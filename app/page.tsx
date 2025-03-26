@@ -14,6 +14,7 @@ import {
   LayoutGrid,
   Settings,
   X,
+  Eye,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -137,6 +138,7 @@ export default function ShadowITDashboard() {
     newUserInReviewApp: true,
     newUserInAnyApp: false,
     periodicReview: "3",
+    periodicReviewEnabled: true,
   })
 
   // Fetch and process CSV data
@@ -430,14 +432,14 @@ export default function ShadowITDashboard() {
   const filteredApps = useMemo(() => {
     return applications.filter((app) => {
       const matchesSearch = searchTerm === "" || 
-        app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        app.category.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesRisk = filterRisk ? app.riskLevel === filterRisk : true
-      const matchesManaged = filterManaged ? app.managementStatus === filterManaged : true
-      const matchesCategory = filterCategory ? app.category === filterCategory : true
+      app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.category.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesRisk = filterRisk ? app.riskLevel === filterRisk : true
+    const matchesManaged = filterManaged ? app.managementStatus === filterManaged : true
+    const matchesCategory = filterCategory ? app.category === filterCategory : true
 
-      return matchesSearch && matchesRisk && matchesManaged && matchesCategory
-    })
+    return matchesSearch && matchesRisk && matchesManaged && matchesCategory
+  })
   }, [applications, searchTerm, filterRisk, filterManaged, filterCategory])
 
   // Get unique categories for the filter dropdown
@@ -1023,12 +1025,17 @@ export default function ShadowITDashboard() {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-lg font-medium text-gray-800">Hey, we found {sortedApps.length} applications.</h2>
+              <h2 className="text-lg font-medium text-gray-800">
+                Hey, we found <span className="text-primary font-semibold">{sortedApps.length}</span> applications.
+              </h2>
             </div>
             <div className="flex gap-2">
               <Button 
                 variant={mainView === "list" ? "default" : "outline"} 
-                onClick={() => setMainView("list")}
+                onClick={() => {
+                  setMainView("list");
+                  handleCloseUserModal();
+                }}
                 className={mainView === "list" ? "bg-gray-900 hover:bg-gray-800" : ""}
               >
                 <LayoutGrid className="h-4 w-4 mr-2" />
@@ -1036,7 +1043,10 @@ export default function ShadowITDashboard() {
               </Button>
               <Button 
                 variant={mainView === "trends" ? "default" : "outline"} 
-                onClick={() => setMainView("trends")}
+                onClick={() => {
+                  setMainView("trends");
+                  handleCloseUserModal();
+                }}
                 className={mainView === "trends" ? "bg-gray-900 hover:bg-gray-800" : ""}
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
@@ -1059,9 +1069,19 @@ export default function ShadowITDashboard() {
                 {/* Filter section */}
                 <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
                   <div className="flex-1">
-                    <Label htmlFor="search" className="text-sm font-medium text-gray-700">
-                      Search Applications
-                    </Label>
+                    <div className="flex justify-between items-center mb-1">
+                      <Label htmlFor="search" className="text-sm font-medium text-gray-700">
+                        Search Applications
+                      </Label>
+                      {searchInput && (
+                        <button
+                          onClick={() => setSearchInput("")}
+                          className="text-xs text-primary hover:text-primary/80 transition-colors"
+                        >
+                          Clear search
+                        </button>
+                      )}
+                    </div>
                     <Input
                       id="search"
                       placeholder="Search by name or category..."
@@ -1072,7 +1092,17 @@ export default function ShadowITDashboard() {
                   </div>
                   <div className="flex flex-col md:flex-row gap-4">
                     <div className="min-w-[150px]">
-                      <Label className="text-sm font-medium text-gray-700">Category</Label>
+                      <div className="flex justify-between items-center mb-1">
+                        <Label className="text-sm font-medium text-gray-700">Category</Label>
+                        {filterCategory && (
+                          <button
+                            onClick={() => setFilterCategory(null)}
+                            className="text-xs text-primary hover:text-primary/80 transition-colors"
+                          >
+                            Clear filter
+                          </button>
+                        )}
+                      </div>
                       <select
                         className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
                         value={filterCategory || ""}
@@ -1087,7 +1117,17 @@ export default function ShadowITDashboard() {
                       </select>
                     </div>
                     <div className="min-w-[150px]">
-                      <Label className="text-sm font-medium text-gray-700">Risk Level</Label>
+                      <div className="flex justify-between items-center mb-1">
+                        <Label className="text-sm font-medium text-gray-700">Risk Level</Label>
+                        {filterRisk && (
+                          <button
+                            onClick={() => setFilterRisk(null)}
+                            className="text-xs text-primary hover:text-primary/80 transition-colors"
+                          >
+                            Clear filter
+                          </button>
+                        )}
+                      </div>
                       <select
                         className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
                         value={filterRisk || ""}
@@ -1100,7 +1140,17 @@ export default function ShadowITDashboard() {
                       </select>
                     </div>
                     <div className="min-w-[150px]">
-                      <Label className="text-sm font-medium text-gray-700">App Status</Label>
+                      <div className="flex justify-between items-center mb-1">
+                        <Label className="text-sm font-medium text-gray-700">App Status</Label>
+                        {filterManaged && (
+                          <button
+                            onClick={() => setFilterManaged(null)}
+                            className="text-xs text-primary hover:text-primary/80 transition-colors"
+                          >
+                            Clear filter
+                          </button>
+                        )}
+                      </div>
                       <select
                         className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
                         value={filterManaged || ""}
@@ -1117,65 +1167,65 @@ export default function ShadowITDashboard() {
 
                 <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
                   <div className="max-h-[800px] overflow-y-auto">
-                    <Table>
+                  <Table>
                       <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
                         <TableRow className="border-b border-gray-100">
                           <TableHead className="w-[250px] cursor-pointer rounded-tl-lg bg-transparent" onClick={() => handleSort("name")}>
-                            <div className="flex items-center">
-                              Application
-                              {getSortIcon("name")}
-                            </div>
-                          </TableHead>
-                          <TableHead className="w-[180px] cursor-pointer" onClick={() => handleSort("category")}>
-                            <div className="flex items-center">
-                              Category
-                              {getSortIcon("category")}
-                            </div>
-                          </TableHead>
-                          <TableHead className="text-center cursor-pointer" onClick={() => handleSort("userCount")}>
-                            <div className="flex items-center justify-center">
-                              Users
-                              {getSortIcon("userCount")}
-                            </div>
-                          </TableHead>
-                          <TableHead className="text-center cursor-pointer" onClick={() => handleSort("riskLevel")}>
-                            <div className="flex items-center justify-center">
-                              Risk
-                              {getSortIcon("riskLevel")}
-                            </div>
-                          </TableHead>
-                          <TableHead
-                            className="text-center cursor-pointer"
-                            onClick={() => handleSort("totalPermissions")}
-                          >
-                            <div className="flex items-center justify-center">
-                              Total Scope Permissions
-                              {getSortIcon("totalPermissions")}
-                            </div>
-                          </TableHead>
-                          <TableHead className="cursor-pointer" onClick={() => handleSort("lastLogin")}>
-                            <div className="flex items-center">
-                              Last Login
-                              {getSortIcon("lastLogin")}
-                            </div>
-                          </TableHead>
-                          <TableHead className="cursor-pointer" onClick={() => handleSort("managementStatus")}>
-                            <div className="flex items-center">
-                              Status
-                              {getSortIcon("managementStatus")}
-                            </div>
-                          </TableHead>
+                          <div className="flex items-center">
+                            Application
+                            {getSortIcon("name")}
+                          </div>
+                        </TableHead>
+                        <TableHead className="w-[180px] cursor-pointer" onClick={() => handleSort("category")}>
+                          <div className="flex items-center">
+                            Category
+                            {getSortIcon("category")}
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center cursor-pointer" onClick={() => handleSort("userCount")}>
+                          <div className="flex items-center justify-center">
+                            Users
+                            {getSortIcon("userCount")}
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center cursor-pointer" onClick={() => handleSort("riskLevel")}>
+                          <div className="flex items-center justify-center">
+                            Risk
+                            {getSortIcon("riskLevel")}
+                          </div>
+                        </TableHead>
+                        <TableHead
+                          className="text-center cursor-pointer"
+                          onClick={() => handleSort("totalPermissions")}
+                        >
+                          <div className="flex items-center justify-center">
+                            Total Scope Permissions
+                            {getSortIcon("totalPermissions")}
+                          </div>
+                        </TableHead>
+                        <TableHead className="cursor-pointer" onClick={() => handleSort("lastLogin")}>
+                          <div className="flex items-center">
+                            Last Login
+                            {getSortIcon("lastLogin")}
+                          </div>
+                        </TableHead>
+                        <TableHead className="cursor-pointer" onClick={() => handleSort("managementStatus")}>
+                          <div className="flex items-center">
+                            Status
+                            {getSortIcon("managementStatus")}
+                          </div>
+                        </TableHead>
                           <TableHead className="text-center rounded-tr-lg">User Access</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                         {currentApps.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
-                              No applications found matching your filters
-                            </TableCell>
-                          </TableRow>
-                        ) : (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                            No applications found matching your filters
+                          </TableCell>
+                        </TableRow>
+                      ) : (
                           currentApps.map((app, index) => (
                             <TableRow 
                               key={app.id} 
@@ -1183,83 +1233,111 @@ export default function ShadowITDashboard() {
                                 index === currentApps.length - 1 ? "last-row" : ""
                               }`}
                             >
-                              <TableCell>
-                                <div className="flex items-center gap-3">
-                                  <AppIcon name={app.name} />
-                                  <div className="font-medium">{app.name}</div>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <AppIcon name={app.name} />
+                                <div className="font-medium">{app.name}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <CategoryBadge category={app.category} />
+                            </TableCell>
+                            <TableCell className="text-center">
+                                <TooltipProvider>
+                                  <Tooltip delayDuration={300}>
+                                    <TooltipTrigger asChild>
+                              <div className="flex items-center justify-center">
+                                <div className="flex -space-x-2">
+                                  {app.users.slice(0, 3).map((user, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 border-2 border-background text-xs font-medium"
+                                    >
+                                      {user.name
+                                        .split(" ")
+                                        .map((n) => n[0])
+                                        .join("")}
+                                    </div>
+                                  ))}
+                                  {app.userCount > 3 && (
+                                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 border-2 border-background text-xs font-medium">
+                                      +{app.userCount - 3}
+                                    </div>
+                                  )}
                                 </div>
-                              </TableCell>
-                              <TableCell>
-                                <CategoryBadge category={app.category} />
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <div className="flex items-center justify-center">
-                                  <div className="flex -space-x-2">
-                                    {app.users.slice(0, 3).map((user, idx) => (
-                                      <div
-                                        key={idx}
-                                        className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 border-2 border-background text-xs font-medium"
-                                      >
-                                        {user.name
-                                          .split(" ")
-                                          .map((n) => n[0])
-                                          .join("")}
+                              </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" className="p-2">
+                                      <div className="max-h-48 overflow-y-auto space-y-1">
+                                        {app.users.map((user, idx) => (
+                                          <p key={idx} className="text-sm">{user.name}</p>
+                                        ))}
                                       </div>
-                                    ))}
-                                    {app.userCount > 3 && (
-                                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 border-2 border-background text-xs font-medium">
-                                        +{app.userCount - 3}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </TableCell>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <TooltipProvider>
+                                  <Tooltip delayDuration={300}>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center justify-center">
+                                      <RiskBadge level={app.riskLevel} />
+                                    </div>
+                                  </TooltipTrigger>
+                                    <TooltipContent side="right" className="p-2">
+                                      <p className="text-sm">{app.riskReason}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </TableCell>
                               <TableCell className="text-center">
                                 <TooltipProvider>
-                                  <Tooltip>
+                                  <Tooltip delayDuration={300}>
                                     <TooltipTrigger asChild>
-                                      <div className="flex items-center justify-center">
-                                        <RiskBadge level={app.riskLevel} />
-                                      </div>
+                                      <div className="text-center">{app.totalPermissions}</div>
                                     </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p className="max-w-xs text-xs">{app.riskReason}</p>
+                                    <TooltipContent side="right" className="p-2">
+                                      <div className="max-h-48 overflow-y-auto space-y-1">
+                                        {app.scopes.map((scope, idx) => (
+                                          <p key={idx} className="text-sm">{scope}</p>
+                                        ))}
+                                      </div>
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
                               </TableCell>
-                              <TableCell className="text-center">{app.totalPermissions}</TableCell>
-                              <TableCell>
-                                <div className="whitespace-pre-line">{formatDate(app.lastLogin)}</div>
-                              </TableCell>
-                              <TableCell>
-                                <select
+                            <TableCell>
+                              <div className="whitespace-pre-line">{formatDate(app.lastLogin)}</div>
+                            </TableCell>
+                            <TableCell>
+                              <select
                                   className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
-                                  value={editedStatuses[app.id] || app.managementStatus}
-                                  onChange={(e) => handleStatusChange(app.id, e.target.value)}
-                                >
-                                  <option value="Managed">Managed</option>
-                                  <option value="Unmanaged">Unmanaged</option>
-                                  <option value="Needs Review">Needs Review</option>
-                                </select>
-                              </TableCell>
-                              <TableCell>
+                                value={editedStatuses[app.id] || app.managementStatus}
+                                onChange={(e) => handleStatusChange(app.id, e.target.value)}
+                              >
+                                <option value="Managed">Managed</option>
+                                <option value="Unmanaged">Unmanaged</option>
+                                <option value="Needs Review">Needs Review</option>
+                              </select>
+                            </TableCell>
+                            <TableCell>
                                 <Button
-                                  onClick={() => handleSeeUsers(app.id)}
+                                onClick={() => handleSeeUsers(app.id)}
                                   variant="outline"
                                   size="sm"
-                                  className="w-full text-primary hover:text-primary hover:bg-primary/10 hover:border-primary/50 transition-all"
+                                  className="w-full text-primary hover:text-primary border-primary/30 hover:border-primary hover:bg-primary/5 transition-all"
                                 >
-                                  <User className="h-4 w-4 mr-2" />
-                                  Track Usage
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  Deep Dive
                                 </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
                 </div>
 
                 {/* Add pagination controls after the Table component */}
@@ -1346,6 +1424,15 @@ export default function ShadowITDashboard() {
                         paddingAngle={2}
                         strokeWidth={2}
                         stroke="#fff"
+                        onClick={(data) => {
+                          // Clear all filters first
+                          setFilterRisk(null);
+                          setFilterManaged(null);
+                          // Set the new category filter
+                          setFilterCategory(data.name);
+                          setMainView("list");
+                        }}
+                        style={{ cursor: 'pointer' }}
                       >
                         {getCategoryDistributionData().map((entry, index) => (
                           <Cell 
@@ -1362,7 +1449,17 @@ export default function ShadowITDashboard() {
                         formatter={(value, entry, index) => {
                           const item = getCategoryDistributionData()[index]
                           return (
-                            <span className="text-gray-900">
+                            <span 
+                              className="text-gray-900 cursor-pointer hover:text-primary"
+                              onClick={() => {
+                                // Clear all filters first
+                                setFilterRisk(null);
+                                setFilterManaged(null);
+                                // Set the new category filter
+                                setFilterCategory(value);
+                                setMainView("list");
+                              }}
+                            >
                               {value}{" "}
                               <span className="text-gray-500 ml-4">
                                 {item.percentage}% ({item.value})
@@ -1400,6 +1497,15 @@ export default function ShadowITDashboard() {
                         barSize={20}
                         strokeWidth={1}
                         stroke="#fff"
+                        cursor="pointer"
+                        onClick={(data) => {
+                          const app = applications.find(a => a.name === data.name);
+                          if (app) {
+                            setMainView("list");
+                            setSelectedAppId(app.id);
+                            setIsUserModalOpen(true);
+                          }
+                        }}
                       >
                         {getTop10AppsByUsers().map((entry, index) => (
                           <Cell 
@@ -1430,7 +1536,39 @@ export default function ShadowITDashboard() {
                     <BarChart data={getRiskChartData()} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
                       <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={80} tick={{ fill: '#111827', fontSize: 12 }} />
+                      <YAxis
+                        dataKey="name"
+                        type="category"
+                        axisLine={false}
+                        tickLine={false}
+                        width={80} 
+                        tick={(props) => {
+                          const { x, y, payload } = props;
+                          return (
+                            <g transform={`translate(${x},${y})`}>
+                              <text
+                                x={-3}
+                                y={0}
+                                dy={4}
+                                textAnchor="end"
+                                fill="#111827"
+                                fontSize={12}
+                                className="cursor-pointer hover:fill-primary transition-colors"
+                                onClick={() => {
+                                  // Clear all filters first
+                                  setFilterCategory(null);
+                                  setFilterManaged(null);
+                                  // Set the new risk filter
+                                  setFilterRisk(payload.value);
+                                  setMainView("list");
+                                }}
+                              >
+                                {payload.value}
+                              </text>
+                            </g>
+                          );
+                        }}
+                      />
                       <Bar 
                         dataKey="value" 
                         name="Applications" 
@@ -1438,6 +1576,15 @@ export default function ShadowITDashboard() {
                         barSize={30}
                         strokeWidth={1}
                         stroke="#fff"
+                        cursor="pointer"
+                        onClick={(data) => {
+                          // Clear all filters first
+                          setFilterCategory(null);
+                          setFilterManaged(null);
+                          // Set the new risk filter
+                          setFilterRisk(data.name);
+                          setMainView("list");
+                        }}
                       >
                         {getRiskChartData().map((entry, index) => (
                           <Cell 
@@ -1483,6 +1630,15 @@ export default function ShadowITDashboard() {
                         barSize={20}
                         strokeWidth={1}
                         stroke="#fff"
+                        cursor="pointer"
+                        onClick={(data) => {
+                          const app = applications.find(a => a.name === data.name);
+                          if (app) {
+                            setMainView("list");
+                            setSelectedAppId(app.id);
+                            setIsUserModalOpen(true);
+                          }
+                        }}
                       >
                         {getTop10AppsByPermissions().map((entry, index) => (
                           <Cell 
@@ -1508,8 +1664,49 @@ export default function ShadowITDashboard() {
         </div>
       ) : (
         // User detail view
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-          <div className="p-6">
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-medium text-gray-800">
+                Hey, we found <span className="text-primary font-semibold">{sortedApps.length}</span> applications.
+              </h2>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant={mainView === "list" ? "default" : "outline"} 
+                onClick={() => {
+                  setMainView("list");
+                  handleCloseUserModal();
+                }}
+                className={mainView === "list" ? "bg-gray-900 hover:bg-gray-800" : ""}
+              >
+                <LayoutGrid className="h-4 w-4 mr-2" />
+                Applications
+              </Button>
+              <Button 
+                variant={mainView === "trends" ? "default" : "outline"} 
+                onClick={() => {
+                  setMainView("trends");
+                  handleCloseUserModal();
+                }}
+                className={mainView === "trends" ? "bg-gray-900 hover:bg-gray-800" : ""}
+              >
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Trends
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setIsSettingsOpen(true)}
+                className="border-gray-200"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+            <div className="p-6">
             {selectedApp && (
               <>
                 <div className="flex items-center justify-between mb-6">
@@ -1536,7 +1733,7 @@ export default function ShadowITDashboard() {
                     <div className="flex items-center gap-1">
                       <span className="text-sm text-muted-foreground font-medium">Status:</span>
                       <select
-                        className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                          className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
                         value={editedStatuses[selectedApp.id] || selectedApp.managementStatus}
                         onChange={(e) => handleStatusChange(selectedApp.id, e.target.value)}
                       >
@@ -1601,164 +1798,164 @@ export default function ShadowITDashboard() {
                     </div>
 
                     <div className="rounded-md border">
-                      <div className="max-h-[800px] overflow-y-auto">
-                        <Table>
-                          <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
+                        <div className="max-h-[800px] overflow-y-auto">
+                      <Table>
+                            <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
+                          <TableRow>
+                                <TableHead className="w-[50px] rounded-tl-lg bg-transparent">#</TableHead>
+                                <TableHead 
+                                  className="w-[200px] cursor-pointer bg-transparent" 
+                                  onClick={() => handleUserSort("name")}
+                                >
+                                  <div className="flex items-center">
+                                    User
+                                    {getUserSortIcon("name")}
+                                  </div>
+                                </TableHead>
+                                <TableHead 
+                                  className="cursor-pointer bg-transparent"
+                                  onClick={() => handleUserSort("email")}
+                                >
+                                  <div className="flex items-center">
+                                    Email
+                                    {getUserSortIcon("email")}
+                                  </div>
+                                </TableHead>
+                                <TableHead 
+                                  className="cursor-pointer bg-transparent"
+                                  onClick={() => handleUserSort("lastActive")}
+                                >
+                                  <div className="flex items-center">
+                                    Last Login
+                                    {getUserSortIcon("lastActive")}
+                                  </div>
+                                </TableHead>
+                                <TableHead className="bg-transparent">Scopes</TableHead>
+                                <TableHead 
+                                  className="cursor-pointer rounded-tr-lg bg-transparent"
+                                  onClick={() => handleUserSort("riskLevel")}
+                                >
+                                  <div className="flex items-center">
+                                    Risk Level
+                                    {getUserSortIcon("riskLevel")}
+                                  </div>
+                                </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                              {currentUsers.length === 0 ? (
                             <TableRow>
-                              <TableHead className="w-[50px] rounded-tl-lg bg-transparent">#</TableHead>
-                              <TableHead 
-                                className="w-[200px] cursor-pointer bg-transparent" 
-                                onClick={() => handleUserSort("name")}
-                              >
-                                <div className="flex items-center">
-                                  User
-                                  {getUserSortIcon("name")}
-                                </div>
-                              </TableHead>
-                              <TableHead 
-                                className="cursor-pointer bg-transparent"
-                                onClick={() => handleUserSort("email")}
-                              >
-                                <div className="flex items-center">
-                                  Email
-                                  {getUserSortIcon("email")}
-                                </div>
-                              </TableHead>
-                              <TableHead 
-                                className="cursor-pointer bg-transparent"
-                                onClick={() => handleUserSort("lastActive")}
-                              >
-                                <div className="flex items-center">
-                                  Last Login
-                                  {getUserSortIcon("lastActive")}
-                                </div>
-                              </TableHead>
-                              <TableHead className="bg-transparent">Scopes</TableHead>
-                              <TableHead 
-                                className="cursor-pointer rounded-tr-lg bg-transparent"
-                                onClick={() => handleUserSort("riskLevel")}
-                              >
-                                <div className="flex items-center">
-                                  Risk Level
-                                  {getUserSortIcon("riskLevel")}
-                                </div>
-                              </TableHead>
+                              <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                                No users found matching your search
+                              </TableCell>
                             </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {currentUsers.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                                  No users found matching your search
+                          ) : (
+                                currentUsers.map((user, index) => (
+                              <TableRow key={user.id} className={index % 2 === 0 ? "bg-muted/30" : ""}>
+                                    <TableCell className="text-muted-foreground">{userStartIndex + index + 1}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-8 w-8">
+                                      <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                                        {user.name
+                                          .split(" ")
+                                          .map((n) => n[0])
+                                          .join("")}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <span className="font-medium">{user.name}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>{user.email}</TableCell>
+                                <TableCell>{formatDate(user.lastActive)}</TableCell>
+                                <TableCell>
+                                  <div className="max-h-24 overflow-y-auto text-sm">
+                                    {user.scopes.map((scope, i) => (
+                                      <div key={i} className="py-1 border-b border-muted last:border-0">
+                                        {scope}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <TooltipProvider>
+                                        <Tooltip delayDuration={300}>
+                                      <TooltipTrigger asChild>
+                                        <div className="flex items-center gap-1">
+                                          <RiskBadge level={user.riskLevel} />
+                                          <Info className="h-4 w-4 text-muted-foreground" />
+                                        </div>
+                                      </TooltipTrigger>
+                                          <TooltipContent side="right" className="p-2">
+                                            <p className="text-xs">{user.riskReason}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
                                 </TableCell>
                               </TableRow>
-                            ) : (
-                              currentUsers.map((user, index) => (
-                                <TableRow key={user.id} className={index % 2 === 0 ? "bg-muted/30" : ""}>
-                                  <TableCell className="text-muted-foreground">{userStartIndex + index + 1}</TableCell>
-                                  <TableCell>
-                                    <div className="flex items-center gap-2">
-                                      <Avatar className="h-8 w-8">
-                                        <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                                          {user.name
-                                            .split(" ")
-                                            .map((n) => n[0])
-                                            .join("")}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <span className="font-medium">{user.name}</span>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>{user.email}</TableCell>
-                                  <TableCell>{formatDate(user.lastActive)}</TableCell>
-                                  <TableCell>
-                                    <div className="max-h-24 overflow-y-auto text-sm">
-                                      {user.scopes.map((scope, i) => (
-                                        <div key={i} className="py-1 border-b border-muted last:border-0">
-                                          {scope}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <div className="flex items-center gap-1">
-                                            <RiskBadge level={user.riskLevel} />
-                                            <Info className="h-4 w-4 text-muted-foreground" />
-                                          </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p className="max-w-xs text-xs">{user.riskReason}</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                        </div>
 
-                      {/* User pagination controls */}
-                      <div className="mt-4 flex items-center justify-between px-4 py-2 border-t border-gray-200">
-                        <div className="text-sm text-muted-foreground">
-                          Showing {userStartIndex + 1}-{Math.min(userEndIndex, filteredUsers.length)} of {filteredUsers.length} users
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setUserCurrentPage(1)}
-                            disabled={userCurrentPage === 1}
-                          >
-                            First
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setUserCurrentPage(prev => Math.max(1, prev - 1))}
-                            disabled={userCurrentPage === 1}
-                          >
-                            Previous
-                          </Button>
-                          <div className="flex items-center space-x-1">
-                            {getUserPageNumbers().map((page, index) => (
-                              page === '...' ? (
-                                <span key={`ellipsis-${index}`} className="px-2">...</span>
-                              ) : (
-                                <Button
-                                  key={page}
-                                  variant={userCurrentPage === page ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => setUserCurrentPage(Number(page))}
-                                  className="w-8"
-                                >
-                                  {page}
-                                </Button>
-                              )
-                            ))}
+                        {/* User pagination controls */}
+                        <div className="mt-4 flex items-center justify-between px-4 py-2 border-t border-gray-200">
+                          <div className="text-sm text-muted-foreground">
+                            Showing {userStartIndex + 1}-{Math.min(userEndIndex, filteredUsers.length)} of {filteredUsers.length} users
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setUserCurrentPage(prev => Math.min(totalUserPages, prev + 1))}
-                            disabled={userCurrentPage === totalUserPages}
-                          >
-                            Next
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setUserCurrentPage(totalUserPages)}
-                            disabled={userCurrentPage === totalUserPages}
-                          >
-                            Last
-                          </Button>
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setUserCurrentPage(1)}
+                              disabled={userCurrentPage === 1}
+                            >
+                              First
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setUserCurrentPage(prev => Math.max(1, prev - 1))}
+                              disabled={userCurrentPage === 1}
+                            >
+                              Previous
+                            </Button>
+                            <div className="flex items-center space-x-1">
+                              {getUserPageNumbers().map((page, index) => (
+                                page === '...' ? (
+                                  <span key={`ellipsis-${index}`} className="px-2">...</span>
+                                ) : (
+                                  <Button
+                                    key={page}
+                                    variant={userCurrentPage === page ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => setUserCurrentPage(Number(page))}
+                                    className="w-8"
+                                  >
+                                    {page}
+                                  </Button>
+                                )
+                              ))}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setUserCurrentPage(prev => Math.min(totalUserPages, prev + 1))}
+                              disabled={userCurrentPage === totalUserPages}
+                            >
+                              Next
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setUserCurrentPage(totalUserPages)}
+                              disabled={userCurrentPage === totalUserPages}
+                            >
+                              Last
+                            </Button>
+                          </div>
                         </div>
-                      </div>
                     </div>
                   </TabsContent>
 
@@ -1770,100 +1967,100 @@ export default function ShadowITDashboard() {
                         permissions.
                       </p>
 
-                      {(() => {
-                        const scopeGroups = getScopeGroups(selectedApp)
-                        const totalScopePages = Math.ceil(scopeGroups.length / itemsPerPage)
-                        const scopeStartIndex = (scopeCurrentPage - 1) * itemsPerPage
-                        const scopeEndIndex = scopeStartIndex + itemsPerPage
-                        const currentScopeGroups = scopeGroups.slice(scopeStartIndex, scopeEndIndex)
+                        {(() => {
+                          const scopeGroups = getScopeGroups(selectedApp)
+                          const totalScopePages = Math.ceil(scopeGroups.length / itemsPerPage)
+                          const scopeStartIndex = (scopeCurrentPage - 1) * itemsPerPage
+                          const scopeEndIndex = scopeStartIndex + itemsPerPage
+                          const currentScopeGroups = scopeGroups.slice(scopeStartIndex, scopeEndIndex)
 
-                        return (
-                          <>
-                            {currentScopeGroups.map((group, groupIndex) => (
-                              <div key={groupIndex} className="mb-6 border rounded-md overflow-hidden">
-                                <div className="bg-gray-50 p-3 flex justify-between items-center border-b border-gray-200">
-                                  <h4 className="font-medium">
-                                    Group {scopeStartIndex + groupIndex + 1} - {group.users.length}{" "}
-                                    {group.users.length === 1 ? "user" : "users"}
-                                  </h4>
-                                  <Badge variant="outline" className="bg-primary/10">
-                                    {group.scopes.length} {group.scopes.length === 1 ? "permission" : "permissions"}
-                                  </Badge>
-                                </div>
+                          return (
+                            <>
+                              {currentScopeGroups.map((group, groupIndex) => (
+                        <div key={groupIndex} className="mb-6 border rounded-md overflow-hidden">
+                          <div className="bg-gray-50 p-3 flex justify-between items-center border-b border-gray-200">
+                            <h4 className="font-medium">
+                                      Group {scopeStartIndex + groupIndex + 1} - {group.users.length}{" "}
+                              {group.users.length === 1 ? "user" : "users"}
+                            </h4>
+                            <Badge variant="outline" className="bg-primary/10">
+                              {group.scopes.length} {group.scopes.length === 1 ? "permission" : "permissions"}
+                            </Badge>
+                          </div>
 
-                                <div className="p-3 border-b">
-                                  <h5 className="text-sm font-medium mb-2">Permissions:</h5>
-                                  <div className="max-h-60 overflow-y-auto">
-                                    {group.scopes.map((scope, scopeIndex) => (
-                                      <div key={scopeIndex} className="py-1 border-b border-muted last:border-0 text-sm">
-                                        {scope}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div className="p-3">
-                                  <h5 className="text-sm font-medium mb-2">Users in this group:</h5>
-                                  <div className="flex flex-wrap gap-2">
-                                    {group.users.map((user, userIndex) => (
-                                      <div
-                                        key={userIndex}
-                                        className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
-                                      >
-                                        <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-200 text-xs font-medium text-gray-800">
-                                          {user.name
-                                            .split(" ")
-                                            .map((n) => n[0])
-                                            .join("")}
+                          <div className="p-3 border-b">
+                                    <h5 className="text-sm font-medium mb-2">Permissions:</h5>
+                                    <div className="max-h-60 overflow-y-auto">
+                                      {group.scopes.map((scope, scopeIndex) => (
+                                        <div key={scopeIndex} className="py-1 border-b border-muted last:border-0 text-sm">
+                                          {scope}
                                         </div>
-                                        <span className="text-sm">{user.name}</span>
-                                      </div>
-                                    ))}
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                              </div>
-                            ))}
 
-                            {/* Scope Groups pagination controls */}
-                            {scopeGroups.length > itemsPerPage && (
-                              <div className="mt-4 flex items-center justify-between px-4 py-2 border-t border-gray-200">
-                                <div className="text-sm text-muted-foreground">
-                                  Showing {scopeStartIndex + 1}-{Math.min(scopeEndIndex, scopeGroups.length)} of {scopeGroups.length} scope groups
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setScopeCurrentPage(1)}
-                                    disabled={scopeCurrentPage === 1}
-                                  >
-                                    First
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setScopeCurrentPage(prev => Math.max(1, prev - 1))}
-                                    disabled={scopeCurrentPage === 1}
-                                  >
-                                    Previous
-                                  </Button>
-                                  <div className="flex items-center space-x-1">
-                                    {getScopePageNumbers(totalScopePages).map((page, index) => (
-                                      page === '...' ? (
-                                        <span key={`ellipsis-${index}`} className="px-2">...</span>
-                                      ) : (
-                                        <Button
-                                          key={page}
-                                          variant={scopeCurrentPage === page ? "default" : "outline"}
-                                          size="sm"
-                                          onClick={() => setScopeCurrentPage(Number(page))}
-                                          className="w-8"
-                                        >
-                                          {page}
-                                        </Button>
-                                      )
-                                    ))}
+                                  <div className="p-3">
+                            <h5 className="text-sm font-medium mb-2">Users in this group:</h5>
+                            <div className="flex flex-wrap gap-2">
+                              {group.users.map((user, userIndex) => (
+                                <div
+                                  key={userIndex}
+                                  className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
+                                >
+                                  <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-200 text-xs font-medium text-gray-800">
+                                    {user.name
+                                      .split(" ")
+                                      .map((n) => n[0])
+                                      .join("")}
                                   </div>
+                                  <span className="text-sm">{user.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                                </div>
+                              ))}
+
+                              {/* Scope Groups pagination controls */}
+                              {scopeGroups.length > itemsPerPage && (
+                                <div className="mt-4 flex items-center justify-between px-4 py-2 border-t border-gray-200">
+                                  <div className="text-sm text-muted-foreground">
+                                    Showing {scopeStartIndex + 1}-{Math.min(scopeEndIndex, scopeGroups.length)} of {scopeGroups.length} scope groups
+                                </div>
+                                  <div className="flex items-center space-x-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setScopeCurrentPage(1)}
+                                      disabled={scopeCurrentPage === 1}
+                                    >
+                                      First
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setScopeCurrentPage(prev => Math.max(1, prev - 1))}
+                                      disabled={scopeCurrentPage === 1}
+                                    >
+                                      Previous
+                                    </Button>
+                                    <div className="flex items-center space-x-1">
+                                      {getScopePageNumbers(totalScopePages).map((page, index) => (
+                                        page === '...' ? (
+                                          <span key={`ellipsis-${index}`} className="px-2">...</span>
+                                        ) : (
+                                          <Button
+                                            key={page}
+                                            variant={scopeCurrentPage === page ? "default" : "outline"}
+                                            size="sm"
+                                            onClick={() => setScopeCurrentPage(Number(page))}
+                                            className="w-8"
+                                          >
+                                            {page}
+                                          </Button>
+                                        )
+                              ))}
+                            </div>
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -1880,12 +2077,12 @@ export default function ShadowITDashboard() {
                                   >
                                     Last
                                   </Button>
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )
-                      })()}
+                          </div>
+                        </div>
+                              )}
+                            </>
+                          )
+                        })()}
                     </div>
                   </TabsContent>
 
@@ -1921,6 +2118,7 @@ export default function ShadowITDashboard() {
                 </Tabs>
               </>
             )}
+            </div>
           </div>
         </div>
       )}
@@ -1945,6 +2143,7 @@ export default function ShadowITDashboard() {
               <h3 className="text-base font-medium text-gray-900">Customize your email notification preferences</h3>
               
               <div className="space-y-4">
+                {/* New App Detection */}
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="font-medium">New App Detection</Label>
@@ -1957,18 +2156,7 @@ export default function ShadowITDashboard() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="font-medium">User Limit Threshold</Label>
-                  <p className="text-sm text-gray-500">Get notified when an app exceeds this many users</p>
-                  <Input
-                    type="number"
-                    value={notificationSettings.userLimitThreshold}
-                    onChange={(e) => handleSettingChange('userLimitThreshold', e.target.value)}
-                    className="w-full"
-                    min="1"
-                  />
-                </div>
-
+                {/* Needs Review Apps */}
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="font-medium">Needs Review Apps</Label>
@@ -1981,6 +2169,7 @@ export default function ShadowITDashboard() {
                   </div>
                 </div>
 
+                {/* New User Detection */}
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="font-medium">New User Detection</Label>
@@ -1993,19 +2182,55 @@ export default function ShadowITDashboard() {
                   </div>
                 </div>
 
+                {/* User Limit Threshold */}
                 <div className="space-y-2">
-                  <Label className="font-medium">Periodic Review</Label>
-                  <p className="text-sm text-gray-500">Schedule regular reviews of all applications</p>
-                  <select
-                    value={notificationSettings.periodicReview}
-                    onChange={(e) => handleSettingChange('periodicReview', e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
-                  >
-                    <option value="1">Every Month</option>
-                    <option value="2">Every 2 Months</option>
-                    <option value="3">Every 3 Months</option>
-                    <option value="6">Every 6 Months</option>
-                  </select>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="font-medium">User Limit Threshold</Label>
+                      <p className="text-sm text-gray-500">Get notified when an app exceeds this many users</p>
+                    </div>
+                    <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer"
+                         onClick={() => handleSettingChange('userLimitExceeded', !notificationSettings.userLimitExceeded)}
+                         style={{ backgroundColor: notificationSettings.userLimitExceeded ? '#111827' : '#E5E7EB' }}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notificationSettings.userLimitExceeded ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </div>
+                  </div>
+                  {notificationSettings.userLimitExceeded && (
+                    <Input
+                      type="number"
+                      value={notificationSettings.userLimitThreshold}
+                      onChange={(e) => handleSettingChange('userLimitThreshold', e.target.value)}
+                      className="w-full mt-2"
+                      min="1"
+                    />
+                  )}
+                </div>
+
+                {/* Periodic Review */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="font-medium">Periodic Review</Label>
+                      <p className="text-sm text-gray-500">Schedule regular reviews of all applications</p>
+                    </div>
+                    <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer"
+                         onClick={() => handleSettingChange('periodicReviewEnabled', !notificationSettings.periodicReviewEnabled)}
+                         style={{ backgroundColor: notificationSettings.periodicReviewEnabled ? '#111827' : '#E5E7EB' }}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notificationSettings.periodicReviewEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </div>
+                  </div>
+                  {notificationSettings.periodicReviewEnabled && (
+                    <select
+                      value={notificationSettings.periodicReview}
+                      onChange={(e) => handleSettingChange('periodicReview', e.target.value)}
+                      className="w-full h-10 px-3 mt-2 rounded-lg border border-gray-200 bg-white text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                    >
+                      <option value="1">Every Month</option>
+                      <option value="2">Every 2 Months</option>
+                      <option value="3">Every 3 Months</option>
+                      <option value="6">Every 6 Months</option>
+                    </select>
+                  )}
                 </div>
               </div>
 
