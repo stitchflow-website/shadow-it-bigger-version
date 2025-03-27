@@ -23,8 +23,6 @@ const nextConfig = {
   },
 }
 
-mergeConfig(nextConfig, userConfig)
-
 function mergeConfig(nextConfig, userConfig) {
   if (!userConfig) {
     return
