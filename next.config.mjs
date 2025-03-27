@@ -25,7 +25,7 @@ const nextConfig = {
 
 function mergeConfig(nextConfig, userConfig) {
   if (!userConfig) {
-    return nextConfig
+    return
   }
 
   for (const key in userConfig) {
@@ -41,7 +41,6 @@ function mergeConfig(nextConfig, userConfig) {
       nextConfig[key] = userConfig[key]
     }
   }
-  return nextConfig
 }
 
-export default mergeConfig(nextConfig, userConfig)
+export default nextConfig

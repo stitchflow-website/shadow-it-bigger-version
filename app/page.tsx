@@ -1320,10 +1320,11 @@ export default function ShadowITDashboard() {
                 </div>
 
                 <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+                  <div className="max-h-[800px] overflow-y-auto">
                   <Table>
-                    <TableHeader className="bg-gray-50/80 backdrop-blur-sm">
-                      <TableRow className="border-b border-gray-100">
-                        <TableHead className="w-[250px] cursor-pointer rounded-tl-lg bg-transparent" onClick={() => handleSort("name")}>
+                      <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
+                        <TableRow className="border-b border-gray-100">
+                          <TableHead className="w-[250px] cursor-pointer rounded-tl-lg bg-transparent" onClick={() => handleSort("name")}>
                           <div className="flex items-center">
                             Application
                             {getSortIcon("name")}
@@ -1368,20 +1369,17 @@ export default function ShadowITDashboard() {
                             {getSortIcon("managementStatus")}
                           </div>
                         </TableHead>
-                        <TableHead className="text-center rounded-tr-lg">User Access</TableHead>
+                          <TableHead className="text-center rounded-tr-lg">User Access</TableHead>
                       </TableRow>
                     </TableHeader>
-                  </Table>
-                  <div className="max-h-[600px] overflow-y-auto">
-                    <Table>
-                      <TableBody>
+                    <TableBody>
                         {currentApps.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
-                              No applications found matching your filters
-                            </TableCell>
-                          </TableRow>
-                        ) : (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                            No applications found matching your filters
+                          </TableCell>
+                        </TableRow>
+                      ) : (
                           currentApps.map((app, index) => (
                             <TableRow 
                               key={app.id} 
