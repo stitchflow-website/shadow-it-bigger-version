@@ -139,141 +139,41 @@ export default function ShadowITDashboard() {
     periodicReview: "3",
   })
 
-  // Fetch and process CSV data
+  // Fetch and process data
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setIsLoading(true)
-        const response = await fetch(
-          "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/3_17_2025_Untitled-ayGNkhLydfqUaAZiABRJdOj60BlDJE.csv",
-        )
-        const csvText = await response.text()
-
-        // Parse CSV
-        const rows = csvText.split("\n")
-        const headers = rows[0].split(",")
-
-        // Process data into applications
-        const appMap = new Map<string, any>()
-
-        for (let i = 1; i < rows.length; i++) {
-          if (!rows[i].trim()) continue
-
-          const values = parseCSVRow(rows[i])
-          if (values.length < 5) continue
-
-          const appName = values[0].trim()
-          const userName = values[1].trim()
-          const scopes = values[2].split(";").map((s) => s.trim())
-          const isInstalled = values[3].trim().toUpperCase() === "TRUE"
-          const isAuthAnonymously = values[4].trim().toUpperCase() === "TRUE"
-
-          if (!appMap.has(appName)) {
-            // Create new app entry
-            appMap.set(appName, {
-              id: `app-${appMap.size + 1}`,
-              name: appName,
-              category: getCategoryFromScopes(scopes),
-              userCount: 0,
-              users: [],
-              scopes: [],
-              riskLevel: getRiskLevelFromScopes(scopes),
-              riskReason: getRiskReasonFromScopes(scopes),
-              totalPermissions: scopes.length,
-              scopeVariance: { userGroups: 0, scopeGroups: 0 },
-              lastLogin: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(), // Random date within last 30 days
-              managementStatus: isInstalled ? "Managed" : "Needs Review",
-              ownerEmail: "",
-              notes: "",
-              isInstalled,
-              isAuthAnonymously,
-              uniqueScopes: new Set(),
-              uniqueUserGroups: new Set(),
-            })
-          }
-
-          const app = appMap.get(appName)
-
-          // Add user if not empty
-          if (userName) {
-            const userId = `user-${app.id}-${app.users.length + 1}`
-            app.userCount++
-
-            // Add unique scopes to the app
-            scopes.forEach((scope) => app.uniqueScopes.add(scope))
-
-            // Create user object
-            const user = {
-              id: userId,
-              appId: app.id,
-              name: userName,
-              email: generateEmailFromName(userName),
-              lastActive: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(), // Random date within last 30 days
-              scopes: scopes,
-              riskLevel: getRiskLevelFromScopes(scopes),
-              riskReason: getRiskReasonFromScopes(scopes),
-            }
-
-            app.users.push(user)
-
-            // Update scope variance
-            const scopeKey = scopes.sort().join("|")
-            app.uniqueUserGroups.add(scopeKey)
-          }
-
-          // Merge all scopes
-          app.scopes = [...new Set([...app.scopes, ...scopes])]
+        setIsLoading(true);
+        
+        // Get orgId from URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        const orgId = urlParams.get('orgId');
+        
+        if (!orgId) {
+          // If no orgId, redirect to login
+          window.location.href = '/login';
+          return;
         }
 
-        // Convert Map to array and calculate final metrics
-        const processedApps = Array.from(appMap.values()).map((app) => {
-          // Calculate scope variance
-          app.scopeVariance = {
-            userGroups: app.uniqueUserGroups.size,
-            scopeGroups: Math.min(app.uniqueUserGroups.size, 5), // Simplify for demo
-          }
+        // Fetch applications from our API
+        const response = await fetch(`/api/applications?orgId=${orgId}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch applications');
+        }
 
-          // Update totalPermissions to be the count of unique scopes
-          app.totalPermissions = app.scopes.length
-
-          // Clean up temporary properties
-          delete app.uniqueScopes
-          delete app.uniqueUserGroups
-
-          return app
-        })
-
-        setApplications(processedApps)
-        setIsLoading(false)
+        const data = await response.json();
+        setApplications(data);
+        setIsLoading(false);
       } catch (error) {
-        console.error("Error fetching or processing CSV data:", error)
-        setIsLoading(false)
-        // Fallback to mock data if CSV fetch fails
-        setApplications([
-          {
-            id: "app1",
-            name: "Google Workspace",
-            category: "Productivity",
-            userCount: 145,
-            users: [],
-            riskLevel: "Medium",
-            riskReason: "Has access to email and calendar data. Multiple permission sets detected across organization.",
-            totalPermissions: 12,
-            scopeVariance: { userGroups: 3, scopeGroups: 2 },
-            lastLogin: "2025-03-15T14:30:00",
-            managementStatus: "Managed",
-            ownerEmail: "it-admin@company.com",
-            notes: "Core productivity suite used by entire organization. Approved by IT.",
-            scopes: [],
-            isInstalled: true,
-            isAuthAnonymously: false,
-          },
-        ])
+        console.error("Error fetching application data:", error);
+        setIsLoading(false);
+        // Redirect to login on error
+        window.location.href = '/login';
       }
-    }
+    };
 
-    fetchData()
-  }, [])
+    fetchData();
+  }, []);
 
   // Helper function to parse CSV row handling quoted values
   function parseCSVRow(row: string): string[] {
