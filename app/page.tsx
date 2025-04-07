@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { useState, useEffect, useMemo } from "react"
 import {
   User,
@@ -119,8 +120,8 @@ export default function ShadowITDashboard() {
   const [scopeCurrentPage, setScopeCurrentPage] = useState(1)
   const itemsPerPage = 20
 
-  // Sorting state - default to showing apps with most users at top
-  const [sortColumn, setSortColumn] = useState<SortColumn>("userCount")
+  // Sorting state - default to showing apps with highest risk and most users at top
+  const [sortColumn, setSortColumn] = useState<SortColumn>("riskLevel")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
 
   const [userSortColumn, setUserSortColumn] = useState<"name" | "email" | "lastActive" | "riskLevel">("lastActive")
@@ -364,7 +365,12 @@ export default function ShadowITDashboard() {
       return sortDirection === "asc" ? dateA - dateB : dateB - dateA
     }
 
-    // Sort based on column
+    // Risk level comparison helper
+    const getRiskValue = (risk: string) => {
+      const riskOrder = { High: 3, Medium: 2, Low: 1 }
+      return riskOrder[risk as keyof typeof riskOrder]
+    }
+
     switch (sortColumn) {
       case "name":
         return compareString(a.name, b.name)
@@ -372,20 +378,19 @@ export default function ShadowITDashboard() {
         return compareString(a.category, b.category)
       case "userCount":
         return compareNumeric(a.userCount, b.userCount)
-      case "riskLevel": {
-        const riskOrder = { Low: 1, Medium: 2, High: 3 }
-        return compareNumeric(riskOrder[a.riskLevel], riskOrder[b.riskLevel])
-      }
+      case "riskLevel":
+        return compareNumeric(getRiskValue(a.riskLevel), getRiskValue(b.riskLevel))
       case "totalPermissions":
         return compareNumeric(a.totalPermissions, b.totalPermissions)
       case "lastLogin":
         return compareDate(a.lastLogin, b.lastLogin)
-      case "managementStatus": {
-        const statusOrder = { Managed: 1, Unmanaged: 2, "Needs Review": 3 }
-        return compareNumeric(statusOrder[a.managementStatus], statusOrder[b.managementStatus])
-      }
+      case "managementStatus":
+        return compareString(a.managementStatus, b.managementStatus)
       default:
-        return 0
+        // Default to sorting by risk level and then user count
+        const riskDiff = compareNumeric(getRiskValue(a.riskLevel), getRiskValue(b.riskLevel))
+        if (riskDiff !== 0) return riskDiff
+        return compareNumeric(a.userCount, b.userCount)
     }
   })
 
@@ -903,6 +908,132 @@ export default function ShadowITDashboard() {
     }))
   }
 
+  // Add this function at the component level, before the return statement
+  function getAppFunctionality(scopes: string[]): Set<string> {
+    const functions = new Set<string>();
+    scopes.forEach(scope => {
+      if (scope.includes('drive') || scope.includes('docs')) {
+        functions.add('document_collaboration');
+      }
+      if (scope.includes('calendar')) {
+        functions.add('scheduling');
+      }
+      if (scope.includes('mail') || scope.includes('gmail')) {
+        functions.add('communication');
+      }
+      if (scope.includes('sheets')) {
+        functions.add('data_analysis');
+      }
+      if (scope.includes('slides')) {
+        functions.add('presentation');
+      }
+      if (scope.includes('admin')) {
+        functions.add('administration');
+      }
+      if (scope.includes('chat') || scope.includes('meet')) {
+        functions.add('team_collaboration');
+      }
+    });
+    return functions;
+  }
+
+  // Add after the getAppFunctionality function
+  function getSimilarApps(currentApp: Application, allApps: Application[]): Array<{app: Application, score: number, reasons: string[]}> {
+    return allApps
+      .filter(app => app.id !== currentApp.id)
+      .map(app => {
+        const score = calculateSimilarityScore(currentApp, app);
+        const reasons = getSimilarityReasons(currentApp, app);
+        return { app, score, reasons };
+      })
+      .filter(result => result.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+  }
+
+  function calculateSimilarityScore(app1: Application, app2: Application): number {
+    let score = 0;
+    
+    // User co-occurrence (50%)
+    const sharedUsers = app1.users.filter(u1 => 
+      app2.users.some(u2 => u2.email === u1.email)
+    ).length;
+    const userOverlapScore = Math.min(sharedUsers / Math.max(app1.users.length, app2.users.length), 1) * 0.5;
+    
+    // Functional similarity (30%)
+    const app1Functions = getAppFunctionality(app1.scopes);
+    const app2Functions = getAppFunctionality(app2.scopes);
+    const sharedFunctions = Array.from(app1Functions).filter(f => app2Functions.has(f)).length;
+    const functionalScore = Math.min(sharedFunctions / Math.max(app1Functions.size, app2Functions.size), 1) * 0.3;
+    
+    // Usage patterns (20%)
+    const activeUsers1 = app1.users.filter(u => new Date(u.lastActive) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+    const activeUsers2 = app2.users.filter(u => new Date(u.lastActive) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+    const usageScore = Math.min(Math.abs(activeUsers1.length - activeUsers2.length) / Math.max(activeUsers1.length, activeUsers2.length), 1) * 0.2;
+    
+    score = userOverlapScore + functionalScore + usageScore;
+    return score;
+  }
+
+  function getSimilarityReasons(app1: Application, app2: Application): string[] {
+    const reasons: string[] = [];
+    
+    // Check user overlap
+    const sharedUsers = app1.users.filter(u1 => 
+      app2.users.some(u2 => u2.email === u1.email)
+    ).length;
+    if (sharedUsers > 0) {
+      reasons.push(`${sharedUsers} shared users`);
+    }
+    
+    // Check functional similarity
+    const app1Functions = getAppFunctionality(app1.scopes);
+    const app2Functions = getAppFunctionality(app2.scopes);
+    const sharedFunctions = Array.from(app1Functions).filter(f => app2Functions.has(f));
+    if (sharedFunctions.length > 0) {
+      reasons.push(`Similar functionality: ${sharedFunctions.join(', ')}`);
+    }
+    
+    // Check usage patterns
+    const activeUsers1 = app1.users.filter(u => new Date(u.lastActive) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+    const activeUsers2 = app2.users.filter(u => new Date(u.lastActive) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+    if (Math.abs(activeUsers1.length - activeUsers2.length) / Math.max(activeUsers1.length, activeUsers2.length) < 0.3) {
+      reasons.push('Similar usage patterns');
+    }
+    
+    return reasons;
+  }
+
+  // Add after the getMonthlyActiveUsers function
+  function getAppSimilarityNetwork() {
+    // Create nodes for each app
+    const nodes = applications.map(app => ({
+      id: app.id,
+      name: app.name,
+      category: app.category,
+      value: app.userCount, // Size based on user count
+      color: getCategoryColor(app.category)
+    }));
+
+    // Create edges between similar apps
+    const edges: Array<{source: string, target: string, value: number}> = [];
+    
+    applications.forEach(app1 => {
+      const similarApps = getSimilarApps(app1, applications);
+      similarApps.forEach(({ app: app2, score }) => {
+        if (score > 0.3) { // Only show strong connections
+          edges.push({
+            source: app1.id,
+            target: app2.id,
+            value: score
+          });
+        }
+      });
+    });
+
+    return { nodes, edges };
+  }
+
   return (
     <div className="max-w-[1400px] mx-auto py-8 space-y-8 font-sans text-gray-900">
       <div className="flex flex-col space-y-1">
@@ -926,7 +1057,30 @@ export default function ShadowITDashboard() {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-lg font-medium text-gray-800">
-                Hey, we found <span className="text-primary font-semibold">{sortedApps.length}</span> applications.
+                {(() => {
+                  // Count how many filters are active
+                  const activeFilters = [filterCategory, filterRisk, filterManaged].filter(Boolean).length;
+                  
+                  if (activeFilters === 0) {
+                    return `Hey, we found ${sortedApps.length} applications.`;
+                  }
+
+                  // Single filter messages
+                  if (activeFilters === 1) {
+                    if (filterCategory) {
+                      return `Hey, we found ${sortedApps.length} applications in ${filterCategory}.`;
+                    }
+                    if (filterRisk) {
+                      return `Hey, we found ${sortedApps.length} ${filterRisk.toLowerCase()} risk applications.`;
+                    }
+                    if (filterManaged) {
+                      return `Hey, we found ${sortedApps.length} ${filterManaged.toLowerCase()} applications.`;
+                    }
+                  }
+
+                  // Multiple filters - show total count with "filtered"
+                  return `Hey, we found ${sortedApps.length} filtered applications.`;
+                })()}
               </h2>
             </div>
             <div className="flex gap-2">
@@ -971,8 +1125,8 @@ export default function ShadowITDashboard() {
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
                       <Label htmlFor="search" className="text-sm font-medium text-gray-700">
-                        Search Applications
-                      </Label>
+                      Search Applications
+                    </Label>
                       {searchInput && (
                         <button
                           onClick={() => setSearchInput("")}
@@ -1004,13 +1158,13 @@ export default function ShadowITDashboard() {
                         )}
                       </div>
                       <select
-                        className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                        className="w-full min-w-[300px] h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 truncate"
                         value={filterCategory || ""}
                         onChange={(e) => setFilterCategory(e.target.value || null)}
                       >
                         <option value="">All Categories</option>
                         {uniqueCategories.map((category) => (
-                          <option key={category} value={category}>
+                          <option key={category} value={category} className="truncate">
                             {category}
                           </option>
                         ))}
@@ -1136,7 +1290,12 @@ export default function ShadowITDashboard() {
                             <TableCell>
                               <div className="flex items-center gap-3">
                                 <AppIcon name={app.name} />
-                                <div className="font-medium">{app.name}</div>
+                                <div 
+                                  className="font-medium cursor-pointer hover:text-primary transition-colors"
+                                  onClick={() => handleSeeUsers(app.id)}
+                                >
+                                  {app.name}
+                                </div>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -1146,7 +1305,10 @@ export default function ShadowITDashboard() {
                                 <TooltipProvider>
                                   <Tooltip delayDuration={300}>
                                     <TooltipTrigger asChild>
-                              <div className="flex items-center justify-center">
+                              <div 
+                                className="flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={() => handleSeeUsers(app.id)}
+                              >
                                 <div className="flex -space-x-2">
                                   {app.users.slice(0, 3).map((user, idx) => (
                                     <div
@@ -1305,7 +1467,7 @@ export default function ShadowITDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Application Distribution by Category */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-                <h3 className="text-lg font-medium text-gray-900">Application Distribution by Category</h3>
+                <h3 className="text-lg font-medium text-gray-900">App Distribution by Category</h3>
                 <p className="text-sm text-gray-500 mb-4">
                   View application distribution across different categories within your organization.
                 </p>
@@ -1417,9 +1579,20 @@ export default function ShadowITDashboard() {
                       </Bar>
                       <RechartsTooltip
                         formatter={(value) => [`${value} users`, ""]}
-                        contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', whiteSpace: 'nowrap' }}
-                        labelStyle={{ color: '#111827', fontWeight: 500 }}
+                        contentStyle={{ 
+                          backgroundColor: 'white', 
+                          border: '1px solid #e5e7eb', 
+                          borderRadius: '8px', 
+                          padding: '4px 12px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          fontFamily: 'inherit',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                        labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
                         itemStyle={{ color: '#111827', fontWeight: 600 }}
+                        separator=": "
                         cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
                       />
                     </BarChart>
@@ -1496,9 +1669,20 @@ export default function ShadowITDashboard() {
                       </Bar>
                       <RechartsTooltip
                         formatter={(value) => [`${value} applications`, ""]}
-                        contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', whiteSpace: 'nowrap' }}
-                        labelStyle={{ color: '#111827', fontWeight: 500 }}
+                        contentStyle={{ 
+                          backgroundColor: 'white', 
+                          border: '1px solid #e5e7eb', 
+                          borderRadius: '8px', 
+                          padding: '4px 12px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          fontFamily: 'inherit',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                        labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
                         itemStyle={{ color: '#111827', fontWeight: 600 }}
+                        separator=": "
                         cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
                       />
                     </BarChart>
@@ -1550,11 +1734,128 @@ export default function ShadowITDashboard() {
                       </Bar>
                       <RechartsTooltip
                         formatter={(value) => [`${value} permissions`, ""]}
-                        contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', whiteSpace: 'nowrap' }}
-                        labelStyle={{ color: '#111827', fontWeight: 500 }}
+                        contentStyle={{ 
+                          backgroundColor: 'white', 
+                          border: '1px solid #e5e7eb', 
+                          borderRadius: '8px', 
+                          padding: '4px 12px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          fontFamily: 'inherit',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                        labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
                         itemStyle={{ color: '#111827', fontWeight: 600 }}
+                        separator=": "
                         cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
                       />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Application Similarity Groups */}
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 col-span-2">
+                <h3 className="text-lg font-medium text-gray-900">Application Similarity Groups</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Groups of applications that share similar characteristics and usage patterns.
+                </p>
+                <div className="h-[500px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={applications.map(app => ({
+                        name: app.name,
+                        users: app.userCount,
+                        permissions: app.totalPermissions,
+                        similar: getSimilarApps(app, applications).length,
+                        category: app.category,
+                      }))}
+                      layout="vertical"
+                      margin={{ left: 150, right: 20, top: 20, bottom: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                      <XAxis type="number" />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        width={140}
+                        tick={({ x, y, payload }) => (
+                          <g transform={`translate(${x},${y})`}>
+                            <text
+                              x={-3}
+                              y={0}
+                              dy={4}
+                              textAnchor="end"
+                              fill="#111827"
+                              fontSize={12}
+                              className="cursor-pointer hover:fill-primary transition-colors"
+                              onClick={() => {
+                                const app = applications.find(a => a.name === payload.value);
+                                if (app) {
+                                  setMainView("list");
+                                  setSelectedAppId(app.id);
+                                  setIsUserModalOpen(true);
+                                }
+                              }}
+                            >
+                              {payload.value}
+                            </text>
+                          </g>
+                        )}
+                      />
+                      <Bar
+                        dataKey="users"
+                        stackId="a"
+                        name="Users"
+                        fill="#4B5563"
+                        radius={[0, 4, 4, 0]}
+                      >
+                        {applications.map((app, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={getCategoryColor(app.category)}
+                            fillOpacity={0.8}
+                            cursor="pointer"
+                            onClick={() => {
+                              setMainView("list");
+                              setSelectedAppId(app.id);
+                              setIsUserModalOpen(true);
+                            }}
+                          />
+                        ))}
+                      </Bar>
+                      <RechartsTooltip
+                        content={({ active, payload, label }) => {
+                          if (active && payload && payload.length) {
+                            const app = applications.find(a => a.name === label);
+                            if (!app) return null;
+
+                            const similarApps = getSimilarApps(app, applications);
+                            return (
+                              <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
+                                <p className="font-medium">{label}</p>
+                                <p className="text-sm text-gray-500">{app.category}</p>
+                                <div className="text-sm mt-2">
+                                  <div className="font-medium">Similar Apps:</div>
+                                  <div className="mt-1 space-y-1">
+                                    {similarApps.map(({ app: similarApp, score }, index) => (
+                                      <div key={index} className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(similarApp.category) }} />
+                                        <span>{similarApp.name}</span>
+                                        <span className="text-gray-500">({Math.round(score * 100)}% match)</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                        cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                      />
+                      <Legend />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1568,7 +1869,30 @@ export default function ShadowITDashboard() {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-lg font-medium text-gray-800">
-                Hey, we found <span className="text-primary font-semibold">{sortedApps.length}</span> applications.
+                {(() => {
+                  // Count how many filters are active
+                  const activeFilters = [filterCategory, filterRisk, filterManaged].filter(Boolean).length;
+                  
+                  if (activeFilters === 0) {
+                    return `Hey, we found ${sortedApps.length} applications.`;
+                  }
+
+                  // Single filter messages
+                  if (activeFilters === 1) {
+                    if (filterCategory) {
+                      return `Hey, we found ${sortedApps.length} applications in ${filterCategory}.`;
+                    }
+                    if (filterRisk) {
+                      return `Hey, we found ${sortedApps.length} ${filterRisk.toLowerCase()} risk applications.`;
+                    }
+                    if (filterManaged) {
+                      return `Hey, we found ${sortedApps.length} ${filterManaged.toLowerCase()} applications.`;
+                    }
+                  }
+
+                  // Multiple filters - show total count with "filtered"
+                  return `Hey, we found ${sortedApps.length} filtered applications.`;
+                })()}
               </h2>
             </div>
             <div className="flex gap-2">
@@ -1676,6 +2000,9 @@ export default function ShadowITDashboard() {
                     <TabsTrigger value="scopes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                       Scopes
                     </TabsTrigger>
+                    <TabsTrigger value="similar" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                      Similar Apps
+                    </TabsTrigger>
                     <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                       Notes
                     </TabsTrigger>
@@ -1779,15 +2106,14 @@ export default function ShadowITDashboard() {
                                 </TableCell>
                                 <TableCell>
                                   <TooltipProvider>
-                                        <Tooltip delayDuration={300}>
+                                    <Tooltip delayDuration={300}>
                                       <TooltipTrigger asChild>
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex items-center justify-center">
                                           <RiskBadge level={user.riskLevel} />
-                                          <Info className="h-4 w-4 text-muted-foreground" />
                                         </div>
                                       </TooltipTrigger>
-                                          <TooltipContent side="right" className="p-2">
-                                            <p className="text-xs">{user.riskReason}</p>
+                                      <TooltipContent side="right" className="p-2">
+                                        <p className="text-xs">{user.riskReason}</p>
                                       </TooltipContent>
                                     </Tooltip>
                                   </TooltipProvider>
@@ -1983,6 +2309,91 @@ export default function ShadowITDashboard() {
                             </>
                           )
                         })()}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="similar">
+                    <div className="p-5 border border-gray-200 rounded-md bg-white">
+                      <h3 className="text-lg font-medium mb-4">Similar Applications</h3>
+                      <p className="text-sm text-muted-foreground mb-6">
+                        Apps that share similar usage patterns with {selectedApp.name}, based on user behavior and functional overlap.
+                      </p>
+
+                      <div className="space-y-6">
+                        {getSimilarApps(selectedApp, applications).map(({ app, score, reasons }) => (
+                          <div key={app.id} className="p-4 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-3">
+                                  <AppIcon name={app.name} />
+                                  <div>
+                                    <h4 className="font-medium">{app.name}</h4>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm text-muted-foreground">{app.category}</span>
+                                      <span className="text-sm text-muted-foreground">•</span>
+                                      <span className="text-sm font-medium text-primary">{Math.round(score * 100)}% match</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Usage Stats */}
+                                <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-50 rounded-md">
+                                  <div>
+                                    <div className="text-sm text-muted-foreground">Shared Users</div>
+                                    <div className="text-lg font-medium">
+                                      {app.users.filter(u => 
+                                        selectedApp.users.some(su => su.email === u.email)
+                                      ).length}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-sm text-muted-foreground">Common Functions</div>
+                                    <div className="text-lg font-medium">
+                                      {Array.from(getAppFunctionality(app.scopes)).filter(f => 
+                                        getAppFunctionality(selectedApp.scopes).has(f)
+                                      ).length}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-sm text-muted-foreground">Active Users</div>
+                                    <div className="text-lg font-medium">
+                                      {app.users.filter(u => 
+                                        new Date(u.lastActive) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+                                      ).length}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Similarity Reasons */}
+                                <div className="space-y-2">
+                                  {reasons.map((reason, index) => (
+                                    <div key={index} className="flex items-center gap-2">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
+                                      <span className="text-sm">{reason}</span>
+                        </div>
+                      ))}
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col items-end gap-3">
+                                <RiskBadge level={app.riskLevel} />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedAppId(app.id);
+                                    setIsUserModalOpen(true);
+                                  }}
+                                  className="whitespace-nowrap"
+                                >
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Details
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </TabsContent>
 
