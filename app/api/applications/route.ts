@@ -12,21 +12,20 @@ type UserType = {
 }
 
 type UserApplicationType = {
-  users: UserType[];
+  user: UserType;
   scopes: string[];
   last_login: string;
 }
 
 type ApplicationType = {
   id: string;
-  google_app_id: string;
   name: string;
-  category: string | null;
+  category: string;
   risk_level: string;
   management_status: string;
   total_permissions: number;
   last_login: string;
-  user_applications: UserApplicationType[] | null;
+  user_applications: UserApplicationType[];
 }
 
 export async function GET(request: Request) {
@@ -38,37 +37,29 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Organization ID is required' }, { status: 400 });
     }
 
-    // Fetch applications with user details and scopes
+    // Get applications with user data in a single query
     const { data: applications, error } = await supabaseAdmin
       .from('applications')
       .select(`
-        id,
-        google_app_id,
-        name,
-        category,
-        risk_level,
-        management_status,
-        total_permissions,
-        last_login,
-        user_applications (
-          users (
+        *,
+        user_applications:user_applications (
+          scopes,
+          last_login,
+          user:users!inner (
             id,
             name,
             email,
             role,
             department,
             last_login
-          ),
-          scopes,
-          last_login
+          )
         )
       `)
       .eq('organization_id', orgId)
       .order('last_login', { ascending: false });
 
     if (error) {
-      console.error('Error fetching applications:', error);
-      return NextResponse.json({ error: 'Failed to fetch applications' }, { status: 500 });
+      throw error;
     }
 
     if (!applications) {
@@ -76,41 +67,58 @@ export async function GET(request: Request) {
     }
 
     // Transform the data to match the frontend structure
-    const transformedApplications = applications.map(app => ({
-      id: app.id,
-      name: app.name,
-      category: app.category || 'Others',
-      userCount: app.user_applications?.length || 0,
-      users: app.user_applications?.map(ua => {
-        // Check if users array exists and has at least one user
-        const user = ua.users?.[0];
-        if (!user) {
-          return null;
-        }
+    const transformedApplications = (applications as ApplicationType[]).map(app => {
+      // Get unique users from user_applications
+      const uniqueUsers = Array.from(new Set(
+        app.user_applications
+          .map(ua => ua.user)
+          .filter((user): user is UserType => Boolean(user))
+      ));
 
-        return {
+      // Get the most recent login date from all user_applications
+      const lastLogin = app.user_applications
+        .reduce((latest, ua) => {
+          const loginDate = new Date(ua.last_login);
+          return latest > loginDate ? latest : loginDate;
+        }, new Date(0))
+        .toISOString();
+
+      return {
+        id: app.id,
+        name: app.name,
+        category: app.category || 'Others',
+        userCount: uniqueUsers.length,
+        users: uniqueUsers.map(user => ({
           id: user.id,
           appId: app.id,
           name: user.name,
           email: user.email,
-          lastActive: ua.last_login,
-          scopes: ua.scopes || [],
-          riskLevel: determineUserRiskLevel(ua.scopes),
-          riskReason: determineUserRiskReason(ua.scopes)
-        };
-      }).filter(Boolean) || [], // Remove null entries and provide empty array as fallback
-      riskLevel: transformRiskLevel(app.risk_level),
-      riskReason: determineAppRiskReason(app.risk_level, app.total_permissions),
-      totalPermissions: app.total_permissions,
-      scopeVariance: calculateScopeVariance(app.user_applications),
-      lastLogin: app.last_login,
-      managementStatus: transformManagementStatus(app.management_status),
-      ownerEmail: '',  // Can be added later if needed
-      notes: '',       // Can be added later if needed
-      scopes: Array.from(new Set(app.user_applications?.flatMap(ua => ua.scopes || []) || [])),
-      isInstalled: app.management_status === 'MANAGED',
-      isAuthAnonymously: false  // Can be added later if needed
-    }));
+          lastActive: app.user_applications.find((ua: UserApplicationType) => 
+            ua.user.id === user.id
+          )?.last_login || user.last_login,
+          scopes: app.user_applications.find((ua: UserApplicationType) => 
+            ua.user.id === user.id
+          )?.scopes || [],
+          riskLevel: determineUserRiskLevel(app.user_applications.find((ua: UserApplicationType) => 
+            ua.user.id === user.id
+          )?.scopes || []),
+          riskReason: determineUserRiskReason(app.user_applications.find((ua: UserApplicationType) => 
+            ua.user.id === user.id
+          )?.scopes || [])
+        })),
+        riskLevel: transformRiskLevel(app.risk_level),
+        riskReason: determineAppRiskReason(app.risk_level, app.total_permissions),
+        totalPermissions: app.total_permissions,
+        scopeVariance: calculateScopeVariance(app.user_applications),
+        lastLogin: lastLogin,
+        managementStatus: transformManagementStatus(app.management_status),
+        ownerEmail: '',
+        notes: '',
+        scopes: Array.from(new Set(app.user_applications?.flatMap(ua => ua.scopes || []) || [])),
+        isInstalled: app.management_status === 'MANAGED',
+        isAuthAnonymously: false
+      };
+    });
 
     return NextResponse.json(transformedApplications);
   } catch (error) {
@@ -212,22 +220,21 @@ function determineAppRiskReason(riskLevel: string, totalPermissions: number): st
 
 export async function PATCH(request: Request) {
   try {
-    const { application_id, management_status } = await request.json();
+    const { id, managementStatus } = await request.json();
 
-    if (!application_id || !management_status) {
-      return NextResponse.json(
-        { error: 'Application ID and management status are required' },
-        { status: 400 }
-      );
+    if (!id || !managementStatus) {
+      return NextResponse.json({ error: 'Application ID and management status are required' }, { status: 400 });
+    }
+
+    // Validate management status
+    if (!['Managed', 'Unmanaged', 'Needs Review'].includes(managementStatus)) {
+      return NextResponse.json({ error: 'Invalid management status' }, { status: 400 });
     }
 
     const { error } = await supabaseAdmin
       .from('applications')
-      .update({
-        management_status,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', application_id);
+      .update({ management_status: managementStatus })
+      .eq('id', id);
 
     if (error) {
       throw error;
@@ -236,9 +243,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating application:', error);
-    return NextResponse.json(
-      { error: 'Failed to update application' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

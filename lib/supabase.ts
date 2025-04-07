@@ -67,4 +67,14 @@ export type UserApplication = {
   last_login: string;
   created_at: string;
   updated_at: string;
+}
+
+export type UserSignedUp = {
+  id: string;
+  email: string;
+  name: string | null;
+  avatar_url: string | null;
+  last_login: string | null;
+  created_at: string;
+  updated_at: string;
 } 

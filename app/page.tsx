@@ -41,6 +41,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { JSX } from "react"
 import { useDebounce } from "@/app/hooks/useDebounce"
+import Image from "next/image"
 
 // Type definitions
 type Application = {
@@ -540,17 +541,38 @@ export default function ShadowITDashboard() {
   }
 
   // Handle status change
-  const handleStatusChange = (appId: string, newStatus: string) => {
-    setApplications((prevApps) =>
-      prevApps.map((app) =>
-        app.id === appId ? { ...app, managementStatus: newStatus as "Managed" | "Unmanaged" | "Needs Review" } : app,
-      ),
-    )
-    setEditedStatuses((prev) => ({
-      ...prev,
-      [appId]: newStatus,
-    }))
-  }
+  const handleStatusChange = async (appId: string, newStatus: string) => {
+    try {
+      const response = await fetch('/api/applications', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: appId,
+          managementStatus: newStatus,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update status');
+      }
+
+      // Update local state
+      setApplications((prevApps) =>
+        prevApps.map((app) =>
+          app.id === appId ? { ...app, managementStatus: newStatus as "Managed" | "Unmanaged" | "Needs Review" } : app,
+        ),
+      );
+      setEditedStatuses((prev) => ({
+        ...prev,
+        [appId]: newStatus,
+      }));
+    } catch (error) {
+      console.error('Error updating status:', error);
+      // You might want to show an error toast here
+    }
+  };
 
   // Helper function to group users by identical scope sets
   function getScopeGroups(app: Application | null) {
@@ -1036,8 +1058,16 @@ export default function ShadowITDashboard() {
 
   return (
     <div className="max-w-[1400px] mx-auto py-8 space-y-8 font-sans text-gray-900">
-      <div className="flex flex-col space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Stitchflow Shadow IT Scanner</h1>
+      <div className="flex flex-col space-y-3">
+        <div className="flex items-center gap-4">
+          <Image 
+            src="/Stitchflow.png" 
+            alt="Stitchflow Logo" 
+            width={32} 
+            height={32} 
+          />
+          <h1 className="text-2xl font-semibold tracking-tight">Shadow IT Scanner</h1>
+        </div>
         <p className="text-gray-600 text-sm">
           Discover and track all the apps your employees use via your org's Google Workspace
         </p>
