@@ -1037,7 +1037,7 @@ export default function ShadowITDashboard() {
   return (
     <div className="max-w-[1400px] mx-auto py-8 space-y-8 font-sans text-gray-900">
       <div className="flex flex-col space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Shadow IT Scanner</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Stitchflow Shadow IT Scanner</h1>
         <p className="text-gray-600 text-sm">
           Discover and track all the apps your employees use via your org's Google Workspace
         </p>
