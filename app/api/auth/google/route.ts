@@ -92,6 +92,7 @@ export async function GET(request: Request) {
     console.log('6. Fetching users list...');
     // Get users list
     const users = await googleService.getUsersList();
+    console.log('Users:', users);
     console.log('Users fetched:', { count: users?.length });
 
     console.log('7. Upserting users in Supabase...');
@@ -122,6 +123,7 @@ export async function GET(request: Request) {
     console.log('8. Fetching OAuth tokens for applications...');
     // Get OAuth tokens for all users
     const applicationTokens = await googleService.getOAuthTokens();
+    console.log('Application tokens:', applicationTokens);
     console.log('Application tokens fetched:', { count: applicationTokens?.length });
 
     console.log('9. Processing applications and user-application relationships...');
