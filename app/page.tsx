@@ -151,14 +151,35 @@ export default function ShadowITDashboard() {
         
         // Get orgId from URL params
         const urlParams = new URLSearchParams(window.location.search);
-        const orgId = urlParams.get('orgId');
+        let orgId = urlParams.get('orgId');
+        
+        // If no orgId in params, check if we can get it from cookies
+        if (!orgId) {
+          try {
+            // Get cookies as a string
+            const cookies = document.cookie.split(';');
+            // Find the orgId cookie
+            const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
+            if (orgIdCookie) {
+              // Extract the value
+              orgId = orgIdCookie.split('=')[1].trim();
+              console.log("Found orgId in cookie:", orgId);
+            }
+          } catch (cookieError) {
+            console.error("Error parsing cookies:", cookieError);
+          }
+        }
         
         if (!orgId) {
-          // If no orgId, redirect to login
-          window.location.href = '/login';
+          console.log("No orgId found in URL or cookies, redirecting to login...");
+          // Add a small delay before redirecting to prevent rapid redirects
+          setTimeout(() => {
+            window.location.href = '/login';
+          }, 500);
           return;
         }
 
+        console.log("Fetching applications with orgId:", orgId);
         // Fetch applications from our API
         const response = await fetch(`/api/applications?orgId=${orgId}`);
         if (!response.ok) {
@@ -172,7 +193,9 @@ export default function ShadowITDashboard() {
         console.error("Error fetching application data:", error);
         setIsLoading(false);
         // Redirect to login on error
-        window.location.href = '/login';
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 500);
       }
     };
 

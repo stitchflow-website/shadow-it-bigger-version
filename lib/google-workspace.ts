@@ -1,6 +1,18 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 
+// Define interfaces for Google API responses
+interface Token {
+  clientId: string;
+  displayText?: string;
+  scopes?: string[];
+  userKey: string;
+  userEmail?: string;
+  lastTimeUsed?: string;
+  // Other token fields from Google API
+  [key: string]: any;
+}
+
 export class GoogleWorkspaceService {
   private oauth2Client: OAuth2Client;
   private admin: any;
@@ -53,18 +65,39 @@ export class GoogleWorkspaceService {
     return response.data;
   }
 
-  async getOAuthTokens() {
+  async getOAuthTokens(): Promise<Token[]> {
     try {
-      // Get the current user's email
-      const userInfo = await this.oauth2.userinfo.get();
-      const userEmail = userInfo.data.email;
-
-      // List tokens for the current user
-      const response = await this.admin.tokens.list({
-        userKey: userEmail,
-        maxResults: 500
-      });
-      return response.data.items || [];
+      // Get all users in the organization
+      const users = await this.getUsersList();
+      console.log(`Found ${users.length} users in the organization`);
+      
+      let allTokens: Token[] = [];
+      
+      // For each user, try to fetch their tokens
+      for (const user of users) {
+        try {
+          console.log(`Fetching tokens for user: ${user.primaryEmail}`);
+          const response = await this.admin.tokens.list({
+            userKey: user.primaryEmail,
+            maxResults: 500
+          });
+          
+          // Add user reference to each token
+          const userTokens = (response.data.items || []).map((token: any): Token => ({
+            ...token,
+            userKey: user.id, // Use the Google user ID as the userKey for mapping
+            userEmail: user.primaryEmail // Add email for reference
+          }));
+          
+          allTokens = [...allTokens, ...userTokens];
+          console.log(`Found ${userTokens.length} tokens for user ${user.primaryEmail}`);
+        } catch (error) {
+          // Don't fail the entire process if one user fails
+          console.error(`Error fetching tokens for user ${user.primaryEmail}:`, error);
+        }
+      }
+      
+      return allTokens;
     } catch (error) {
       console.error('Error fetching OAuth tokens:', error);
       // Return empty array instead of throwing to handle the case where no tokens exist
@@ -75,5 +108,11 @@ export class GoogleWorkspaceService {
   async getToken(code: string) {
     const { tokens } = await this.oauth2Client.getToken(code);
     return tokens;
+  }
+
+  // Add method to get authenticated user info
+  async getAuthenticatedUserInfo() {
+    const response = await this.oauth2.userinfo.get();
+    return response.data;
   }
 } 
