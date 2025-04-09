@@ -4,6 +4,9 @@ import type { NextRequest } from 'next/server';
 // Define paths that don't require authentication
 const PUBLIC_PATHS = [
   '/login', 
+  '/loading',
+  '/privacy',
+  '/terms',
   '/auth/google',
   '/api/auth/google'  // Add the API route for OAuth callback
 ];
