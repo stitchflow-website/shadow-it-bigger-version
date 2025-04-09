@@ -40,6 +40,7 @@ export type Application = {
   risk_level: 'HIGH' | 'MEDIUM' | 'LOW';
   management_status: 'APPROVED' | 'PENDING' | 'BLOCKED';
   total_permissions: number;
+  all_scopes: string[];
   last_login: string;
   organization_id: string;
   created_at: string;

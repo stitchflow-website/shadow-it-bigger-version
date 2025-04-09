@@ -179,6 +179,17 @@ export default function ShadowITDashboard() {
           return;
         }
 
+        // Check if there's an active sync for this organization
+        const syncResponse = await fetch(`/api/sync/status?orgId=${orgId}`);
+        if (syncResponse.ok) {
+          const syncData = await syncResponse.json();
+          if (syncData && syncData.status === 'IN_PROGRESS') {
+            console.log("Found active sync, redirecting to loading page...");
+            window.location.href = `/loading?syncId=${syncData.id}`;
+            return;
+          }
+        }
+
         console.log("Fetching applications with orgId:", orgId);
         // Fetch applications from our API
         const response = await fetch(`/api/applications?orgId=${orgId}`);
@@ -602,8 +613,17 @@ export default function ShadowITDashboard() {
     if (!app) return []
 
     // Create a map of scope sets to users
-    const scopeGroups = new Map<string, { scopes: string[]; users: AppUser[] }>()
+    const scopeGroups = new Map<string, { scopes: string[]; users: AppUser[]; isAllScopes?: boolean }>()
 
+    // First, create a group for all scopes from the application
+    const allScopes = [...app.scopes].sort()
+    scopeGroups.set("ALL_SCOPES", {
+      scopes: allScopes,
+      users: [], // This may be empty if no user has all permissions
+      isAllScopes: true // Mark this as the special "All Possible Scopes" group
+    })
+
+    // Then group users by their specific scope sets
     app.users.forEach((user) => {
       // Sort scopes to ensure consistent grouping
       const sortedScopes = [...user.scopes].sort()
@@ -620,7 +640,15 @@ export default function ShadowITDashboard() {
     })
 
     // Convert map to array for rendering
+    // Sort by number of scopes (descending) so the full scope set appears first
     return Array.from(scopeGroups.values())
+      .sort((a, b) => {
+        // Always put the "All Scopes" group first
+        if (a.isAllScopes) return -1;
+        if (b.isAllScopes) return 1;
+        // Then sort remaining groups by number of scopes
+        return b.scopes.length - a.scopes.length;
+      })
   }
 
   // Chart data preparation functions
@@ -2257,18 +2285,26 @@ export default function ShadowITDashboard() {
                             <>
                               {currentScopeGroups.map((group, groupIndex) => (
                         <div key={groupIndex} className="mb-6 border rounded-md overflow-hidden">
-                          <div className="bg-gray-50 p-3 flex justify-between items-center border-b border-gray-200">
+                          <div className={`p-3 flex justify-between items-center border-b border-gray-200 ${group.isAllScopes ? "bg-blue-50" : "bg-gray-50"}`}>
                             <h4 className="font-medium">
-                                      Group {scopeStartIndex + groupIndex + 1} - {group.users.length}{" "}
-                              {group.users.length === 1 ? "user" : "users"}
+                              {group.isAllScopes ? (
+                                <span className="flex items-center">
+                                  <Info className="h-4 w-4 mr-1 text-blue-600" />
+                                  All Application Scopes
+                                </span>
+                              ) : (
+                                `User Group ${scopeStartIndex + groupIndex + (scopeCurrentPage === 1 ? 0 : -1)} - ${group.users.length} ${group.users.length === 1 ? "user" : "users"}`
+                              )}
                             </h4>
-                            <Badge variant="outline" className="bg-primary/10">
+                            <Badge variant={group.isAllScopes ? "default" : "outline"} className={group.isAllScopes ? "bg-blue-600" : "bg-primary/10"}>
                               {group.scopes.length} {group.scopes.length === 1 ? "permission" : "permissions"}
                             </Badge>
                           </div>
 
                           <div className="p-3 border-b">
-                                    <h5 className="text-sm font-medium mb-2">Permissions:</h5>
+                                    <h5 className="text-sm font-medium mb-2">
+                                      {group.isAllScopes ? "Total Available Permissions:" : "Permissions:"}
+                                    </h5>
                                     <div className="max-h-60 overflow-y-auto">
                                       {group.scopes.map((scope, scopeIndex) => (
                                         <div key={scopeIndex} className="py-1 border-b border-muted last:border-0 text-sm">
@@ -2279,23 +2315,33 @@ export default function ShadowITDashboard() {
                                   </div>
 
                                   <div className="p-3">
-                            <h5 className="text-sm font-medium mb-2">Users in this group:</h5>
-                            <div className="flex flex-wrap gap-2">
-                              {group.users.map((user, userIndex) => (
-                                <div
-                                  key={userIndex}
-                                  className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
-                                >
-                                  <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-200 text-xs font-medium text-gray-800">
-                                    {user.name
-                                      .split(" ")
-                                      .map((n) => n[0])
-                                      .join("")}
+                            <h5 className="text-sm font-medium mb-2">
+                              {group.isAllScopes 
+                                ? "This represents all permissions the application could request from any user"
+                                : "Users with this permission set:"}
+                            </h5>
+                            {group.isAllScopes ? (
+                              <div className="text-sm text-muted-foreground italic">
+                                No single user has all these permissions. Different users have granted different subsets.
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {group.users.map((user, userIndex) => (
+                                  <div
+                                    key={userIndex}
+                                    className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
+                                  >
+                                    <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-200 text-xs font-medium text-gray-800">
+                                      {user.name
+                                        .split(" ")
+                                        .map((n) => n[0])
+                                        .join("")}
+                                    </div>
+                                    <span className="text-sm">{user.name}</span>
                                   </div>
-                                  <span className="text-sm">{user.name}</span>
-                                </div>
-                              ))}
-                            </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                                 </div>
                               ))}

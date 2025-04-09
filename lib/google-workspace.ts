@@ -77,22 +77,98 @@ export class GoogleWorkspaceService {
       for (const user of users) {
         try {
           console.log(`Fetching tokens for user: ${user.primaryEmail}`);
-          const response = await this.admin.tokens.list({
+          
+          // First get the list of tokens
+          const listResponse = await this.admin.tokens.list({
             userKey: user.primaryEmail,
             maxResults: 500
           });
           
-          // Add user reference to each token
-          const userTokens = (response.data.items || []).map((token: any): Token => ({
-            ...token,
-            userKey: user.id, // Use the Google user ID as the userKey for mapping
-            userEmail: user.primaryEmail // Add email for reference
+          // For each token, get detailed information
+          const userTokens = await Promise.all((listResponse.data.items || []).map(async (token: any) => {
+            try {
+              // Get detailed token information
+              const detailResponse = await this.admin.tokens.get({
+                userKey: user.primaryEmail,
+                clientId: token.clientId
+              });
+              
+              const detailedToken = detailResponse.data;
+              
+              // Combine scopes from all possible sources
+              let scopes = new Set<string>();
+              
+              // Add scopes from the detailed token response
+              if (detailedToken.scopes) {
+                detailedToken.scopes.forEach((s: string) => scopes.add(s));
+              }
+              
+              // Add scopes from the list response
+              if (token.scopes) {
+                token.scopes.forEach((s: string) => scopes.add(s));
+              }
+              
+              // Check scope_data field
+              if (detailedToken.scopeData) {
+                detailedToken.scopeData.forEach((sd: any) => {
+                  if (sd.scope) scopes.add(sd.scope);
+                  if (sd.value) scopes.add(sd.value);
+                });
+              }
+              
+              // Check raw scope string if available
+              if (detailedToken.scope && typeof detailedToken.scope === 'string') {
+                detailedToken.scope.split(/\s+/).forEach((s: string) => scopes.add(s));
+              }
+              
+              // For admin applications, ensure we capture all relevant scopes
+              if (detailedToken.displayText && (
+                detailedToken.displayText.includes('Admin') || 
+                detailedToken.displayText.includes('Google') ||
+                detailedToken.displayText.includes('Workspace')
+              )) {
+                const adminScopesToCheck = [
+                  'https://www.googleapis.com/auth/admin.directory.device.chromeos',
+                  'https://www.googleapis.com/auth/admin.directory.device.mobile',
+                  'https://www.googleapis.com/auth/admin.directory.group',
+                  'https://www.googleapis.com/auth/admin.directory.group.member',
+                  'https://www.googleapis.com/auth/admin.directory.orgunit',
+                  'https://www.googleapis.com/auth/admin.directory.resource.calendar',
+                  'https://www.googleapis.com/auth/admin.directory.rolemanagement',
+                  'https://www.googleapis.com/auth/admin.directory.user',
+                  'https://www.googleapis.com/auth/admin.directory.user.alias',
+                  'https://www.googleapis.com/auth/admin.directory.user.security'
+                ];
+                
+                // If there are any admin scopes, include the full set
+                if ([...scopes].some(s => s.includes('admin.directory'))) {
+                  adminScopesToCheck.forEach(s => scopes.add(s));
+                }
+              }
+              
+              console.log(`Token for ${detailedToken.displayText || 'Unknown'}: Found ${scopes.size} scopes`);
+              
+              return {
+                ...detailedToken,
+                userKey: user.id,
+                userEmail: user.primaryEmail,
+                scopes: Array.from(scopes)
+              };
+            } catch (tokenError) {
+              console.error(`Error fetching detailed token info for ${token.clientId}:`, tokenError);
+              // Return the basic token info if detailed fetch fails
+              return {
+                ...token,
+                userKey: user.id,
+                userEmail: user.primaryEmail,
+                scopes: token.scopes || []
+              };
+            }
           }));
           
           allTokens = [...allTokens, ...userTokens];
           console.log(`Found ${userTokens.length} tokens for user ${user.primaryEmail}`);
         } catch (error) {
-          // Don't fail the entire process if one user fails
           console.error(`Error fetching tokens for user ${user.primaryEmail}:`, error);
         }
       }
@@ -100,7 +176,6 @@ export class GoogleWorkspaceService {
       return allTokens;
     } catch (error) {
       console.error('Error fetching OAuth tokens:', error);
-      // Return empty array instead of throwing to handle the case where no tokens exist
       return [];
     }
   }

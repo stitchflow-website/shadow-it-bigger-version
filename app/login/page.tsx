@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 function LoginContent() {
   const [error, setError] = useState<string | null>(null);
@@ -41,17 +42,15 @@ function LoginContent() {
       }
       
       const scopes = [
-        // User and domain management
+        // User and domain management - read-only access
         'https://www.googleapis.com/auth/admin.directory.user.readonly',
         'https://www.googleapis.com/auth/admin.directory.domain.readonly',
-        'https://www.googleapis.com/auth/admin.directory.user',
-        'https://www.googleapis.com/auth/admin.directory.domain',
-        // Token and security management
+        'https://www.googleapis.com/auth/admin.directory.group.readonly',
+        // Token management - required for accessing OAuth tokens
         'https://www.googleapis.com/auth/admin.directory.user.security',
-        'https://www.googleapis.com/auth/admin.directory.device.chromeos',
-        // Reports and audit logs
-        'https://www.googleapis.com/auth/admin.reports.audit.readonly',
-        'https://www.googleapis.com/auth/admin.reports.usage.readonly',
+        // Reports and audit logs - read-only access
+        // 'https://www.googleapis.com/auth/admin.reports.audit.readonly',
+        // 'https://www.googleapis.com/auth/admin.reports.usage.readonly',
         // Basic profile info
         'openid',
         'profile',
@@ -75,31 +74,52 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Card className="w-[400px]">
-        <CardHeader>
-          <CardTitle>Welcome to Shadow IT Scanner</CardTitle>
-          <CardDescription>
-            Sign in with your Google Workspace account to manage your organization's applications.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <div className="mb-4 p-4 text-sm text-red-800 bg-red-100 rounded-lg">
-              {error}
-            </div>
-          )}
-          <Button 
-            onClick={handleGoogleLogin}
-            className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-            size="lg"
-            disabled={isLoading}
-          >
-            <img src="/google-logo.svg" alt="Google logo" className="h-5 w-5" />
-            {isLoading ? 'Connecting...' : 'Sign in with Google Workspace'}
-          </Button>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen flex flex-col">
+      <div className="flex-grow flex items-center justify-center">
+        <Card className="w-[400px]">
+          <CardHeader>
+            <CardTitle>Welcome to Shadow IT Scanner</CardTitle>
+            <CardDescription>
+              Sign in with your Google Workspace account to manage your organization's applications.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {error && (
+              <div className="mb-4 p-4 text-sm text-red-800 bg-red-100 rounded-lg">
+                {error}
+              </div>
+            )}
+            <Button 
+              onClick={handleGoogleLogin}
+              className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+              size="lg"
+              disabled={isLoading}
+            >
+              <img src="/google-logo.svg" alt="Google logo" className="h-5 w-5" />
+              {isLoading ? 'Connecting...' : 'Sign in with Google Workspace'}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+      <footer className="bottom-0 left-0 right-0 flex justify-between items-center px-4 py-3 bg-[#1a1a2e] text-white">
+        <div className="flex items-center gap-4">
+          <Link href="/" className="hover:text-blue-500 transition-colors">
+            stitchflow.com
+          </Link>
+          <Link href="/privacy" className="hover:text-blue-500 transition-colors">
+            Privacy Policy
+          </Link>
+          <Link href="/terms" className="hover:text-blue-500 transition-colors">
+            Terms of Service
+          </Link>
+        </div>
+        <a 
+          href="mailto:contact@stitchflow.io" 
+          className="hover:text-blue-500 transition-colors"
+        >
+          contact@stitchflow.io
+        </a>
+      </footer>
     </div>
   );
 }
