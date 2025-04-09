@@ -3,6 +3,10 @@ import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel } from '@/lib/risk-assessment';
 
+// Configure Vercel runtime to maximize function duration
+export const runtime = 'nodejs'; // Use Node.js runtime for intensive processing
+export const maxDuration = 300; // 5 minutes max duration
+
 // Helper function to update sync status
 async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
   return await supabaseAdmin
@@ -55,19 +59,36 @@ export async function POST(request: Request) {
     // This ensures the API responds quickly while processing continues
     const { organization_id, sync_id, access_token, refresh_token } = await request.json();
     
+    console.log(`Background sync API called for org: ${organization_id}, sync_id: ${sync_id}`);
+    
+    if (!organization_id || !sync_id || !access_token) {
+      console.error('Missing required parameters for background sync');
+      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    }
+    
+    // Process in background without awaiting
+    // We deliberately don't await this so we can return a response immediately
+    Promise.resolve().then(() => {
+      backgroundProcess(organization_id, sync_id, access_token, refresh_token)
+        .catch(error => {
+          console.error(`Unhandled error in background process for sync_id ${sync_id}:`, error);
+          // Still try to update the sync status to failed
+          updateSyncStatus(
+            sync_id,
+            -1,
+            `Sync failed: Unhandled error in background process: ${error.message}`,
+            'FAILED'
+          ).catch(e => console.error('Failed to update sync status after background process error:', e));
+        });
+    });
+    
     // Send immediate response
-    const responsePromise = Promise.resolve(
-      NextResponse.json({ message: 'Sync started in background' })
-    );
-    
-    // Process in background
-    backgroundProcess(organization_id, sync_id, access_token, refresh_token);
-    
-    return responsePromise;
+    console.log(`Returning successful response for sync_id: ${sync_id}`);
+    return NextResponse.json({ message: 'Sync started in background', sync_id });
   } catch (error: any) {
     console.error('Error in background sync API:', error);
     return NextResponse.json(
-      { error: 'Failed to start background sync' },
+      { error: `Failed to start background sync: ${error.message}` },
       { status: 500 }
     );
   }
@@ -75,6 +96,8 @@ export async function POST(request: Request) {
 
 async function backgroundProcess(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {
   try {
+    console.log(`Starting background process for sync_id: ${sync_id}`);
+    
     // Initialize Google Workspace service
     const googleService = new GoogleWorkspaceService({
       client_id: process.env.GOOGLE_CLIENT_ID!,
@@ -86,11 +109,22 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
       access_token,
       refresh_token
     });
+    console.log(`Google Workspace service initialized for sync_id: ${sync_id}`);
 
     // Step 1: Fetch users list (20% progress)
+    console.log(`Fetching users from Google Workspace for sync_id: ${sync_id}`);
     await updateSyncStatus(sync_id, 10, 'Fetching users from Google Workspace');
-    const users = await googleService.getUsersList();
-    console.log(`Fetched ${users.length} users`);
+    
+    // Wrap risky operations in try blocks to ensure one failure doesn't stop the entire process
+    let users = [];
+    try {
+      users = await googleService.getUsersList();
+      console.log(`Fetched ${users.length} users for sync_id: ${sync_id}`);
+    } catch (error) {
+      console.error(`Error fetching users for sync_id: ${sync_id}:`, error);
+      // Continue with empty users list rather than failing completely
+      users = [];
+    }
     
     await updateSyncStatus(sync_id, 20, `Processing ${users.length} users`);
     
@@ -138,9 +172,18 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     });
 
     // Step 2: Fetch OAuth tokens (40% progress)
+    console.log(`Fetching OAuth tokens for sync_id: ${sync_id}`);
     await updateSyncStatus(sync_id, 30, 'Fetching application data from Google Workspace');
-    const applicationTokens = await googleService.getOAuthTokens();
-    console.log(`Fetched ${applicationTokens.length} application tokens`);
+    
+    let applicationTokens: any[] = [];
+    try {
+      applicationTokens = await googleService.getOAuthTokens();
+      console.log(`Fetched ${applicationTokens.length} application tokens for sync_id: ${sync_id}`);
+    } catch (error) {
+      console.error(`Error fetching OAuth tokens for sync_id: ${sync_id}:`, error);
+      // Continue with empty tokens list rather than failing completely
+      applicationTokens = [];
+    }
     
     await updateSyncStatus(sync_id, 40, `Processing ${applicationTokens.length} application connections`);
     

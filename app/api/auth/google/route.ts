@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
 
+// Add runtime configuration at the top
+export const runtime = 'nodejs';
+export const maxDuration = 300; // 5 minutes max duration
+
 // Helper function to safely format date
 function formatDate(dateValue: any): string {
   if (!dateValue) return new Date().toISOString();
@@ -148,24 +152,30 @@ export async function GET(request: Request) {
     }
 
     // Trigger the background data processing job
-    const apiUrl = new URL('/api/background/sync', request.url).toString();
-    fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        organization_id: org.id,
-        sync_id: syncStatus.id,
-        access_token: oauthTokens.access_token,
-        refresh_token: oauthTokens.refresh_token,
-      }),
-    }).catch(error => {
-      console.error('Error triggering background sync:', error);
-    });
-
-    console.log('Background sync job triggered');
+    console.log('About to trigger background sync job with sync_id:', syncStatus.id);
     
+    try {
+      const apiUrl = new URL('/api/background/sync', request.url).toString();
+      const syncResponse = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          organization_id: org.id,
+          sync_id: syncStatus.id,
+          access_token: oauthTokens.access_token,
+          refresh_token: oauthTokens.refresh_token,
+        }),
+      });
+      
+      const syncResult = await syncResponse.json();
+      console.log('Background sync job triggered successfully:', syncResult);
+    } catch (error) {
+      console.error('Error triggering background sync:', error);
+      // Continue with the auth flow even if sync fails
+    }
+
     // Create the response with redirect
     const response = NextResponse.redirect(new URL('/loading?syncId=' + syncStatus.id, request.url));
     
