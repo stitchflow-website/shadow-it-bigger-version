@@ -56,9 +56,9 @@ export async function GET(request: Request) {
     console.log('2. Initializing Google Workspace service...');
     // Initialize Google Workspace service
     const googleService = new GoogleWorkspaceService({
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
     });
 
     console.log('3. Getting tokens from Google...');
@@ -75,19 +75,8 @@ export async function GET(request: Request) {
     
     await googleService.setCredentials(oauthTokens);
 
-    console.log('4. Fetching organization details...');
-    // Get organization details
-    const orgDetails = await googleService.getOrganizationDetails();
-    console.log('Organization details:', {
-      domains: orgDetails.domains?.length,
-      firstDomain: orgDetails.domains?.[0]
-    });
-    
-    const domain = orgDetails.domains[0];
-    console.log('Domain:', domain);
-
+    console.log('4. Getting authenticated user info...');
     // Get the authenticated user's info
-    console.log('Getting authenticated user info...');
     const userInfo = await googleService.getAuthenticatedUserInfo();
     console.log('Authenticated user:', userInfo);
 
@@ -109,13 +98,16 @@ export async function GET(request: Request) {
       throw authUserError;
     }
 
-    // Create or get organization
+    // Extract organization domain from user's email
+    const userDomain = userInfo.email!.split('@')[1];
+
+    // Create or get organization based on user's email domain
     const { data: org, error: orgError } = await supabaseAdmin
       .from('organizations')
       .upsert({
-        google_org_id: domain.customerId,
-        name: domain.domainName,
-        domain: domain.domainName,
+        google_org_id: userDomain, // Use domain as org ID since we don't have customerId
+        name: userDomain,
+        domain: userDomain,
       })
       .select()
       .single();
@@ -178,7 +170,7 @@ export async function GET(request: Request) {
       path: '/',
     });
     
-    response.cookies.set('userEmail', userInfo.email, {
+    response.cookies.set('userEmail', userInfo.email!, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
