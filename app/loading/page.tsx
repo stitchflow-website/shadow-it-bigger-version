@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -14,6 +14,10 @@ function LoadingContent() {
   const [status, setStatus] = useState('IN_PROGRESS');
   const [message, setMessage] = useState('Starting data sync...');
   const [error, setError] = useState<string | null>(null);
+  // Use dynamic polling interval that increases as progress increases
+  const [pollInterval, setPollInterval] = useState(1000);
+  // Track last successful response time
+  const lastResponseTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {
     if (!syncId) {
@@ -33,6 +37,9 @@ function LoadingContent() {
           return;
         }
 
+        // Update last successful response time
+        lastResponseTimeRef.current = Date.now();
+        
         const data = await response.json();
         
         if (data) {
@@ -54,6 +61,16 @@ function LoadingContent() {
             setError(`Sync failed: ${data.message}`);
             return;
           }
+          
+          // Adjust polling frequency based on progress
+          // Lower frequency as progress increases to reduce load
+          if (data.progress < 30) {
+            setPollInterval(1000); // 1s when starting
+          } else if (data.progress < 70) {
+            setPollInterval(2000); // 2s when making good progress
+          } else {
+            setPollInterval(3000); // 3s when almost done
+          }
         }
       } catch (err) {
         console.error('Error in sync status check:', err);
@@ -64,12 +81,26 @@ function LoadingContent() {
     // Check status immediately
     checkSyncStatus();
 
-    // Then set up polling
-    const intervalId = setInterval(checkSyncStatus, 2000);
+    // Then set up polling with dynamic interval
+    const intervalId = setInterval(checkSyncStatus, pollInterval);
+
+    // Also check for stale polls (no response for over 30 seconds)
+    const staleCheckId = setInterval(() => {
+      const now = Date.now();
+      const lastResponseAge = (now - lastResponseTimeRef.current) / 1000;
+      
+      // If we haven't gotten a response in 30 seconds, show an error
+      if (lastResponseAge > 30 && status === 'IN_PROGRESS') {
+        setError('Sync appears to be stuck. The server may be busy. You can wait or refresh the page.');
+      }
+    }, 10000);
 
     // Clean up on unmount
-    return () => clearInterval(intervalId);
-  }, [syncId, router]);
+    return () => {
+      clearInterval(intervalId);
+      clearInterval(staleCheckId);
+    };
+  }, [syncId, router, pollInterval, status]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
