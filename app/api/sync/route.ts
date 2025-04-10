@@ -33,8 +33,8 @@ export async function POST(request: Request) {
     const { error: orgError } = await supabase
       .from('organizations')
       .update({
-        name: orgDetails.domains[0].domainName,
-        domain: orgDetails.domains[0].domainName,
+        name: orgDetails.name,
+        domain: orgDetails.domain,
         updated_at: new Date().toISOString(),
       })
       .eq('id', organization_id);

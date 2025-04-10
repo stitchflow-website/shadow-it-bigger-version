@@ -44,6 +44,8 @@ function LoginContent() {
       const scopes = [
         // User and domain management - read-only access
         'https://www.googleapis.com/auth/admin.directory.user.readonly',
+        'https://www.googleapis.com/auth/admin.directory.domain.readonly',
+        'https://www.googleapis.com/auth/admin.directory.group.readonly',
         // Token management - required for accessing OAuth tokens
         'https://www.googleapis.com/auth/admin.directory.user.security',
         // Reports and audit logs - read-only access

@@ -4,6 +4,7 @@ export const HIGH_RISK_SCOPES = [
   // Admin access
   'https://www.googleapis.com/auth/admin',
   'https://www.googleapis.com/auth/admin.directory.user',
+  'https://www.googleapis.com/auth/admin.directory.group',
   'https://www.googleapis.com/auth/admin.directory.user.security',
   // Sensitive data access
   'https://www.googleapis.com/auth/gmail',
@@ -14,6 +15,7 @@ export const HIGH_RISK_SCOPES = [
 export const MEDIUM_RISK_SCOPES = [
   // Read-only admin access
   'https://www.googleapis.com/auth/admin.directory.user.readonly',
+  'https://www.googleapis.com/auth/admin.directory.group.readonly',
   // Moderate data access
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/contacts',
@@ -46,6 +48,9 @@ export function determineRiskReason(scopes: string[] | null | undefined): string
 
   if (scopes.some(s => s.includes('admin.directory.user'))) {
     return 'Has access to user management which can modify user accounts.';
+  }
+  if (scopes.some(s => s.includes('admin.directory.group'))) {
+    return 'Has access to group management which can modify access controls.';
   }
   if (scopes.some(s => s.includes('gmail'))) {
     return 'Has access to email data which may contain sensitive information.';
