@@ -4,7 +4,7 @@
       "maxDuration": 300
     },
     "app/api/background/sync/route.ts": {
-      "maxDuration": 300,
+      "maxDuration": 600,
       "memory": 3008
     },
     "app/api/sync/status/route.ts": {

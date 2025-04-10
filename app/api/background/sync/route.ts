@@ -71,19 +71,37 @@ export async function POST(request: Request) {
     // This ensures the API responds quickly while processing continues
     const { organization_id, sync_id, access_token, refresh_token } = await request.json();
     
+    if (!organization_id || !sync_id || !access_token) {
+      console.error('Missing required parameters:', { organization_id, sync_id, access_token: !!access_token });
+      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    }
+
+    console.log('Starting sync process with ID:', sync_id, 'for org:', organization_id);
+    
     // Send immediate response
     const responsePromise = Promise.resolve(
       NextResponse.json({ message: 'Sync started in background' })
     );
     
-    // Process in background
-    backgroundProcess(organization_id, sync_id, access_token, refresh_token);
+    // Process in background with error handling
+    backgroundProcess(organization_id, sync_id, access_token, refresh_token).catch(error => {
+      console.error('Background process failed:', error);
+      // Try to update the sync status to failed
+      updateSyncStatus(
+        sync_id,
+        -1,
+        `Sync failed: ${error.message}`,
+        'FAILED'
+      ).catch(statusError => {
+        console.error('Failed to update sync status after error:', statusError);
+      });
+    });
     
     return responsePromise;
   } catch (error: any) {
     console.error('Error in background sync API:', error);
     return NextResponse.json(
-      { error: 'Failed to start background sync' },
+      { error: 'Failed to start background sync', details: error.message },
       { status: 500 }
     );
   }
@@ -100,15 +118,48 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
       redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
     });
 
-    await googleService.setCredentials({ 
-      access_token,
-      refresh_token
-    });
+    await updateSyncStatus(sync_id, 5, 'Setting up Google Workspace connection');
+    
+    try {
+      await googleService.setCredentials({ 
+        access_token,
+        refresh_token
+      });
+      console.log('Successfully set credentials for Google Workspace API');
+    } catch (error: any) {
+      console.error('Failed to set credentials:', error);
+      await updateSyncStatus(sync_id, -1, `Failed to connect to Google Workspace: ${error.message}`, 'FAILED');
+      return; // Exit early on credential error
+    }
 
     // Step 1: Fetch users list (20% progress)
     await updateSyncStatus(sync_id, 10, 'Fetching users from Google Workspace');
-    const users = await googleService.getUsersList();
-    console.log(`Fetched ${users.length} users for org ${organization_id}`);
+    
+    let users = [];
+    try {
+      users = await googleService.getUsersList();
+      console.log(`Fetched ${users.length} users for org ${organization_id}`);
+    } catch (error: any) {
+      console.error('Error fetching users list:', error);
+      await updateSyncStatus(
+        sync_id, 
+        -1, 
+        `Error fetching users: ${error.message}. Check Google Workspace permissions.`, 
+        'FAILED'
+      );
+      return; // Exit early on user fetch error
+    }
+    
+    if (!users || users.length === 0) {
+      console.warn('No users found for organization');
+      await updateSyncStatus(
+        sync_id, 
+        -1, 
+        'No users found in Google Workspace. Check permissions and try again.', 
+        'FAILED'
+      );
+      return;
+    }
     
     await updateSyncStatus(sync_id, 20, `Processing ${users.length} users`);
     
@@ -143,41 +194,119 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     
     console.log(`Prepared ${usersToUpsert.length} users for upsert`);
     
-    // Batch upsert all users
-    const { error: usersError } = await supabaseAdmin
-      .from('users')
-      .upsert(usersToUpsert);
-    
-    if (usersError) {
-      console.error('Error upserting users:', usersError);
-      throw usersError;
+    if (usersToUpsert.length === 0) {
+      console.warn('No valid users to insert after processing');
+      await updateSyncStatus(
+        sync_id, 
+        -1, 
+        'Failed to process user data. Please try again.', 
+        'FAILED'
+      );
+      return;
     }
     
-    console.log('Successfully upserted users');
+    // Batch upsert all users
+    try {
+      const { error: usersError } = await supabaseAdmin
+        .from('users')
+        .upsert(usersToUpsert);
+      
+      if (usersError) {
+        console.error('Error upserting users:', usersError);
+        await updateSyncStatus(
+          sync_id, 
+          -1, 
+          `Database error when storing users: ${usersError.message}`, 
+          'FAILED'
+        );
+        return;
+      }
+      
+      console.log('Successfully upserted users');
+    } catch (error: any) {
+      console.error('Exception during user upsert:', error);
+      await updateSyncStatus(
+        sync_id, 
+        -1, 
+        `Failed to save users to database: ${error.message}`, 
+        'FAILED'
+      );
+      return;
+    }
 
     // Get all users for this organization to create a mapping
-    const { data: createdUsers, error: createdUsersError } = await supabaseAdmin
-      .from('users')
-      .select('id, google_user_id, email')
-      .eq('organization_id', organization_id);
-    
-    if (createdUsersError) {
-      console.error('Error fetching created users:', createdUsersError);
-      throw createdUsersError;
+    let createdUsers = [];
+    try {
+      const { data, error: createdUsersError } = await supabaseAdmin
+        .from('users')
+        .select('id, google_user_id, email')
+        .eq('organization_id', organization_id);
+      
+      if (createdUsersError) {
+        console.error('Error fetching created users:', createdUsersError);
+        await updateSyncStatus(
+          sync_id, 
+          -1, 
+          `Database error when retrieving users: ${createdUsersError.message}`, 
+          'FAILED'
+        );
+        return;
+      }
+      
+      createdUsers = data || [];
+      console.log(`Retrieved ${createdUsers.length} users from database`);
+      
+      if (createdUsers.length === 0) {
+        console.error('No users found in database after upsert');
+        await updateSyncStatus(
+          sync_id, 
+          -1, 
+          'Failed to save users to database. Please try again.', 
+          'FAILED'
+        );
+        return;
+      }
+    } catch (error: any) {
+      console.error('Exception during user retrieval:', error);
+      await updateSyncStatus(
+        sync_id, 
+        -1, 
+        `Failed to retrieve users from database: ${error.message}`, 
+        'FAILED'
+      );
+      return;
     }
 
     // Create a mapping for quick lookup
     const userMap = new Map();
     const userEmailMap = new Map();
-    createdUsers?.forEach(user => {
+    createdUsers.forEach(user => {
       userMap.set(user.google_user_id, user.id);
       userEmailMap.set(user.email, user.id);
     });
 
     // Step 2: Fetch OAuth tokens (40% progress)
     await updateSyncStatus(sync_id, 30, 'Fetching application data from Google Workspace');
-    const applicationTokens = await googleService.getOAuthTokens();
-    console.log(`Fetched ${applicationTokens.length} application tokens`);
+    
+    let applicationTokens = [];
+    try {
+      applicationTokens = await googleService.getOAuthTokens();
+      console.log(`Fetched ${applicationTokens.length} application tokens`);
+      
+      if (applicationTokens.length === 0) {
+        console.warn('No application tokens found');
+        // This isn't a failure, just a warning - continue processing
+      }
+    } catch (error: any) {
+      console.error('Error fetching OAuth tokens:', error);
+      await updateSyncStatus(
+        sync_id, 
+        -1, 
+        `Failed to fetch application data: ${error.message}. Check permissions.`, 
+        'FAILED'
+      );
+      return;
+    }
     
     await updateSyncStatus(sync_id, 40, `Processing ${applicationTokens.length} application connections`);
     
