@@ -12,14 +12,14 @@ async function updateSyncStatus(
 ) {
   try {
     const { error } = await supabaseAdmin
-      .from('sync_status')
-      .update({
-        status,
-        progress,
-        message,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', syncId);
+    .from('sync_status')
+    .update({
+      status,
+      progress,
+      message,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', syncId);
     
     if (error) {
       console.error('Error updating sync status:', error);
@@ -121,10 +121,10 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     await updateSyncStatus(sync_id, 5, 'Setting up Google Workspace connection');
     
     try {
-      await googleService.setCredentials({ 
-        access_token,
-        refresh_token
-      });
+    await googleService.setCredentials({ 
+      access_token,
+      refresh_token
+    });
       console.log('Successfully set credentials for Google Workspace API');
     } catch (error: any) {
       console.error('Failed to set credentials:', error);
@@ -166,26 +166,26 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     // Create a batch of all users to upsert
     const usersToUpsert = users.map((user: any) => {
       try {
-        // Determine department from orgUnitPath if available
-        const department = user.orgUnitPath ? 
-          user.orgUnitPath.split('/').filter(Boolean).pop() || null : 
-          null;
-          
-        // Determine role based on isAdmin flag
-        const role = user.isAdmin ? 'Admin' : 'User';
+      // Determine department from orgUnitPath if available
+      const department = user.orgUnitPath ? 
+        user.orgUnitPath.split('/').filter(Boolean).pop() || null : 
+        null;
         
-        // Format the last login time if available
-        const lastLogin = user.lastLoginTime ? formatDate(user.lastLoginTime) : null;
-        
-        return {
-          google_user_id: user.id,
-          email: user.primaryEmail,
+      // Determine role based on isAdmin flag
+      const role = user.isAdmin ? 'Admin' : 'User';
+      
+      // Format the last login time if available
+      const lastLogin = user.lastLoginTime ? formatDate(user.lastLoginTime) : null;
+      
+      return {
+        google_user_id: user.id,
+        email: user.primaryEmail,
           name: user.name?.fullName || user.primaryEmail,
-          role: role,
-          department: department,
-          organization_id: organization_id,
-          last_login: lastLogin,
-        };
+        role: role,
+        department: department,
+        organization_id: organization_id,
+        last_login: lastLogin,
+      };
       } catch (err) {
         console.error('Error processing user:', err, user);
         return null;
@@ -207,10 +207,10 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     
     // Batch upsert all users
     try {
-      const { error: usersError } = await supabaseAdmin
-        .from('users')
-        .upsert(usersToUpsert);
-      
+    const { error: usersError } = await supabaseAdmin
+      .from('users')
+      .upsert(usersToUpsert);
+    
       if (usersError) {
         console.error('Error upserting users:', usersError);
         await updateSyncStatus(
@@ -233,14 +233,14 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
       );
       return;
     }
-
+    
     // Get all users for this organization to create a mapping
     let createdUsers = [];
     try {
       const { data, error: createdUsersError } = await supabaseAdmin
-        .from('users')
+      .from('users')
         .select('id, google_user_id, email')
-        .eq('organization_id', organization_id);
+      .eq('organization_id', organization_id);
       
       if (createdUsersError) {
         console.error('Error fetching created users:', createdUsersError);
@@ -276,7 +276,7 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
       );
       return;
     }
-
+    
     // Create a mapping for quick lookup
     const userMap = new Map();
     const userEmailMap = new Map();
@@ -291,7 +291,7 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     let applicationTokens = [];
     try {
       applicationTokens = await googleService.getOAuthTokens();
-      console.log(`Fetched ${applicationTokens.length} application tokens`);
+    console.log(`Fetched ${applicationTokens.length} application tokens`);
       
       if (applicationTokens.length === 0) {
         console.warn('No application tokens found');
@@ -389,12 +389,13 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
       
       // Prepare application for upsert
       appsToUpsert.push({
-        id: existingApp?.id, // Include ID if it exists
+        // Only include ID if it exists and is not null
+        ...(existingApp?.id ? { id: existingApp.id } : {}),
         google_app_id: tokens.map(t => t.clientId).join(','), // Store all client IDs
         name: appName,
         category: 'Unknown',
         risk_level: highestRiskLevel,
-        management_status: existingApp?.id ? existingApp.management_status || 'PENDING' : 'PENDING', // Preserve existing status or set to PENDING for new
+        management_status: existingApp?.id ? undefined : 'PENDING', // Only set for new apps
         total_permissions: allScopes.size,
         all_scopes: Array.from(allScopes), // Store all unique scopes
         last_login: formatDate(lastUsedTime),
@@ -412,108 +413,106 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     // Batch upsert all applications at once
     console.log(`Upserting ${appsToUpsert.length} applications`);
     
+    // Declare variables outside the try block so they're available in the rest of the function
     let updatedApps: any[] = [];
+    const appIdMap = new Map();
     
     try {
-      // First insert new applications that don't have IDs
-      const newApps = appsToUpsert.filter(app => !app.id);
-      const existingApps = appsToUpsert.filter(app => app.id);
+      const { data, error: appsError } = await supabaseAdmin
+        .from('applications')
+        .upsert(appsToUpsert)
+        .select('id, name');
       
-      let newlyCreatedApps: any[] = [];
-      
-      if (newApps.length > 0) {
-        console.log(`Inserting ${newApps.length} new applications`);
-        const { data: insertedApps, error: insertError } = await supabaseAdmin
-          .from('applications')
-          .insert(newApps)
-          .select('id, name');
-        
-        if (insertError) {
-          console.error('Error inserting new applications:', insertError);
-          await updateSyncStatus(
-            sync_id,
-            -1,
-            `Database error when inserting applications: ${insertError.message}`,
-            'FAILED'
-          );
-          return;
-        }
-        
-        newlyCreatedApps = insertedApps || [];
+      if (appsError) {
+        console.error('Error upserting applications:', appsError);
+        await updateSyncStatus(
+          sync_id, 
+          -1, 
+          `Database error when storing applications: ${appsError.message}`, 
+          'FAILED'
+        );
+        return;
       }
       
-      // Then update existing applications
-      let updatedExistingApps: any[] = [];
+      updatedApps = data || [];
       
-      if (existingApps.length > 0) {
-        console.log(`Updating ${existingApps.length} existing applications`);
-        
-        // Update each existing app individually to avoid constraint violations
-        for (const app of existingApps) {
-          const { data: updatedApp, error: updateError } = await supabaseAdmin
-            .from('applications')
-            .update(app)
-            .eq('id', app.id)
-            .select('id, name');
-          
-          if (updateError) {
-            console.error(`Error updating application ${app.name}:`, updateError);
-            // Continue with other apps rather than failing
-          } else if (updatedApp && updatedApp.length > 0) {
-            updatedExistingApps.push(updatedApp[0]);
-          }
+      if (!updatedApps || updatedApps.length === 0) {
+        console.warn('No applications were updated or inserted');
+        if (appsToUpsert.length > 0) {
+          // This is unexpected, log it but continue
+          console.error('Apps to upsert:', JSON.stringify(appsToUpsert.slice(0, 2)));
         }
+      } else {
+        console.log(`Successfully upserted ${updatedApps.length} applications`);
       }
-      
-      // Combine newly created and updated apps
-      updatedApps = [...newlyCreatedApps, ...updatedExistingApps];
       
       // Create a map of app names to their IDs
-      const appIdMap = new Map();
-      updatedApps.forEach((app: any) => {
+      updatedApps.forEach(app => {
         appIdMap.set(app.name, app.id);
       });
-      
-      // For any app that wasn't properly upserted, try to fetch it by name
-      for (const { appName } of appProcessingData) {
-        if (!appIdMap.has(appName)) {
-          console.log(`Need to fetch ID for app: ${appName}`);
-          const { data: fetchedApp } = await supabaseAdmin
-            .from('applications')
-            .select('id, name')
-            .eq('name', appName)
-            .eq('organization_id', organization_id)
-            .maybeSingle();
-          
-          if (fetchedApp?.id) {
-            appIdMap.set(appName, fetchedApp.id);
-            updatedApps.push(fetchedApp);
-            console.log(`Found ID ${fetchedApp.id} for app ${appName}`);
-          }
-        }
+    } catch (error: any) {
+      console.error('Exception during applications upsert:', error);
+      await updateSyncStatus(
+        sync_id, 
+        -1, 
+        `Failed to save applications to database: ${error.message}`, 
+        'FAILED'
+      );
+      return;
+    }
+    
+    // Prepare user-application relations batch
+    const relationsToUpsert: any[] = [];
+    const relationsToUpdate: any[] = [];
+    
+    // Pre-fetch existing user-application relations to avoid duplicates
+    try {
+      if (!updatedApps || updatedApps.length === 0) {
+        console.warn('No application IDs to fetch relations for, skipping user-application processing');
+        await updateSyncStatus(
+          sync_id, 
+          100, 
+          `Sync completed - Processed ${totalApps} applications but no application data was saved`, 
+          'COMPLETED'
+        );
+        return;
       }
       
-      // Pre-fetch existing user-application relations to avoid duplicates
+      const appIds = updatedApps.map(a => a.id).filter(Boolean);
+      
+      if (appIds.length === 0) {
+        console.warn('No valid application IDs found, skipping user-application processing');
+        await updateSyncStatus(
+          sync_id, 
+          100, 
+          `Sync completed - No valid application IDs were found`, 
+          'COMPLETED'
+        );
+        return;
+      }
+      
       const { data: existingRelations, error: relationsError } = await supabaseAdmin
         .from('user_applications')
         .select('id, user_id, application_id, scopes')
-        .in('application_id', updatedApps.map((a: any) => a.id) || []);
+        .in('application_id', appIds);
       
       if (relationsError) {
         console.error('Error fetching existing relations:', relationsError);
-        throw relationsError;
+        await updateSyncStatus(
+          sync_id, 
+          -1, 
+          `Database error when retrieving application relations: ${relationsError.message}`, 
+          'FAILED'
+        );
+        return;
       }
       
       // Create a map for quick lookup of existing relations
       const existingRelationMap = new Map();
-      existingRelations?.forEach(rel => {
+      (existingRelations || []).forEach(rel => {
         const key = `${rel.user_id}:${rel.application_id}`;
         existingRelationMap.set(key, rel);
       });
-      
-      // Prepare user-application relations batch
-      const relationsToUpsert: any[] = [];
-      const relationsToUpdate: any[] = [];
       
       // Process all tokens to create user-application relations
       for (const { appName, tokens } of appProcessingData) {
@@ -553,121 +552,92 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
               updated_at: new Date().toISOString()
             });
           } else {
-            // New relation - ensure each entry has all required fields
+            // New relation
             relationsToUpsert.push({
               user_id: userId,
               application_id: appId,
-              scopes: userScopes || [],
-              last_login: formatDate(token.lastTimeUsed),
-              organization_id: organization_id // Add organization_id for extra safety
+              scopes: userScopes,
+              last_login: formatDate(token.lastTimeUsed)
             });
           }
         }
       }
-      
-      // Process in batches of 100 to avoid query size limits
-      const BATCH_SIZE = 100;
-      
-      // Insert new relations in batches
-      if (relationsToUpsert.length > 0) {
-        console.log(`Inserting ${relationsToUpsert.length} new user-application relations`);
-        
-        for (let i = 0; i < relationsToUpsert.length; i += BATCH_SIZE) {
-          const batch = relationsToUpsert.slice(i, i + BATCH_SIZE);
-          
-          await updateSyncStatus(
-            sync_id, 
-            80 + Math.floor((i / relationsToUpsert.length) * 10), 
-            `Saving application connections: ${i}/${relationsToUpsert.length}`
-          );
-          
-          try {
-            const { error: insertError } = await supabaseAdmin
-              .from('user_applications')
-              .insert(batch);
-            
-            if (insertError) {
-              console.error('Error inserting user-application relations batch:', insertError);
-              
-              // If it's a constraint violation, try each record individually
-              if (insertError.message?.includes('violates') || insertError.code === '23502') {
-                console.log('Trying individual inserts instead of batch');
-                
-                for (const relation of batch) {
-                  try {
-                    const { error: individualInsertError } = await supabaseAdmin
-                      .from('user_applications')
-                      .insert(relation);
-                    
-                    if (individualInsertError) {
-                      console.error(`Failed to insert relation for user ${relation.user_id} and app ${relation.application_id}:`, individualInsertError);
-                    }
-                  } catch (err) {
-                    console.error('Error during individual insert:', err);
-                  }
-                }
-              }
-            }
-          } catch (error) {
-            console.error('Exception during batch insert:', error);
-            // Continue to next batch rather than failing entire process
-          }
-        }
-      }
-      
-      // Update existing relations in batches
-      if (relationsToUpdate.length > 0) {
-        console.log(`Updating ${relationsToUpdate.length} existing user-application relations`);
-        
-        for (let i = 0; i < relationsToUpdate.length; i += BATCH_SIZE) {
-          const batch = relationsToUpdate.slice(i, i + BATCH_SIZE);
-          
-          await updateSyncStatus(
-            sync_id, 
-            90 + Math.floor((i / relationsToUpdate.length) * 10), 
-            `Updating application connections: ${i}/${relationsToUpdate.length}`
-          );
-          
-          // We need to update one at a time because Supabase doesn't support updating
-          // multiple records with different values in a single call
-          for (const relation of batch) {
-            try {
-              const { error: updateError } = await supabaseAdmin
-                .from('user_applications')
-                .update({
-                  scopes: relation.scopes,
-                  last_login: relation.last_login,
-                  updated_at: relation.updated_at
-                })
-                .eq('id', relation.id);
-              
-              if (updateError) {
-                console.error('Error updating user-application relation:', updateError);
-                // Continue to next relation rather than failing entire process
-              }
-            } catch (error) {
-              console.error('Error during relation update:', error);
-              // Continue to next relation rather than failing entire process
-            }
-          }
-        }
-      }
     } catch (error: any) {
-      console.error('Error in sync process:', error);
+      console.error('Error preparing user-application relations:', error);
       await updateSyncStatus(
-        sync_id,
-        -1,
-        `Failed to save data to database: ${error.message}`,
+        sync_id, 
+        -1, 
+        `Error processing application relations: ${error.message}`, 
         'FAILED'
       );
       return;
+    }
+    
+    // Process in batches of 100 to avoid query size limits
+    const BATCH_SIZE = 100;
+    
+    // Insert new relations in batches
+    if (relationsToUpsert.length > 0) {
+      console.log(`Inserting ${relationsToUpsert.length} new user-application relations`);
+      
+      for (let i = 0; i < relationsToUpsert.length; i += BATCH_SIZE) {
+        const batch = relationsToUpsert.slice(i, i + BATCH_SIZE);
+        
+        await updateSyncStatus(
+          sync_id, 
+          80 + Math.floor((i / relationsToUpsert.length) * 10), 
+          `Saving application connections: ${i}/${relationsToUpsert.length}`
+        );
+        
+        const { error: insertError } = await supabaseAdmin
+          .from('user_applications')
+          .insert(batch);
+        
+        if (insertError) {
+          console.error('Error inserting user-application relations batch:', insertError);
+          // Continue to next batch rather than failing entire process
+        }
+      }
+    }
+    
+    // Update existing relations in batches
+    if (relationsToUpdate.length > 0) {
+      console.log(`Updating ${relationsToUpdate.length} existing user-application relations`);
+      
+      for (let i = 0; i < relationsToUpdate.length; i += BATCH_SIZE) {
+        const batch = relationsToUpdate.slice(i, i + BATCH_SIZE);
+        
+        await updateSyncStatus(
+          sync_id, 
+          90 + Math.floor((i / relationsToUpdate.length) * 10), 
+          `Updating application connections: ${i}/${relationsToUpdate.length}`
+        );
+        
+        // We need to update one at a time because Supabase doesn't support updating
+        // multiple records with different values in a single call
+        for (const relation of batch) {
+          const { error: updateError } = await supabaseAdmin
+            .from('user_applications')
+            .update({
+              scopes: relation.scopes,
+              last_login: relation.last_login,
+              updated_at: relation.updated_at
+            })
+            .eq('id', relation.id);
+          
+          if (updateError) {
+            console.error('Error updating user-application relation:', updateError);
+            // Continue to next relation rather than failing entire process
+          }
+        }
+      }
     }
     
     // Finalize (100% progress)
     await updateSyncStatus(
       sync_id, 
       100, 
-      `Sync completed - Processed ${updatedApps.length} applications and ${users.length} users`, 
+      `Sync completed - Processed ${totalApps} applications and ${users.length} users`, 
       'COMPLETED'
     );
     
@@ -687,40 +657,40 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
 
 // Helper function to extract scopes from a token
 function extractScopes(token: any): string[] {
-  // Make sure we have a valid scopes array
-  let userScopes = token.scopes || [];
-  
-  // Check if we should extract from other token fields
-  if (token.scopeData && Array.isArray(token.scopeData)) {
-    // Some admin API responses include detailed scope data in a separate field
-    const scopesFromData = token.scopeData.map((sd: any) => sd.scope || sd.value || '').filter(Boolean);
-    if (scopesFromData.length > 0) {
-      userScopes = [...new Set([...userScopes, ...scopesFromData])];
-    }
-  }
-  
-  // Some scopes might come from a raw permission field in some API responses
-  if (token.permissions && Array.isArray(token.permissions)) {
-    const scopesFromPermissions = token.permissions.map((p: any) => p.scope || p.value || p).filter(Boolean);
-    if (scopesFromPermissions.length > 0) {
-      // Merge with existing scopes if any
-      userScopes = [...new Set([...userScopes, ...scopesFromPermissions])];
-    }
-  }
-  
-  // If we still don't have scopes and have raw scope data as string
-  if (userScopes.length === 0 && token.rawScopes) {
-    userScopes = token.rawScopes.split(' ');
-  }
-  
-  // If we have any scope-like fields, try to extract them
-  const potentialScopeFields = ['scope_string', 'oauth_scopes', 'accessScopes'];
-  for (const field of potentialScopeFields) {
-    if (token[field] && typeof token[field] === 'string' && token[field].includes('://')) {
-      const extractedScopes = token[field].split(/\s+/);
-      userScopes = [...new Set([...userScopes, ...extractedScopes])];
-    }
-  }
-  
+          // Make sure we have a valid scopes array
+          let userScopes = token.scopes || [];
+          
+          // Check if we should extract from other token fields
+          if (token.scopeData && Array.isArray(token.scopeData)) {
+            // Some admin API responses include detailed scope data in a separate field
+            const scopesFromData = token.scopeData.map((sd: any) => sd.scope || sd.value || '').filter(Boolean);
+            if (scopesFromData.length > 0) {
+              userScopes = [...new Set([...userScopes, ...scopesFromData])];
+            }
+          }
+          
+          // Some scopes might come from a raw permission field in some API responses
+          if (token.permissions && Array.isArray(token.permissions)) {
+            const scopesFromPermissions = token.permissions.map((p: any) => p.scope || p.value || p).filter(Boolean);
+            if (scopesFromPermissions.length > 0) {
+              // Merge with existing scopes if any
+              userScopes = [...new Set([...userScopes, ...scopesFromPermissions])];
+            }
+          }
+          
+          // If we still don't have scopes and have raw scope data as string
+          if (userScopes.length === 0 && token.rawScopes) {
+            userScopes = token.rawScopes.split(' ');
+          }
+          
+          // If we have any scope-like fields, try to extract them
+          const potentialScopeFields = ['scope_string', 'oauth_scopes', 'accessScopes'];
+          for (const field of potentialScopeFields) {
+            if (token[field] && typeof token[field] === 'string' && token[field].includes('://')) {
+              const extractedScopes = token[field].split(/\s+/);
+              userScopes = [...new Set([...userScopes, ...extractedScopes])];
+            }
+          }
+          
   return userScopes;
 } 
