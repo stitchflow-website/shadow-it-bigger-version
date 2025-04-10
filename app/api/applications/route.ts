@@ -9,13 +9,14 @@ type UserType = {
   email: string;
   role: string | null;
   department: string | null;
-  last_login: string | null;
+  created_at: string;
+  // last_login: string | null; // Removed
 }
 
 type UserApplicationType = {
   user: UserType;
   scopes: string[];
-  last_login: string;
+  // last_login: string; // Removed
 }
 
 type ApplicationType = {
@@ -25,9 +26,82 @@ type ApplicationType = {
   risk_level: string;
   management_status: string;
   total_permissions: number;
-  last_login: string;
+  // last_login: string; // Removed
   user_applications: UserApplicationType[];
   all_scopes?: string[];
+  created_at: string;
+}
+
+// Helper to generate app logo URL from logo.dev
+function getAppLogoUrl(appName: string) {
+  const domain = appNameToDomain(appName);
+  
+  // Try to get the app icon using Logo.dev
+  const logoUrl = `https://img.logo.dev/${domain}?token=pk_ZLJInZ4_TB-ZDbNe2FnQ_Q&format=png&retina=true`;
+  
+  // We could also provide a fallback URL using other icon services if needed
+  // This gives us multiple ways to find a logo if the primary method fails
+  const fallbackUrl = `https://icon.horse/icon/${domain}`;
+  
+  // Return both URLs so the frontend can try multiple sources
+  return {
+    primary: logoUrl,
+    fallback: fallbackUrl
+  };
+}
+
+// Helper to convert app name to likely domain format
+function appNameToDomain(appName: string): string {
+  // Common apps with special domain formats
+  const knownDomains: Record<string, string> = {
+    'slack': 'slack.com',
+    'stitchflow': 'stitchflow.io',
+    'yeshid': 'yeshid.com',
+    'onelogin': 'onelogin.com',
+    'google drive': 'drive.google.com',
+    'google chrome': 'google.com',
+    'accessowl': 'accessowl.com',
+    'accessowl scanner': 'accessowl.com',
+    'mode analytics': 'mode.com',
+    'hubspot': 'hubspot.com',
+    'github': 'github.com',
+    'gmail': 'gmail.com',
+    'zoom': 'zoom.us',
+    'notion': 'notion.so',
+    'figma': 'figma.com',
+    'jira': 'atlassian.com',
+    'confluence': 'atlassian.com',
+    'asana': 'asana.com',
+    'trello': 'trello.com',
+    'dropbox': 'dropbox.com',
+    'box': 'box.com',
+    'microsoft': 'microsoft.com',
+    'office365': 'office.com'
+  };
+  
+  // Convert app name to lowercase for case-insensitive lookup
+  const lowerAppName = appName.toLowerCase();
+  
+  // Check for exact matches in known domains
+  if (knownDomains[lowerAppName]) {
+    return knownDomains[lowerAppName];
+  }
+  
+  // Check for partial matches (e.g., if app name contains known key)
+  for (const [key, domain] of Object.entries(knownDomains)) {
+    if (lowerAppName.includes(key)) {
+      return domain;
+    }
+  }
+  
+  // Default processing for unknown apps
+  // Remove special characters, spaces, and convert to lowercase
+  const sanitized = lowerAppName
+    .replace(/[^\w\s-]/gi, '')  // Keep hyphens as they're common in domains
+    .replace(/\s+/g, '');
+  
+  // Default to .com instead of .io
+  return sanitized + '.com';
 }
 
 export async function GET(request: Request) {
@@ -46,19 +120,17 @@ export async function GET(request: Request) {
         *,
         user_applications:user_applications (
           scopes,
-          last_login,
           user:users!inner (
             id,
             name,
             email,
             role,
             department,
-            last_login
+            created_at
           )
         )
       `)
-      .eq('organization_id', orgId)
-      .order('last_login', { ascending: false });
+      .eq('organization_id', orgId);
 
     if (error) {
       throw error;
@@ -77,19 +149,14 @@ export async function GET(request: Request) {
           .filter((user): user is UserType => Boolean(user))
       ));
 
-      // Get the most recent login date from all user_applications
-      const lastLogin = app.user_applications
-        .reduce((latest, ua) => {
-          const loginDate = new Date(ua.last_login);
-          return latest > loginDate ? latest : loginDate;
-        }, new Date(0))
-        .toISOString();
-
       // Get all unique scopes from user_applications
       const allUserScopes = Array.from(new Set(app.user_applications?.flatMap(ua => ua.scopes || []) || []));
       
       // Use the all_scopes field from the application if available, otherwise fallback to user scopes
       const applicationScopes = app.all_scopes || allUserScopes;
+
+      // Get logo URLs
+      const logoUrls = getAppLogoUrl(app.name);
 
       return {
         id: app.id,
@@ -110,8 +177,8 @@ export async function GET(request: Request) {
             appId: app.id,
             name: user.name,
             email: user.email,
-            lastActive: userApp?.last_login || user.last_login,
             scopes: userScopes,
+            created_at: user.created_at,
             riskLevel: determineRiskLevel(userScopes),
             riskReason: determineRiskReason(userScopes)
           };
@@ -120,7 +187,9 @@ export async function GET(request: Request) {
         riskReason: determineAppRiskReason(app.risk_level, app.total_permissions),
         totalPermissions: app.total_permissions,
         scopeVariance: calculateScopeVariance(app.user_applications),
-        lastLogin: lastLogin,
+        logoUrl: logoUrls.primary,
+        logoUrlFallback: logoUrls.fallback,
+        created_at: app.created_at,
         managementStatus: transformManagementStatus(app.management_status),
         ownerEmail: '',
         notes: '',

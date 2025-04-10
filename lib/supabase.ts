@@ -41,7 +41,6 @@ export type Application = {
   management_status: 'APPROVED' | 'PENDING' | 'BLOCKED';
   total_permissions: number;
   all_scopes: string[];
-  last_login: string;
   organization_id: string;
   created_at: string;
   updated_at: string;
@@ -55,7 +54,6 @@ export type User = {
   role: string | null;
   department: string | null;
   organization_id: string;
-  last_login: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -65,7 +63,6 @@ export type UserApplication = {
   user_id: string;
   application_id: string;
   scopes: string[];
-  last_login: string;
   created_at: string;
   updated_at: string;
 }
@@ -75,7 +72,6 @@ export type UserSignedUp = {
   email: string;
   name: string | null;
   avatar_url: string | null;
-  last_login: string | null;
   created_at: string;
   updated_at: string;
 } 

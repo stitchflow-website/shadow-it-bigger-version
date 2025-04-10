@@ -1,7 +1,6 @@
 "use client"
 
-import React from "react"
-import { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import {
   User,
   ArrowUpDown,
@@ -54,7 +53,9 @@ type Application = {
   riskReason: string
   totalPermissions: number
   scopeVariance: { userGroups: number; scopeGroups: number }
-  lastLogin: string
+  logoUrl?: string      // Primary logo URL
+  logoUrlFallback?: string // Fallback logo URL
+  created_at?: string   // Added created_at field
   managementStatus: "Managed" | "Unmanaged" | "Needs Review"
   ownerEmail: string
   notes: string
@@ -68,7 +69,8 @@ type AppUser = {
   appId: string
   name: string
   email: string
-  lastActive: string
+  lastActive?: string
+  created_at?: string
   scopes: string[]
   riskLevel: "Low" | "Medium" | "High"
   riskReason: string
@@ -81,9 +83,12 @@ type SortColumn =
   | "userCount"
   | "riskLevel"
   | "totalPermissions"
-  | "lastLogin"
+  // | "lastLogin" // Removed
   | "managementStatus"
 type SortDirection = "asc" | "desc"
+
+// User table sort types
+type UserSortColumn = "name" | "email" | "created" | "riskLevel"
 
 // Chart data types
 type CategoryData = {
@@ -125,7 +130,7 @@ export default function ShadowITDashboard() {
   const [sortColumn, setSortColumn] = useState<SortColumn>("riskLevel")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
 
-  const [userSortColumn, setUserSortColumn] = useState<"name" | "email" | "lastActive" | "riskLevel">("lastActive")
+  const [userSortColumn, setUserSortColumn] = useState<"name" | "email" | "created" | "riskLevel">("name")
   const [userSortDirection, setUserSortDirection] = useState<SortDirection>("desc")
 
   const searchTerm = useDebounce(searchInput, 300)
@@ -417,8 +422,6 @@ export default function ShadowITDashboard() {
         return compareNumeric(getRiskValue(a.riskLevel), getRiskValue(b.riskLevel))
       case "totalPermissions":
         return compareNumeric(a.totalPermissions, b.totalPermissions)
-      case "lastLogin":
-        return compareDate(a.lastLogin, b.lastLogin)
       case "managementStatus":
         return compareString(a.managementStatus, b.managementStatus)
       default:
@@ -494,7 +497,12 @@ export default function ShadowITDashboard() {
         return userSortDirection === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA)
       }
 
-      const compareDate = (valA: string, valB: string) => {
+      const compareDate = (valA: string | undefined, valB: string | undefined) => {
+        // If either value is undefined, handle it
+        if (!valA && !valB) return 0;
+        if (!valA) return userSortDirection === "asc" ? -1 : 1;
+        if (!valB) return userSortDirection === "asc" ? 1 : -1;
+        
         const dateA = new Date(valA).getTime()
         const dateB = new Date(valB).getTime()
         return userSortDirection === "asc" ? dateA - dateB : dateB - dateA
@@ -505,8 +513,8 @@ export default function ShadowITDashboard() {
           return compareString(a.name, b.name)
         case "email":
           return compareString(a.email, b.email)
-        case "lastActive":
-          return compareDate(a.lastActive, b.lastActive)
+        case "created":
+          return compareDate(a.created_at, b.created_at)
         case "riskLevel": {
           const riskOrder = { Low: 1, Medium: 2, High: 3 }
           return userSortDirection === "asc" 
@@ -830,17 +838,69 @@ export default function ShadowITDashboard() {
     })
   }
 
-  // App Icon component
-  const AppIcon = ({ name }: { name: string }) => {
+  // App Icon component with improved fallbacks
+  const AppIcon = ({ name, logoUrl, logoUrlFallback }: { 
+    name: string; 
+    logoUrl?: string;
+    logoUrlFallback?: string;
+  }) => {
     // Get the first letter of the app name
-    const initial = name.charAt(0).toUpperCase()
+    const initial = name.charAt(0).toUpperCase();
+    const [primaryLogoError, setPrimaryLogoError] = useState(false);
+    const [fallbackLogoError, setFallbackLogoError] = useState(false);
 
-    return (
-      <div className="flex items-center justify-center w-8 h-8 rounded-md bg-gray-100 text-gray-800 font-medium">
-        {initial}
-      </div>
-    )
-  }
+    // Generate a consistent background color based on app name
+    const getBackgroundColor = (appName: string) => {
+      // Simple hash function to generate a consistent color
+      const hash = appName.split('').reduce((acc, char) => {
+        return char.charCodeAt(0) + ((acc << 5) - acc);
+      }, 0);
+      
+      // Generate a pastel color using the hash
+      const h = Math.abs(hash) % 360;
+      return `hsl(${h}, 70%, 85%)`;
+    };
+
+    const bgColor = getBackgroundColor(name);
+
+    // Use primary logo, fallback logo, or initial with colored background
+    if (logoUrl && !primaryLogoError) {
+      return (
+        <div className="w-8 h-8 rounded-md overflow-hidden">
+          <Image
+            src={logoUrl}
+            alt={`${name} logo`}
+            width={32}
+            height={32}
+            className="object-contain"
+            onError={() => setPrimaryLogoError(true)}
+          />
+        </div>
+      );
+    } else if (logoUrlFallback && !fallbackLogoError) {
+      return (
+        <div className="w-8 h-8 rounded-md overflow-hidden">
+          <Image
+            src={logoUrlFallback}
+            alt={`${name} logo (fallback)`}
+            width={32}
+            height={32}
+            className="object-contain"
+            onError={() => setFallbackLogoError(true)}
+          />
+        </div>
+      );
+    } else {
+      return (
+        <div 
+          className="flex items-center justify-center w-8 h-8 rounded-md text-gray-800 font-medium"
+          style={{ backgroundColor: bgColor }}
+        >
+          {initial}
+        </div>
+      );
+    }
+  };
 
   // Update the getCategoryColor function in the CategoryBadge component
   const CategoryBadge = ({ category }: { category: string }) => {
@@ -882,8 +942,11 @@ export default function ShadowITDashboard() {
     )
   }
 
-  // Risk Badge component
+  // Update the RiskBadge component to handle uppercase and lowercase 
   function RiskBadge({ level }: { level: string }) {
+    // Normalize the level to ensure consistent casing
+    const normalizedLevel = level.charAt(0).toUpperCase() + level.slice(1).toLowerCase();
+    
     const iconMap: Record<string, JSX.Element> = {
       Low: <CheckCircle className="h-5 w-5 mr-1 text-green-700" />,
       Medium: <AlertTriangle className="h-5 w-5 mr-1 text-yellow-700" />,
@@ -897,30 +960,44 @@ export default function ShadowITDashboard() {
     }
 
     return (
-      <div className={`flex items-center px-2 py-1 rounded-full ${colorMap[level]}`}>
-        {iconMap[level]}
-        <span>{level}</span>
+      <div className={`flex items-center px-2 py-1 rounded-full ${colorMap[normalizedLevel]}`}>
+        {iconMap[normalizedLevel]}
+        <span>{normalizedLevel}</span>
       </div>
     )
   }
 
   // Date formatting function
-  function formatDate(dateString: string): string {
-    const date = new Date(dateString)
+  function formatDate(dateString: string | null | undefined): string {
+    if (!dateString) {
+      return 'N/A';
+    }
 
-    // Format like "Mar 2, 2025, 1:29 AM"
-    return new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    }).format(date)
+    try {
+      const date = new Date(dateString);
+      
+      // Check if the date is valid
+      if (isNaN(date.getTime())) {
+        return 'Invalid date';
+      }
+
+      // Format like "Mar 2, 2025, 1:29 AM"
+      return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }).format(date);
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Error';
+    }
   }
 
   // Handle user table sorting
-  const handleUserSort = (column: "name" | "email" | "lastActive" | "riskLevel") => {
+  const handleUserSort = (column: "name" | "email" | "created" | "riskLevel") => {
     if (userSortColumn === column) {
       setUserSortDirection(userSortDirection === "asc" ? "desc" : "asc")
     } else {
@@ -930,7 +1007,7 @@ export default function ShadowITDashboard() {
   }
 
   // Get sort icon for user table column header
-  const getUserSortIcon = (column: "name" | "email" | "lastActive" | "riskLevel") => {
+  const getUserSortIcon = (column: "name" | "email" | "created" | "riskLevel") => {
     if (userSortColumn !== column) {
       return <ArrowUpDown className="ml-1 h-4 w-4 opacity-50" />
     }
@@ -1031,18 +1108,17 @@ export default function ShadowITDashboard() {
     const sharedUsers = app1.users.filter(u1 => 
       app2.users.some(u2 => u2.email === u1.email)
     ).length;
-    const userOverlapScore = Math.min(sharedUsers / Math.max(app1.users.length, app2.users.length), 1) * 0.5;
+    const userOverlapScore = Math.min(sharedUsers / Math.max(app1.users.length, app2.users.length, 1), 1) * 0.5;
     
     // Functional similarity (30%)
     const app1Functions = getAppFunctionality(app1.scopes);
     const app2Functions = getAppFunctionality(app2.scopes);
     const sharedFunctions = Array.from(app1Functions).filter(f => app2Functions.has(f)).length;
-    const functionalScore = Math.min(sharedFunctions / Math.max(app1Functions.size, app2Functions.size), 1) * 0.3;
+    const functionalScore = Math.min(sharedFunctions / Math.max(app1Functions.size, app2Functions.size, 1), 1) * 0.3;
     
     // Usage patterns (20%)
-    const activeUsers1 = app1.users.filter(u => new Date(u.lastActive) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-    const activeUsers2 = app2.users.filter(u => new Date(u.lastActive) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-    const usageScore = Math.min(Math.abs(activeUsers1.length - activeUsers2.length) / Math.max(activeUsers1.length, activeUsers2.length), 1) * 0.2;
+    // Only calculate if both apps have lastActive data
+    let usageScore = 0.2; // Default score if we can't calculate
     
     score = userOverlapScore + functionalScore + usageScore;
     return score;
@@ -1067,12 +1143,7 @@ export default function ShadowITDashboard() {
       reasons.push(`Similar functionality: ${sharedFunctions.join(', ')}`);
     }
     
-    // Check usage patterns
-    const activeUsers1 = app1.users.filter(u => new Date(u.lastActive) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-    const activeUsers2 = app2.users.filter(u => new Date(u.lastActive) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-    if (Math.abs(activeUsers1.length - activeUsers2.length) / Math.max(activeUsers1.length, activeUsers2.length) < 0.3) {
-      reasons.push('Similar usage patterns');
-    }
+    // Removed usage patterns check that was using lastActive
     
     return reasons;
   }
@@ -1338,12 +1409,6 @@ export default function ShadowITDashboard() {
                             {getSortIcon("totalPermissions")}
                           </div>
                         </TableHead>
-                        <TableHead className="cursor-pointer" onClick={() => handleSort("lastLogin")}>
-                          <div className="flex items-center">
-                            Last Login
-                            {getSortIcon("lastLogin")}
-                          </div>
-                        </TableHead>
                         <TableHead className="cursor-pointer" onClick={() => handleSort("managementStatus")}>
                           <div className="flex items-center">
                             Status
@@ -1370,7 +1435,7 @@ export default function ShadowITDashboard() {
                             >
                             <TableCell>
                               <div className="flex items-center gap-3">
-                                <AppIcon name={app.name} />
+                                <AppIcon name={app.name} logoUrl={app.logoUrl} logoUrlFallback={app.logoUrlFallback} />
                                 <div 
                                   className="font-medium cursor-pointer hover:text-primary transition-colors"
                                   onClick={() => handleSeeUsers(app.id)}
@@ -1451,11 +1516,8 @@ export default function ShadowITDashboard() {
                                 </TooltipProvider>
                               </TableCell>
                             <TableCell>
-                              <div className="whitespace-pre-line">{formatDate(app.lastLogin)}</div>
-                            </TableCell>
-                            <TableCell>
                               <select
-                                  className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                                className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
                                 value={editedStatuses[app.id] || app.managementStatus}
                                 onChange={(e) => handleStatusChange(app.id, e.target.value)}
                               >
@@ -2063,8 +2125,8 @@ export default function ShadowITDashboard() {
                       <dd className="font-medium">{selectedApp.totalPermissions}</dd>
                     </div>
                     <div>
-                      <dt className="text-muted-foreground font-medium">Last Login</dt>
-                      <dd className="font-medium">{formatDate(selectedApp.lastLogin)}</dd>
+                      <dt className="text-muted-foreground font-medium">Created</dt>
+                      <dd className="font-medium">{selectedApp.created_at && formatDate(selectedApp.created_at)}</dd>
                     </div>
                     <div>
                       <dt className="text-muted-foreground font-medium">Owner</dt>
@@ -2131,11 +2193,11 @@ export default function ShadowITDashboard() {
                                 </TableHead>
                                 <TableHead 
                                   className="cursor-pointer bg-transparent"
-                                  onClick={() => handleUserSort("lastActive")}
+                                  onClick={() => handleUserSort("created")}
                                 >
                                   <div className="flex items-center">
-                                    Last Login
-                                    {getUserSortIcon("lastActive")}
+                                    Created
+                                    {getUserSortIcon("created")}
                                   </div>
                                 </TableHead>
                                 <TableHead className="bg-transparent">Scopes</TableHead>
@@ -2175,7 +2237,7 @@ export default function ShadowITDashboard() {
                                   </div>
                                 </TableCell>
                                 <TableCell>{user.email}</TableCell>
-                                <TableCell>{formatDate(user.lastActive)}</TableCell>
+                                <TableCell>{user.created_at ? formatDate(user.created_at) : 'N/A'}</TableCell>
                                 <TableCell>
                                   <div className="max-h-24 overflow-y-auto text-sm">
                                     {user.scopes.map((scope, i) => (
@@ -2424,7 +2486,7 @@ export default function ShadowITDashboard() {
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-3">
-                                  <AppIcon name={app.name} />
+                                  <AppIcon name={app.name} logoUrl={app.logoUrl} logoUrlFallback={app.logoUrlFallback} />
                                   <div>
                                     <h4 className="font-medium">{app.name}</h4>
                                     <div className="flex items-center gap-2">
@@ -2456,9 +2518,7 @@ export default function ShadowITDashboard() {
                                   <div>
                                     <div className="text-sm text-muted-foreground">Active Users</div>
                                     <div className="text-lg font-medium">
-                                      {app.users.filter(u => 
-                                        new Date(u.lastActive) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-                                      ).length}
+                                      {app.users.length}
                                     </div>
                                   </div>
                                 </div>

@@ -67,7 +67,7 @@ export function middleware(request: NextRequest) {
   // Direct unauthenticated users to login if they try to access protected routes
   if (!isAuthenticated && !isPublicPath) {
     console.log('Unauthenticated user on protected route, redirecting to login');
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(new URL('https://shadow-it.vercel.app/login', request.url));
   }
 
   // For authenticated users on all other paths, proceed and add headers

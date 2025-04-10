@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS users_signedup (
     email TEXT NOT NULL UNIQUE,
     name TEXT,
     avatar_url TEXT,
-    last_login TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -26,6 +25,19 @@ ALTER TABLE applications ADD COLUMN IF NOT EXISTS management_status TEXT CHECK (
 
 -- Add all_scopes column to applications table to store all unique scopes
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS all_scopes TEXT[] DEFAULT '{}';
+
+-- Migration to remove last_login column
+-- Remove last_login from users_signedup table if it exists
+ALTER TABLE users_signedup DROP COLUMN IF EXISTS last_login;
+
+-- Remove last_login from users table if it exists
+ALTER TABLE users DROP COLUMN IF EXISTS last_login;
+
+-- Remove last_login from user_applications table if it exists
+ALTER TABLE user_applications DROP COLUMN IF EXISTS last_login;
+
+-- Remove last_login from applications table if it exists
+ALTER TABLE applications DROP COLUMN IF EXISTS last_login;
 
 -- Table for tracking sync status
 CREATE TABLE IF NOT EXISTS sync_status (
