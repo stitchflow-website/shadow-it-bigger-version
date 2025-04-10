@@ -59,7 +59,7 @@ export function middleware(request: NextRequest) {
   // Direct authenticated users to dashboard if they try to access login
   if (isAuthenticated && path === '/login') {
     console.log('Authenticated user on login page, redirecting to dashboard');
-    const url = new URL('https://shadow-it.vercel.app/login', request.url);
+    const url = new URL('/tools/shadow-it/', request.url);
     url.searchParams.set('orgId', orgId);
     return NextResponse.redirect(url);
   }
