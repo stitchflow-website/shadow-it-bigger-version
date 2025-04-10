@@ -50,36 +50,12 @@ export class GoogleWorkspaceService {
   }
 
   async getUsersList() {
-    try {
-      console.log('Calling Google Admin API to fetch users list');
-      const response = await this.admin.users.list({
-        customer: 'my_customer',
-        maxResults: 500,
-        orderBy: 'email',
-      });
-      
-      if (!response || !response.data || !response.data.users) {
-        console.error('Invalid response from Google Admin API:', response);
-        throw new Error('Invalid response from Google Admin API');
-      }
-      
-      console.log(`Received ${response.data.users.length} users from Google Admin API`);
-      return response.data.users;
-    } catch (error: any) {
-      console.error('Error in getUsersList:', error);
-      // Check if it's an auth error
-      if (error.code === 401 || error.message?.includes('auth')) {
-        throw new Error('Google Workspace authentication failed. Please check your credentials and try again.');
-      }
-      
-      // Check if it's a permission error
-      if (error.code === 403 || error.message?.includes('permission')) {
-        throw new Error('Missing required permissions for Google Workspace. Please ensure your account has admin privileges.');
-      }
-      
-      // Generic error
-      throw new Error(`Failed to fetch users: ${error.message || 'Unknown error'}`);
-    }
+    const response = await this.admin.users.list({
+      customer: 'my_customer',
+      maxResults: 500,
+      orderBy: 'email',
+    });
+    return response.data.users;
   }
 
   async getUserDetails(userKey: string) {

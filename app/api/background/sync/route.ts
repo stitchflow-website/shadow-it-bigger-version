@@ -4,14 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel } from '@/lib/risk-assessment';
 
 // Helper function to update sync status
-async function updateSyncStatus(
-  syncId: string,
-  progress: number,
-  message: string,
-  status: 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' = 'IN_PROGRESS'
-) {
-  try {
-    const { error } = await supabaseAdmin
+async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
+  return await supabaseAdmin
     .from('sync_status')
     .update({
       status,
@@ -20,16 +14,6 @@ async function updateSyncStatus(
       updated_at: new Date().toISOString(),
     })
     .eq('id', syncId);
-    
-    if (error) {
-      console.error('Error updating sync status:', error);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error('Failed to update sync status:', err);
-    return false;
-  }
 }
 
 // Helper function to safely format date
@@ -71,37 +55,19 @@ export async function POST(request: Request) {
     // This ensures the API responds quickly while processing continues
     const { organization_id, sync_id, access_token, refresh_token } = await request.json();
     
-    if (!organization_id || !sync_id || !access_token) {
-      console.error('Missing required parameters:', { organization_id, sync_id, access_token: !!access_token });
-      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
-    }
-
-    console.log('Starting sync process with ID:', sync_id, 'for org:', organization_id);
-    
     // Send immediate response
     const responsePromise = Promise.resolve(
       NextResponse.json({ message: 'Sync started in background' })
     );
     
-    // Process in background with error handling
-    backgroundProcess(organization_id, sync_id, access_token, refresh_token).catch(error => {
-      console.error('Background process failed:', error);
-      // Try to update the sync status to failed
-      updateSyncStatus(
-        sync_id,
-        -1,
-        `Sync failed: ${error.message}`,
-        'FAILED'
-      ).catch(statusError => {
-        console.error('Failed to update sync status after error:', statusError);
-      });
-    });
+    // Process in background
+    backgroundProcess(organization_id, sync_id, access_token, refresh_token);
     
     return responsePromise;
   } catch (error: any) {
     console.error('Error in background sync API:', error);
     return NextResponse.json(
-      { error: 'Failed to start background sync', details: error.message },
+      { error: 'Failed to start background sync' },
       { status: 500 }
     );
   }
@@ -109,8 +75,6 @@ export async function POST(request: Request) {
 
 async function backgroundProcess(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {
   try {
-    console.log('Starting background process for org:', organization_id, 'sync:', sync_id);
-    
     // Initialize Google Workspace service
     const googleService = new GoogleWorkspaceService({
       client_id: process.env.GOOGLE_CLIENT_ID!,
@@ -118,54 +82,20 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
       redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
     });
 
-    await updateSyncStatus(sync_id, 5, 'Setting up Google Workspace connection');
-    
-    try {
     await googleService.setCredentials({ 
       access_token,
       refresh_token
     });
-      console.log('Successfully set credentials for Google Workspace API');
-    } catch (error: any) {
-      console.error('Failed to set credentials:', error);
-      await updateSyncStatus(sync_id, -1, `Failed to connect to Google Workspace: ${error.message}`, 'FAILED');
-      return; // Exit early on credential error
-    }
 
     // Step 1: Fetch users list (20% progress)
     await updateSyncStatus(sync_id, 10, 'Fetching users from Google Workspace');
-    
-    let users = [];
-    try {
-      users = await googleService.getUsersList();
-      console.log(`Fetched ${users.length} users for org ${organization_id}`);
-    } catch (error: any) {
-      console.error('Error fetching users list:', error);
-      await updateSyncStatus(
-        sync_id, 
-        -1, 
-        `Error fetching users: ${error.message}. Check Google Workspace permissions.`, 
-        'FAILED'
-      );
-      return; // Exit early on user fetch error
-    }
-    
-    if (!users || users.length === 0) {
-      console.warn('No users found for organization');
-      await updateSyncStatus(
-        sync_id, 
-        -1, 
-        'No users found in Google Workspace. Check permissions and try again.', 
-        'FAILED'
-      );
-      return;
-    }
+    const users = await googleService.getUsersList();
+    console.log(`Fetched ${users.length} users`);
     
     await updateSyncStatus(sync_id, 20, `Processing ${users.length} users`);
     
     // Create a batch of all users to upsert
     const usersToUpsert = users.map((user: any) => {
-      try {
       // Determine department from orgUnitPath if available
       const department = user.orgUnitPath ? 
         user.orgUnitPath.split('/').filter(Boolean).pop() || null : 
@@ -180,140 +110,44 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
       return {
         google_user_id: user.id,
         email: user.primaryEmail,
-          name: user.name?.fullName || user.primaryEmail,
+        name: user.name.fullName,
         role: role,
         department: department,
         organization_id: organization_id,
         last_login: lastLogin,
       };
-      } catch (err) {
-        console.error('Error processing user:', err, user);
-        return null;
-      }
-    }).filter(Boolean);
-    
-    console.log(`Prepared ${usersToUpsert.length} users for upsert`);
-    
-    if (usersToUpsert.length === 0) {
-      console.warn('No valid users to insert after processing');
-      await updateSyncStatus(
-        sync_id, 
-        -1, 
-        'Failed to process user data. Please try again.', 
-        'FAILED'
-      );
-      return;
-    }
+    });
     
     // Batch upsert all users
-    try {
     const { error: usersError } = await supabaseAdmin
       .from('users')
       .upsert(usersToUpsert);
     
-      if (usersError) {
-        console.error('Error upserting users:', usersError);
-        await updateSyncStatus(
-          sync_id, 
-          -1, 
-          `Database error when storing users: ${usersError.message}`, 
-          'FAILED'
-        );
-        return;
-      }
-      
-      console.log('Successfully upserted users');
-    } catch (error: any) {
-      console.error('Exception during user upsert:', error);
-      await updateSyncStatus(
-        sync_id, 
-        -1, 
-        `Failed to save users to database: ${error.message}`, 
-        'FAILED'
-      );
-      return;
-    }
+    if (usersError) throw usersError;
     
     // Get all users for this organization to create a mapping
-    let createdUsers = [];
-    try {
-      const { data, error: createdUsersError } = await supabaseAdmin
+    const { data: createdUsers } = await supabaseAdmin
       .from('users')
-        .select('id, google_user_id, email')
+      .select('id, google_user_id')
       .eq('organization_id', organization_id);
-      
-      if (createdUsersError) {
-        console.error('Error fetching created users:', createdUsersError);
-        await updateSyncStatus(
-          sync_id, 
-          -1, 
-          `Database error when retrieving users: ${createdUsersError.message}`, 
-          'FAILED'
-        );
-        return;
-      }
-      
-      createdUsers = data || [];
-      console.log(`Retrieved ${createdUsers.length} users from database`);
-      
-      if (createdUsers.length === 0) {
-        console.error('No users found in database after upsert');
-        await updateSyncStatus(
-          sync_id, 
-          -1, 
-          'Failed to save users to database. Please try again.', 
-          'FAILED'
-        );
-        return;
-      }
-    } catch (error: any) {
-      console.error('Exception during user retrieval:', error);
-      await updateSyncStatus(
-        sync_id, 
-        -1, 
-        `Failed to retrieve users from database: ${error.message}`, 
-        'FAILED'
-      );
-      return;
-    }
     
     // Create a mapping for quick lookup
     const userMap = new Map();
-    const userEmailMap = new Map();
-    createdUsers.forEach(user => {
+    createdUsers?.forEach(user => {
       userMap.set(user.google_user_id, user.id);
-      userEmailMap.set(user.email, user.id);
     });
 
     // Step 2: Fetch OAuth tokens (40% progress)
     await updateSyncStatus(sync_id, 30, 'Fetching application data from Google Workspace');
-    
-    let applicationTokens = [];
-    try {
-      applicationTokens = await googleService.getOAuthTokens();
+    const applicationTokens = await googleService.getOAuthTokens();
     console.log(`Fetched ${applicationTokens.length} application tokens`);
-      
-      if (applicationTokens.length === 0) {
-        console.warn('No application tokens found');
-        // This isn't a failure, just a warning - continue processing
-      }
-    } catch (error: any) {
-      console.error('Error fetching OAuth tokens:', error);
-      await updateSyncStatus(
-        sync_id, 
-        -1, 
-        `Failed to fetch application data: ${error.message}. Check permissions.`, 
-        'FAILED'
-      );
-      return;
-    }
     
     await updateSyncStatus(sync_id, 40, `Processing ${applicationTokens.length} application connections`);
     
-    // First, prepare all data before database operations
+    // Group applications by display name
     const appNameMap = new Map<string, any[]>();
     
-    // Group tokens by application name
+    // First pass: Group tokens by application name
     for (const token of applicationTokens) {
       const appName = token.displayText || 'Unknown App';
       
@@ -324,37 +158,18 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
       appNameMap.get(appName)!.push(token);
     }
     
-    // Pre-fetch all existing applications for this organization
-    const { data: existingApps, error: existingAppsError } = await supabaseAdmin
-      .from('applications')
-      .select('id, name, total_permissions')
-      .eq('organization_id', organization_id);
-      
-    if (existingAppsError) {
-      console.error('Error fetching existing applications:', existingAppsError);
-      throw existingAppsError;
-    }
-    
-    // Create a map for quick lookup of existing apps
-    const existingAppMap = new Map();
-    existingApps?.forEach(app => {
-      existingAppMap.set(app.name, app);
-    });
-    
-    // Prepare applications batch for upsert
-    const appsToUpsert: any[] = [];
-    const appProcessingData: any[] = [];
-    
-    // Process each group of applications
+    // Process each group of applications (40% to 80% progress)
     let appCount = 0;
     const totalApps = appNameMap.size;
     
-    // Process all applications in a single pass
+    // Batch for collecting user-application relationships
+    const userAppRelations: any[] = [];
+    
     for (const [appName, tokens] of appNameMap.entries()) {
       appCount++;
       const progressPercent = 40 + Math.floor((appCount / totalApps) * 40);
       
-      if (appCount % 10 === 0 || appCount === totalApps) {
+      if (appCount % 5 === 0 || appCount === totalApps) {
         await updateSyncStatus(
           sync_id, 
           progressPercent, 
@@ -362,8 +177,13 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
         );
       }
       
-      // Find existing application
-      const existingApp = existingAppMap.get(appName);
+      // Find or create application record using the app name
+      const { data: existingApp } = await supabaseAdmin
+        .from('applications')
+        .select('id, total_permissions')
+        .eq('name', appName)
+        .eq('organization_id', organization_id)
+        .single();
       
       // Calculate total unique permissions across all instances
       const allScopes = new Set<string>();
@@ -387,276 +207,39 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
         return highest;
       }, 'LOW');
       
-      // Prepare application for upsert
-      appsToUpsert.push({
-        // Only include ID if it exists and is not null
-        ...(existingApp?.id ? { id: existingApp.id } : {}),
-        google_app_id: tokens.map(t => t.clientId).join(','), // Store all client IDs
-        name: appName,
-        category: 'Unknown',
-        risk_level: highestRiskLevel,
-        management_status: existingApp?.id ? undefined : 'PENDING', // Only set for new apps
-        total_permissions: allScopes.size,
-        all_scopes: Array.from(allScopes), // Store all unique scopes
-        last_login: formatDate(lastUsedTime),
-        organization_id: organization_id,
-      });
-      
-      // Store processing data for later
-      appProcessingData.push({
-        appName,
-        tokens,
-        existingAppId: existingApp?.id
-      });
-    }
-    
-    // Batch upsert all applications at once
-    console.log(`Upserting ${appsToUpsert.length} applications`);
-    
-    // Declare variables outside the try block so they're available in the rest of the function
-    let updatedApps: any[] = [];
-    const appIdMap = new Map();
-    
-    try {
-      const { data, error: appsError } = await supabaseAdmin
+      // Create or update the application
+      const { data: appData, error: appError } = await supabaseAdmin
         .from('applications')
-        .upsert(appsToUpsert)
-        .select('id, name');
+        .upsert({
+          id: existingApp?.id, // Include ID if it exists
+          google_app_id: tokens.map(t => t.clientId).join(','), // Store all client IDs
+          name: appName,
+          category: 'Unknown',
+          risk_level: highestRiskLevel,
+          management_status: existingApp?.id ? undefined : 'PENDING', // Only set for new apps
+          total_permissions: allScopes.size,
+          all_scopes: Array.from(allScopes), // Store all unique scopes
+          last_login: formatDate(lastUsedTime),
+          organization_id: organization_id,
+        })
+        .select('id')
+        .single();
       
-      if (appsError) {
-        console.error('Error upserting applications:', appsError);
-        await updateSyncStatus(
-          sync_id, 
-          -1, 
-          `Database error when storing applications: ${appsError.message}`, 
-          'FAILED'
-        );
-        return;
-      }
+      if (appError) throw appError;
       
-      updatedApps = data || [];
-      
-      if (!updatedApps || updatedApps.length === 0) {
-        console.warn('No applications were updated or inserted');
-        if (appsToUpsert.length > 0) {
-          // This is unexpected, log it but continue
-          console.error('Apps to upsert:', JSON.stringify(appsToUpsert.slice(0, 2)));
-        }
-      } else {
-        console.log(`Successfully upserted ${updatedApps.length} applications`);
-      }
-      
-      // Create a map of app names to their IDs
-      updatedApps.forEach(app => {
-        appIdMap.set(app.name, app.id);
-      });
-    } catch (error: any) {
-      console.error('Exception during applications upsert:', error);
-      await updateSyncStatus(
-        sync_id, 
-        -1, 
-        `Failed to save applications to database: ${error.message}`, 
-        'FAILED'
-      );
-      return;
-    }
-    
-    // Prepare user-application relations batch
-    const relationsToUpsert: any[] = [];
-    const relationsToUpdate: any[] = [];
-    
-    // Pre-fetch existing user-application relations to avoid duplicates
-    try {
-      if (!updatedApps || updatedApps.length === 0) {
-        console.warn('No application IDs to fetch relations for, skipping user-application processing');
-        await updateSyncStatus(
-          sync_id, 
-          100, 
-          `Sync completed - Processed ${totalApps} applications but no application data was saved`, 
-          'COMPLETED'
-        );
-        return;
-      }
-      
-      const appIds = updatedApps.map(a => a.id).filter(Boolean);
-      
-      if (appIds.length === 0) {
-        console.warn('No valid application IDs found, skipping user-application processing');
-        await updateSyncStatus(
-          sync_id, 
-          100, 
-          `Sync completed - No valid application IDs were found`, 
-          'COMPLETED'
-        );
-        return;
-      }
-      
-      const { data: existingRelations, error: relationsError } = await supabaseAdmin
-        .from('user_applications')
-        .select('id, user_id, application_id, scopes')
-        .in('application_id', appIds);
-      
-      if (relationsError) {
-        console.error('Error fetching existing relations:', relationsError);
-        await updateSyncStatus(
-          sync_id, 
-          -1, 
-          `Database error when retrieving application relations: ${relationsError.message}`, 
-          'FAILED'
-        );
-        return;
-      }
-      
-      // Create a map for quick lookup of existing relations
-      const existingRelationMap = new Map();
-      (existingRelations || []).forEach(rel => {
-        const key = `${rel.user_id}:${rel.application_id}`;
-        existingRelationMap.set(key, rel);
-      });
-      
-      // Process all tokens to create user-application relations
-      for (const { appName, tokens } of appProcessingData) {
-        const appId = appIdMap.get(appName);
-        if (!appId) {
-          console.warn(`No application ID found for ${appName}`);
+      // Process each user separately for this application to avoid batch conflicts
+      for (const token of tokens) {
+        const userId = userMap.get(token.userKey);
+        if (!userId) {
+          console.warn('No matching user found for token:', token.userKey);
           continue;
         }
         
-        for (const token of tokens) {
-          // Try to find user by ID first, then by email
-          let userId = userMap.get(token.userKey);
-          if (!userId && token.userEmail) {
-            userId = userEmailMap.get(token.userEmail);
-          }
+        try {
+          // Extract this specific user's scopes from their token
+          // We need to ensure that all scopes are correctly collected from the admin API
+          // The token.scopes array might be incomplete due to how the Google Admin API returns data
           
-          if (!userId) {
-            console.warn('No matching user found for token:', token.userKey || token.userEmail);
-            continue;
-          }
-          
-          // Extract this specific user's scopes
-          const userScopes = extractScopes(token);
-          
-          // Check if relation already exists
-          const relationKey = `${userId}:${appId}`;
-          const existingRelation = existingRelationMap.get(relationKey);
-          
-          if (existingRelation) {
-            // Merge with existing scopes
-            const mergedScopes = [...new Set([...existingRelation.scopes, ...userScopes])];
-            
-            relationsToUpdate.push({
-              id: existingRelation.id,
-              scopes: mergedScopes,
-              last_login: formatDate(token.lastTimeUsed),
-              updated_at: new Date().toISOString()
-            });
-          } else {
-            // New relation
-            relationsToUpsert.push({
-              user_id: userId,
-              application_id: appId,
-              scopes: userScopes,
-              last_login: formatDate(token.lastTimeUsed)
-            });
-          }
-        }
-      }
-    } catch (error: any) {
-      console.error('Error preparing user-application relations:', error);
-      await updateSyncStatus(
-        sync_id, 
-        -1, 
-        `Error processing application relations: ${error.message}`, 
-        'FAILED'
-      );
-      return;
-    }
-    
-    // Process in batches of 100 to avoid query size limits
-    const BATCH_SIZE = 100;
-    
-    // Insert new relations in batches
-    if (relationsToUpsert.length > 0) {
-      console.log(`Inserting ${relationsToUpsert.length} new user-application relations`);
-      
-      for (let i = 0; i < relationsToUpsert.length; i += BATCH_SIZE) {
-        const batch = relationsToUpsert.slice(i, i + BATCH_SIZE);
-        
-        await updateSyncStatus(
-          sync_id, 
-          80 + Math.floor((i / relationsToUpsert.length) * 10), 
-          `Saving application connections: ${i}/${relationsToUpsert.length}`
-        );
-        
-        const { error: insertError } = await supabaseAdmin
-          .from('user_applications')
-          .insert(batch);
-        
-        if (insertError) {
-          console.error('Error inserting user-application relations batch:', insertError);
-          // Continue to next batch rather than failing entire process
-        }
-      }
-    }
-    
-    // Update existing relations in batches
-    if (relationsToUpdate.length > 0) {
-      console.log(`Updating ${relationsToUpdate.length} existing user-application relations`);
-      
-      for (let i = 0; i < relationsToUpdate.length; i += BATCH_SIZE) {
-        const batch = relationsToUpdate.slice(i, i + BATCH_SIZE);
-        
-        await updateSyncStatus(
-          sync_id, 
-          90 + Math.floor((i / relationsToUpdate.length) * 10), 
-          `Updating application connections: ${i}/${relationsToUpdate.length}`
-        );
-        
-        // We need to update one at a time because Supabase doesn't support updating
-        // multiple records with different values in a single call
-        for (const relation of batch) {
-          const { error: updateError } = await supabaseAdmin
-            .from('user_applications')
-            .update({
-              scopes: relation.scopes,
-              last_login: relation.last_login,
-              updated_at: relation.updated_at
-            })
-            .eq('id', relation.id);
-          
-          if (updateError) {
-            console.error('Error updating user-application relation:', updateError);
-            // Continue to next relation rather than failing entire process
-          }
-        }
-      }
-    }
-    
-    // Finalize (100% progress)
-    await updateSyncStatus(
-      sync_id, 
-      100, 
-      `Sync completed - Processed ${totalApps} applications and ${users.length} users`, 
-      'COMPLETED'
-    );
-    
-    console.log('Background sync completed successfully');
-  } catch (error: any) {
-    console.error('Error in background sync process:', error);
-    
-    // Update status to failed
-    await updateSyncStatus(
-      sync_id,
-      -1,
-      `Sync failed: ${error.message}`,
-      'FAILED'
-    );
-  }
-}
-
-// Helper function to extract scopes from a token
-function extractScopes(token: any): string[] {
           // Make sure we have a valid scopes array
           let userScopes = token.scopes || [];
           
@@ -692,5 +275,77 @@ function extractScopes(token: any): string[] {
             }
           }
           
-  return userScopes;
+          // Log what we found for debugging
+          console.log(`User ${token.userEmail || token.userKey} with app ${appName} has ${userScopes.length} scopes`);
+          
+          // First check if the relationship already exists
+          const { data: existingRel } = await supabaseAdmin
+            .from('user_applications')
+            .select('id, scopes')
+            .eq('user_id', userId)
+            .eq('application_id', appData.id)
+            .maybeSingle();
+          
+          if (existingRel) {
+            // Update existing relationship with merged scopes and last login
+            const mergedScopes = [...new Set([...existingRel.scopes, ...userScopes])];
+            const { error: updateError } = await supabaseAdmin
+              .from('user_applications')
+              .update({
+                scopes: mergedScopes, // Merge with existing scopes
+                last_login: formatDate(token.lastTimeUsed),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingRel.id);
+            
+            if (updateError) {
+              console.error('Error updating user-application relationship:', updateError);
+              // Continue to next token rather than failing entire process
+              continue;
+            }
+          } else {
+            // Insert new relationship
+            const { error: insertError } = await supabaseAdmin
+              .from('user_applications')
+              .insert({
+                user_id: userId,
+                application_id: appData.id,
+                scopes: userScopes,
+                last_login: formatDate(token.lastTimeUsed)
+              });
+            
+            if (insertError) {
+              console.error('Error inserting user-application relationship:', insertError);
+              // Continue to next token rather than failing entire process
+              continue;
+            }
+          }
+        } catch (userAppError) {
+          console.error('Error processing user-application relationship:', userAppError);
+          // Continue to next token rather than failing entire process
+          continue;
+        }
+      }
+    }
+    
+    // Finalize (100% progress)
+    await updateSyncStatus(
+      sync_id, 
+      100, 
+      `Sync completed - Processed ${totalApps} applications and ${users.length} users`, 
+      'COMPLETED'
+    );
+    
+    console.log('Background sync completed successfully');
+  } catch (error: any) {
+    console.error('Error in background sync process:', error);
+    
+    // Update status to failed
+    await updateSyncStatus(
+      sync_id,
+      -1,
+      `Sync failed: ${error.message}`,
+      'FAILED'
+    );
+  }
 } 
