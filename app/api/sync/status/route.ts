@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-// Configure runtime for better performance
-export const runtime = 'nodejs';
-export const maxDuration = 60; // 1 minute max duration
-
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);

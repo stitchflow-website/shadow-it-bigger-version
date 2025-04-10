@@ -14,8 +14,6 @@ function LoadingContent() {
   const [status, setStatus] = useState('IN_PROGRESS');
   const [message, setMessage] = useState('Starting data sync...');
   const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [lastProgressUpdate, setLastProgressUpdate] = useState<number>(Date.now());
 
   useEffect(() => {
     if (!syncId) {
@@ -31,25 +29,16 @@ function LoadingContent() {
         
         if (!response.ok) {
           console.error('Error fetching sync status:', response.statusText);
-          setRetryCount(prev => prev + 1);
-          if (retryCount > 5) {
-            setError('Unable to fetch sync status after multiple attempts. The process may still be running in the background. Please refresh or check again later.');
-          }
+          setError('Unable to fetch sync status. Please refresh the page or contact support.');
           return;
         }
 
         const data = await response.json();
         
         if (data) {
-          // Only update if the progress has changed
-          if (data.progress !== progress) {
-            setLastProgressUpdate(Date.now());
-          }
-          
           setProgress(data.progress);
           setStatus(data.status);
           setMessage(data.message || 'Processing your data...');
-          setRetryCount(0); // Reset retry count on successful response
 
           // If completed, redirect to dashboard
           if (data.status === 'COMPLETED') {
@@ -65,19 +54,10 @@ function LoadingContent() {
             setError(`Sync failed: ${data.message}`);
             return;
           }
-          
-          // Check if progress has been stuck for too long (2 minutes)
-          const timeSinceLastUpdate = Date.now() - lastProgressUpdate;
-          if (progress > 0 && timeSinceLastUpdate > 120000) {
-            setMessage(`${data.message} (taking longer than expected, please be patient)`);
-          }
         }
       } catch (err) {
         console.error('Error in sync status check:', err);
-        setRetryCount(prev => prev + 1);
-        if (retryCount > 5) {
-          setError('An unexpected error occurred. The process may still be running in the background. Please refresh or check your dashboard later.');
-        }
+        setError('An unexpected error occurred. Please refresh the page or contact support.');
       }
     };
 
@@ -89,17 +69,7 @@ function LoadingContent() {
 
     // Clean up on unmount
     return () => clearInterval(intervalId);
-  }, [syncId, router, progress, retryCount, lastProgressUpdate]);
-
-  // Add manual refresh button
-  const handleRefresh = () => {
-    window.location.reload();
-  };
-  
-  // Add go to dashboard button
-  const handleGoToDashboard = () => {
-    router.push('/');
-  };
+  }, [syncId, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -114,16 +84,10 @@ function LoadingContent() {
           {error ? (
             <div className="text-red-500 mb-4 p-4 bg-red-50 rounded-md">
               {error}
-              <div className="mt-4 flex space-x-4">
+              <div className="mt-4">
                 <button 
                   className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                  onClick={handleRefresh}
-                >
-                  Refresh Page
-                </button>
-                <button 
-                  className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
-                  onClick={handleGoToDashboard}
+                  onClick={() => router.push('/')}
                 >
                   Go to Dashboard
                 </button>
@@ -144,17 +108,6 @@ function LoadingContent() {
                   <br />
                   This process is running in the background, so you'll be redirected once it completes.
                 </p>
-                {progress === 10 && (
-                  <div className="mt-4 p-2 bg-yellow-50 rounded text-yellow-700">
-                    <p>Data processing is in progress. This step may take several minutes.</p>
-                    <button 
-                      className="mt-2 px-3 py-1 bg-blue-500 text-white text-xs rounded-md hover:bg-blue-600"
-                      onClick={handleRefresh}
-                    >
-                      Refresh
-                    </button>
-                  </div>
-                )}
               </div>
             </>
           )}

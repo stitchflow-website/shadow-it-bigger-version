@@ -3,10 +3,6 @@ import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel } from '@/lib/risk-assessment';
 
-// Configure Vercel runtime to maximize function duration
-export const runtime = 'nodejs'; // Use Node.js runtime for intensive processing
-export const maxDuration = 300; // 5 minutes max duration
-
 // Helper function to update sync status
 async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
   return await supabaseAdmin
@@ -59,83 +55,44 @@ export async function POST(request: Request) {
     // This ensures the API responds quickly while processing continues
     const { organization_id, sync_id, access_token, refresh_token } = await request.json();
     
-    console.log(`[${sync_id}] Background sync API called for org: ${organization_id}`);
-    
-    if (!organization_id || !sync_id || !access_token) {
-      console.error('Missing required parameters for background sync');
-      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
-    }
-    
-    // Instead of a deep background process, let's implement a chunked approach
-    // First chunk: Initialize and fetch users
-    const step1Promise = initializeAndFetchUsers(organization_id, sync_id, access_token, refresh_token);
-    
     // Send immediate response
-    console.log(`[${sync_id}] Returning successful response`);
-    return NextResponse.json({ message: 'Sync started in background', sync_id });
+    const responsePromise = Promise.resolve(
+      NextResponse.json({ message: 'Sync started in background' })
+    );
+    
+    // Process in background
+    backgroundProcess(organization_id, sync_id, access_token, refresh_token);
+    
+    return responsePromise;
   } catch (error: any) {
     console.error('Error in background sync API:', error);
     return NextResponse.json(
-      { error: `Failed to start background sync: ${error.message}` },
+      { error: 'Failed to start background sync' },
       { status: 500 }
     );
   }
 }
 
-// Split the process into chunks to avoid timeout issues
-async function initializeAndFetchUsers(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {
+async function backgroundProcess(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {
   try {
-    console.log(`[${sync_id}] Starting first chunk: initialize and fetch users`);
-    
-    // Check environment variables
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
-    
-    if (!clientId || !clientSecret || !redirectUri) {
-      console.error(`[${sync_id}] Missing required environment variables for Google API`);
-      await updateSyncStatus(
-        sync_id,
-        10,
-        'Sync failed: Missing Google API configuration',
-        'FAILED'
-      );
-      return;
-    }
-    
     // Initialize Google Workspace service
     const googleService = new GoogleWorkspaceService({
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
     });
 
     await googleService.setCredentials({ 
       access_token,
       refresh_token
     });
-    console.log(`[${sync_id}] Google Workspace service initialized successfully`);
-    
-    // Force update to 15% to track progress
-    await updateSyncStatus(sync_id, 15, 'Google API connection established');
-    
+
     // Step 1: Fetch users list (20% progress)
-    console.log(`[${sync_id}] Fetching users from Google Workspace`);
-    await updateSyncStatus(sync_id, 20, 'Fetching users from Google Workspace');
+    await updateSyncStatus(sync_id, 10, 'Fetching users from Google Workspace');
+    const users = await googleService.getUsersList();
+    console.log(`Fetched ${users.length} users`);
     
-    // Fetch users
-    let users = [];
-    try {
-      users = await googleService.getUsersList();
-      console.log(`[${sync_id}] Fetched ${users.length} users`);
-    } catch (error) {
-      console.error(`[${sync_id}] Error fetching users:`, error);
-      // Continue with empty users list rather than failing completely
-      users = [];
-    }
-    
-    // Process users and update DB
-    await updateSyncStatus(sync_id, 25, `Processing ${users.length} users`);
+    await updateSyncStatus(sync_id, 20, `Processing ${users.length} users`);
     
     // Create a batch of all users to upsert
     const usersToUpsert = users.map((user: any) => {
@@ -166,13 +123,9 @@ async function initializeAndFetchUsers(organization_id: string, sync_id: string,
       .from('users')
       .upsert(usersToUpsert);
     
-    if (usersError) {
-      console.error(`[${sync_id}] Error upserting users:`, usersError);
-      await updateSyncStatus(sync_id, -1, `Sync failed: Error saving users`, 'FAILED');
-      return;
-    }
+    if (usersError) throw usersError;
     
-    // Get user IDs mapping
+    // Get all users for this organization to create a mapping
     const { data: createdUsers } = await supabaseAdmin
       .from('users')
       .select('id, google_user_id')
@@ -183,39 +136,11 @@ async function initializeAndFetchUsers(organization_id: string, sync_id: string,
     createdUsers?.forEach(user => {
       userMap.set(user.google_user_id, user.id);
     });
-    
-    // Start second chunk: Fetch OAuth tokens
-    console.log(`[${sync_id}] Triggering next step: fetch OAuth tokens`);
-    fetchOAuthTokens(organization_id, sync_id, googleService, userMap);
-    
-  } catch (error: any) {
-    console.error(`[${sync_id}] Error in first chunk:`, error);
-    await updateSyncStatus(
-      sync_id,
-      -1,
-      `Sync failed in initialization: ${error.message}`,
-      'FAILED'
-    );
-  }
-}
 
-// Second chunk: Fetch OAuth tokens
-async function fetchOAuthTokens(organization_id: string, sync_id: string, googleService: any, userMap: Map<string, string>) {
-  try {
-    console.log(`[${sync_id}] Starting second chunk: fetch OAuth tokens`);
-    
     // Step 2: Fetch OAuth tokens (40% progress)
     await updateSyncStatus(sync_id, 30, 'Fetching application data from Google Workspace');
-    
-    let applicationTokens: any[] = [];
-    try {
-      applicationTokens = await googleService.getOAuthTokens();
-      console.log(`[${sync_id}] Fetched ${applicationTokens.length} application tokens`);
-    } catch (error) {
-      console.error(`[${sync_id}] Error fetching OAuth tokens:`, error);
-      // Continue with empty tokens list rather than failing completely
-      applicationTokens = [];
-    }
+    const applicationTokens = await googleService.getOAuthTokens();
+    console.log(`Fetched ${applicationTokens.length} application tokens`);
     
     await updateSyncStatus(sync_id, 40, `Processing ${applicationTokens.length} application connections`);
     
@@ -232,24 +157,6 @@ async function fetchOAuthTokens(organization_id: string, sync_id: string, google
       
       appNameMap.get(appName)!.push(token);
     }
-    
-    // Start third chunk: Process applications
-    processApplications(organization_id, sync_id, appNameMap, userMap);
-    
-  } catch (error: any) {
-    console.error(`[${sync_id}] Error in second chunk:`, error);
-    await updateSyncStatus(
-      sync_id,
-      -1,
-      `Sync failed in token fetching: ${error.message}`,
-      'FAILED'
-    );
-  }
-}
-
-async function processApplications(organization_id: string, sync_id: string, appNameMap: Map<string, any[]>, userMap: Map<string, string>) {
-  try {
-    console.log(`[${sync_id}] Starting third chunk: process applications`);
     
     // Process each group of applications (40% to 80% progress)
     let appCount = 0;
@@ -324,7 +231,7 @@ async function processApplications(organization_id: string, sync_id: string, app
       for (const token of tokens) {
         const userId = userMap.get(token.userKey);
         if (!userId) {
-          console.warn(`[${sync_id}] No matching user found for token: ${token.userKey}`);
+          console.warn('No matching user found for token:', token.userKey);
           continue;
         }
         
@@ -369,7 +276,7 @@ async function processApplications(organization_id: string, sync_id: string, app
           }
           
           // Log what we found for debugging
-          console.log(`[${sync_id}] User ${token.userEmail || token.userKey} with app ${appName} has ${userScopes.length} scopes`);
+          console.log(`User ${token.userEmail || token.userKey} with app ${appName} has ${userScopes.length} scopes`);
           
           // First check if the relationship already exists
           const { data: existingRel } = await supabaseAdmin
@@ -392,7 +299,7 @@ async function processApplications(organization_id: string, sync_id: string, app
               .eq('id', existingRel.id);
             
             if (updateError) {
-              console.error(`[${sync_id}] Error updating user-application relationship:`, updateError);
+              console.error('Error updating user-application relationship:', updateError);
               // Continue to next token rather than failing entire process
               continue;
             }
@@ -408,13 +315,13 @@ async function processApplications(organization_id: string, sync_id: string, app
               });
             
             if (insertError) {
-              console.error(`[${sync_id}] Error inserting user-application relationship:`, insertError);
+              console.error('Error inserting user-application relationship:', insertError);
               // Continue to next token rather than failing entire process
               continue;
             }
           }
         } catch (userAppError) {
-          console.error(`[${sync_id}] Error processing user-application relationship:`, userAppError);
+          console.error('Error processing user-application relationship:', userAppError);
           // Continue to next token rather than failing entire process
           continue;
         }
@@ -425,17 +332,19 @@ async function processApplications(organization_id: string, sync_id: string, app
     await updateSyncStatus(
       sync_id, 
       100, 
-      `Sync completed - Processed ${totalApps} applications and ${userMap.size} users`, 
+      `Sync completed - Processed ${totalApps} applications and ${users.length} users`, 
       'COMPLETED'
     );
     
-    console.log(`[${sync_id}] Background sync completed successfully`);
+    console.log('Background sync completed successfully');
   } catch (error: any) {
-    console.error(`[${sync_id}] Error in third chunk:`, error);
+    console.error('Error in background sync process:', error);
+    
+    // Update status to failed
     await updateSyncStatus(
       sync_id,
       -1,
-      `Sync failed in application processing: ${error.message}`,
+      `Sync failed: ${error.message}`,
       'FAILED'
     );
   }
