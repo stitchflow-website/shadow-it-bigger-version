@@ -26,15 +26,15 @@ export async function POST(request: Request) {
 
     await googleService.setCredentials({ access_token });
 
-    // Get updated organization details
-    const orgDetails = await googleService.getOrganizationDetails();
+    // Get user info to obtain domain information
+    const userInfo = await googleService.getAuthenticatedUserInfo();
     
     // Update organization in Supabase
     const { error: orgError } = await supabase
       .from('organizations')
       .update({
-        name: orgDetails.name,
-        domain: orgDetails.domain,
+        name: userInfo.hd || 'Unknown Organization',
+        domain: userInfo.hd || 'unknown.com',
         updated_at: new Date().toISOString(),
       })
       .eq('id', organization_id);

@@ -56,9 +56,9 @@ export async function GET(request: Request) {
     console.log('2. Initializing Google Workspace service...');
     // Initialize Google Workspace service
     const googleService = new GoogleWorkspaceService({
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-      redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: process.env.GOOGLE_REDIRECT_URI,
     });
 
     console.log('3. Getting tokens from Google...');
@@ -75,10 +75,15 @@ export async function GET(request: Request) {
     
     await googleService.setCredentials(oauthTokens);
 
-    console.log('4. Getting authenticated user info...');
     // Get the authenticated user's info
+    console.log('Getting authenticated user info...');
     const userInfo = await googleService.getAuthenticatedUserInfo();
     console.log('Authenticated user:', userInfo);
+
+    if (!userInfo.hd) {
+      console.error('Not a Google Workspace account - missing domain (hd field)');
+      return NextResponse.redirect(new URL('/login?error=not_workspace_account', request.url));
+    }
 
     // Create or update the authenticated user
     const { data: authUser, error: authUserError } = await supabaseAdmin
@@ -98,16 +103,17 @@ export async function GET(request: Request) {
       throw authUserError;
     }
 
-    // Extract organization domain from user's email
-    const userDomain = userInfo.email!.split('@')[1];
+    // Create organization ID from domain
+    const orgId = userInfo.hd.replace(/\./g, '-');
 
-    // Create or get organization based on user's email domain
+    // Create or get organization
     const { data: org, error: orgError } = await supabaseAdmin
       .from('organizations')
       .upsert({
-        google_org_id: userDomain, // Use domain as org ID since we don't have customerId
-        name: userDomain,
-        domain: userDomain,
+        google_org_id: orgId,
+        name: userInfo.hd,
+        domain: userInfo.hd,
+        updated_at: new Date().toISOString(),
       })
       .select()
       .single();
@@ -170,7 +176,7 @@ export async function GET(request: Request) {
       path: '/',
     });
     
-    response.cookies.set('userEmail', userInfo.email!, {
+    response.cookies.set('userEmail', userInfo.email, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

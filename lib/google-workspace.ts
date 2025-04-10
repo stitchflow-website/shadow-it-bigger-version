@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { OAuth2Client, Credentials } from 'google-auth-library';
+import { OAuth2Client } from 'google-auth-library';
 
 // Define interfaces for Google API responses
 interface Token {
@@ -18,16 +18,12 @@ export class GoogleWorkspaceService {
   private admin: any;
   private oauth2: any;
 
-  constructor(config: {
-    client_id: string;
-    client_secret: string;
-    redirect_uri: string;
-  }) {
-    this.oauth2Client = new OAuth2Client(
-      config.client_id,
-      config.client_secret,
-      config.redirect_uri
-    );
+  constructor(credentials: any) {
+    this.oauth2Client = new OAuth2Client({
+      clientId: credentials.client_id,
+      clientSecret: credentials.client_secret,
+      redirectUri: credentials.redirect_uri,
+    });
 
     // Initialize admin SDK
     this.admin = google.admin({
@@ -42,15 +38,8 @@ export class GoogleWorkspaceService {
     });
   }
 
-  async setCredentials(credentials: Credentials) {
-    this.oauth2Client.setCredentials(credentials);
-  }
-
-  async getOrganizationDetails() {
-    const response = await this.admin.domains.list({
-      customer: 'my_customer',
-    });
-    return response.data;
+  async setCredentials(tokens: any) {
+    this.oauth2Client.setCredentials(tokens);
   }
 
   async getUsersList() {
@@ -191,10 +180,7 @@ export class GoogleWorkspaceService {
 
   // Add method to get authenticated user info
   async getAuthenticatedUserInfo() {
-    const oauth2 = google.oauth2('v2');
-    const response = await oauth2.userinfo.get({
-      auth: this.oauth2Client,
-    });
+    const response = await this.oauth2.userinfo.get();
     return response.data;
   }
 } 

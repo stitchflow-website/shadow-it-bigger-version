@@ -21,6 +21,9 @@ function LoginContent() {
         case 'auth_failed':
           setError('Authentication failed. Please try again.');
           break;
+        case 'not_workspace_account':
+          setError('Please sign in with a Google Workspace account. Personal Gmail accounts are not supported.');
+          break;
         default:
           setError('An error occurred during authentication');
       }
@@ -46,9 +49,6 @@ function LoginContent() {
         'https://www.googleapis.com/auth/admin.directory.user.readonly',
         // Token management - required for accessing OAuth tokens
         'https://www.googleapis.com/auth/admin.directory.user.security',
-        // Reports and audit logs - read-only access
-        // 'https://www.googleapis.com/auth/admin.reports.audit.readonly',
-        // 'https://www.googleapis.com/auth/admin.reports.usage.readonly',
         // Basic profile info
         'openid',
         'profile',
