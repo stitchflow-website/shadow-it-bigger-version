@@ -394,7 +394,7 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
         name: appName,
         category: 'Unknown',
         risk_level: highestRiskLevel,
-        management_status: existingApp?.id ? undefined : 'PENDING', // Only set for new apps
+        management_status: existingApp?.id ? existingApp.management_status || 'PENDING' : 'PENDING', // Preserve existing status or set to PENDING for new
         total_permissions: allScopes.size,
         all_scopes: Array.from(allScopes), // Store all unique scopes
         last_login: formatDate(lastUsedTime),
@@ -411,158 +411,263 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     
     // Batch upsert all applications at once
     console.log(`Upserting ${appsToUpsert.length} applications`);
-    const { data: updatedApps, error: appsError } = await supabaseAdmin
-      .from('applications')
-      .upsert(appsToUpsert)
-      .select('id, name');
     
-    if (appsError) {
-      console.error('Error upserting applications:', appsError);
-      throw appsError;
-    }
+    let updatedApps: any[] = [];
     
-    // Create a map of app names to their IDs
-    const appIdMap = new Map();
-    updatedApps?.forEach(app => {
-      appIdMap.set(app.name, app.id);
-    });
-    
-    // Pre-fetch existing user-application relations to avoid duplicates
-    const { data: existingRelations, error: relationsError } = await supabaseAdmin
-      .from('user_applications')
-      .select('id, user_id, application_id, scopes')
-      .in('application_id', updatedApps?.map(a => a.id) || []);
-    
-    if (relationsError) {
-      console.error('Error fetching existing relations:', relationsError);
-      throw relationsError;
-    }
-    
-    // Create a map for quick lookup of existing relations
-    const existingRelationMap = new Map();
-    existingRelations?.forEach(rel => {
-      const key = `${rel.user_id}:${rel.application_id}`;
-      existingRelationMap.set(key, rel);
-    });
-    
-    // Prepare user-application relations batch
-    const relationsToUpsert: any[] = [];
-    const relationsToUpdate: any[] = [];
-    
-    // Process all tokens to create user-application relations
-    for (const { appName, tokens } of appProcessingData) {
-      const appId = appIdMap.get(appName);
-      if (!appId) {
-        console.warn(`No application ID found for ${appName}`);
-        continue;
-      }
+    try {
+      // First insert new applications that don't have IDs
+      const newApps = appsToUpsert.filter(app => !app.id);
+      const existingApps = appsToUpsert.filter(app => app.id);
       
-      for (const token of tokens) {
-        // Try to find user by ID first, then by email
-        let userId = userMap.get(token.userKey);
-        if (!userId && token.userEmail) {
-          userId = userEmailMap.get(token.userEmail);
-        }
-        
-        if (!userId) {
-          console.warn('No matching user found for token:', token.userKey || token.userEmail);
-          continue;
-        }
-        
-        // Extract this specific user's scopes
-        const userScopes = extractScopes(token);
-        
-        // Check if relation already exists
-        const relationKey = `${userId}:${appId}`;
-        const existingRelation = existingRelationMap.get(relationKey);
-        
-        if (existingRelation) {
-          // Merge with existing scopes
-          const mergedScopes = [...new Set([...existingRelation.scopes, ...userScopes])];
-          
-          relationsToUpdate.push({
-            id: existingRelation.id,
-            scopes: mergedScopes,
-            last_login: formatDate(token.lastTimeUsed),
-            updated_at: new Date().toISOString()
-          });
-        } else {
-          // New relation
-          relationsToUpsert.push({
-            user_id: userId,
-            application_id: appId,
-            scopes: userScopes,
-            last_login: formatDate(token.lastTimeUsed)
-          });
-        }
-      }
-    }
-    
-    // Process in batches of 100 to avoid query size limits
-    const BATCH_SIZE = 100;
-    
-    // Insert new relations in batches
-    if (relationsToUpsert.length > 0) {
-      console.log(`Inserting ${relationsToUpsert.length} new user-application relations`);
+      let newlyCreatedApps: any[] = [];
       
-      for (let i = 0; i < relationsToUpsert.length; i += BATCH_SIZE) {
-        const batch = relationsToUpsert.slice(i, i + BATCH_SIZE);
-        
-        await updateSyncStatus(
-          sync_id, 
-          80 + Math.floor((i / relationsToUpsert.length) * 10), 
-          `Saving application connections: ${i}/${relationsToUpsert.length}`
-        );
-        
-        const { error: insertError } = await supabaseAdmin
-          .from('user_applications')
-          .insert(batch);
+      if (newApps.length > 0) {
+        console.log(`Inserting ${newApps.length} new applications`);
+        const { data: insertedApps, error: insertError } = await supabaseAdmin
+          .from('applications')
+          .insert(newApps)
+          .select('id, name');
         
         if (insertError) {
-          console.error('Error inserting user-application relations batch:', insertError);
-          // Continue to next batch rather than failing entire process
+          console.error('Error inserting new applications:', insertError);
+          await updateSyncStatus(
+            sync_id,
+            -1,
+            `Database error when inserting applications: ${insertError.message}`,
+            'FAILED'
+          );
+          return;
         }
+        
+        newlyCreatedApps = insertedApps || [];
       }
-    }
-    
-    // Update existing relations in batches
-    if (relationsToUpdate.length > 0) {
-      console.log(`Updating ${relationsToUpdate.length} existing user-application relations`);
       
-      for (let i = 0; i < relationsToUpdate.length; i += BATCH_SIZE) {
-        const batch = relationsToUpdate.slice(i, i + BATCH_SIZE);
+      // Then update existing applications
+      let updatedExistingApps: any[] = [];
+      
+      if (existingApps.length > 0) {
+        console.log(`Updating ${existingApps.length} existing applications`);
         
-        await updateSyncStatus(
-          sync_id, 
-          90 + Math.floor((i / relationsToUpdate.length) * 10), 
-          `Updating application connections: ${i}/${relationsToUpdate.length}`
-        );
-        
-        // We need to update one at a time because Supabase doesn't support updating
-        // multiple records with different values in a single call
-        for (const relation of batch) {
-          const { error: updateError } = await supabaseAdmin
-            .from('user_applications')
-            .update({
-              scopes: relation.scopes,
-              last_login: relation.last_login,
-              updated_at: relation.updated_at
-            })
-            .eq('id', relation.id);
+        // Update each existing app individually to avoid constraint violations
+        for (const app of existingApps) {
+          const { data: updatedApp, error: updateError } = await supabaseAdmin
+            .from('applications')
+            .update(app)
+            .eq('id', app.id)
+            .select('id, name');
           
           if (updateError) {
-            console.error('Error updating user-application relation:', updateError);
-            // Continue to next relation rather than failing entire process
+            console.error(`Error updating application ${app.name}:`, updateError);
+            // Continue with other apps rather than failing
+          } else if (updatedApp && updatedApp.length > 0) {
+            updatedExistingApps.push(updatedApp[0]);
           }
         }
       }
+      
+      // Combine newly created and updated apps
+      updatedApps = [...newlyCreatedApps, ...updatedExistingApps];
+      
+      // Create a map of app names to their IDs
+      const appIdMap = new Map();
+      updatedApps.forEach((app: any) => {
+        appIdMap.set(app.name, app.id);
+      });
+      
+      // For any app that wasn't properly upserted, try to fetch it by name
+      for (const { appName } of appProcessingData) {
+        if (!appIdMap.has(appName)) {
+          console.log(`Need to fetch ID for app: ${appName}`);
+          const { data: fetchedApp } = await supabaseAdmin
+            .from('applications')
+            .select('id, name')
+            .eq('name', appName)
+            .eq('organization_id', organization_id)
+            .maybeSingle();
+          
+          if (fetchedApp?.id) {
+            appIdMap.set(appName, fetchedApp.id);
+            updatedApps.push(fetchedApp);
+            console.log(`Found ID ${fetchedApp.id} for app ${appName}`);
+          }
+        }
+      }
+      
+      // Pre-fetch existing user-application relations to avoid duplicates
+      const { data: existingRelations, error: relationsError } = await supabaseAdmin
+        .from('user_applications')
+        .select('id, user_id, application_id, scopes')
+        .in('application_id', updatedApps.map((a: any) => a.id) || []);
+      
+      if (relationsError) {
+        console.error('Error fetching existing relations:', relationsError);
+        throw relationsError;
+      }
+      
+      // Create a map for quick lookup of existing relations
+      const existingRelationMap = new Map();
+      existingRelations?.forEach(rel => {
+        const key = `${rel.user_id}:${rel.application_id}`;
+        existingRelationMap.set(key, rel);
+      });
+      
+      // Prepare user-application relations batch
+      const relationsToUpsert: any[] = [];
+      const relationsToUpdate: any[] = [];
+      
+      // Process all tokens to create user-application relations
+      for (const { appName, tokens } of appProcessingData) {
+        const appId = appIdMap.get(appName);
+        if (!appId) {
+          console.warn(`No application ID found for ${appName}`);
+          continue;
+        }
+        
+        for (const token of tokens) {
+          // Try to find user by ID first, then by email
+          let userId = userMap.get(token.userKey);
+          if (!userId && token.userEmail) {
+            userId = userEmailMap.get(token.userEmail);
+          }
+          
+          if (!userId) {
+            console.warn('No matching user found for token:', token.userKey || token.userEmail);
+            continue;
+          }
+          
+          // Extract this specific user's scopes
+          const userScopes = extractScopes(token);
+          
+          // Check if relation already exists
+          const relationKey = `${userId}:${appId}`;
+          const existingRelation = existingRelationMap.get(relationKey);
+          
+          if (existingRelation) {
+            // Merge with existing scopes
+            const mergedScopes = [...new Set([...existingRelation.scopes, ...userScopes])];
+            
+            relationsToUpdate.push({
+              id: existingRelation.id,
+              scopes: mergedScopes,
+              last_login: formatDate(token.lastTimeUsed),
+              updated_at: new Date().toISOString()
+            });
+          } else {
+            // New relation - ensure each entry has all required fields
+            relationsToUpsert.push({
+              user_id: userId,
+              application_id: appId,
+              scopes: userScopes || [],
+              last_login: formatDate(token.lastTimeUsed),
+              organization_id: organization_id // Add organization_id for extra safety
+            });
+          }
+        }
+      }
+      
+      // Process in batches of 100 to avoid query size limits
+      const BATCH_SIZE = 100;
+      
+      // Insert new relations in batches
+      if (relationsToUpsert.length > 0) {
+        console.log(`Inserting ${relationsToUpsert.length} new user-application relations`);
+        
+        for (let i = 0; i < relationsToUpsert.length; i += BATCH_SIZE) {
+          const batch = relationsToUpsert.slice(i, i + BATCH_SIZE);
+          
+          await updateSyncStatus(
+            sync_id, 
+            80 + Math.floor((i / relationsToUpsert.length) * 10), 
+            `Saving application connections: ${i}/${relationsToUpsert.length}`
+          );
+          
+          try {
+            const { error: insertError } = await supabaseAdmin
+              .from('user_applications')
+              .insert(batch);
+            
+            if (insertError) {
+              console.error('Error inserting user-application relations batch:', insertError);
+              
+              // If it's a constraint violation, try each record individually
+              if (insertError.message?.includes('violates') || insertError.code === '23502') {
+                console.log('Trying individual inserts instead of batch');
+                
+                for (const relation of batch) {
+                  try {
+                    const { error: individualInsertError } = await supabaseAdmin
+                      .from('user_applications')
+                      .insert(relation);
+                    
+                    if (individualInsertError) {
+                      console.error(`Failed to insert relation for user ${relation.user_id} and app ${relation.application_id}:`, individualInsertError);
+                    }
+                  } catch (err) {
+                    console.error('Error during individual insert:', err);
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Exception during batch insert:', error);
+            // Continue to next batch rather than failing entire process
+          }
+        }
+      }
+      
+      // Update existing relations in batches
+      if (relationsToUpdate.length > 0) {
+        console.log(`Updating ${relationsToUpdate.length} existing user-application relations`);
+        
+        for (let i = 0; i < relationsToUpdate.length; i += BATCH_SIZE) {
+          const batch = relationsToUpdate.slice(i, i + BATCH_SIZE);
+          
+          await updateSyncStatus(
+            sync_id, 
+            90 + Math.floor((i / relationsToUpdate.length) * 10), 
+            `Updating application connections: ${i}/${relationsToUpdate.length}`
+          );
+          
+          // We need to update one at a time because Supabase doesn't support updating
+          // multiple records with different values in a single call
+          for (const relation of batch) {
+            try {
+              const { error: updateError } = await supabaseAdmin
+                .from('user_applications')
+                .update({
+                  scopes: relation.scopes,
+                  last_login: relation.last_login,
+                  updated_at: relation.updated_at
+                })
+                .eq('id', relation.id);
+              
+              if (updateError) {
+                console.error('Error updating user-application relation:', updateError);
+                // Continue to next relation rather than failing entire process
+              }
+            } catch (error) {
+              console.error('Error during relation update:', error);
+              // Continue to next relation rather than failing entire process
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Error in sync process:', error);
+      await updateSyncStatus(
+        sync_id,
+        -1,
+        `Failed to save data to database: ${error.message}`,
+        'FAILED'
+      );
+      return;
     }
     
     // Finalize (100% progress)
     await updateSyncStatus(
       sync_id, 
       100, 
-      `Sync completed - Processed ${totalApps} applications and ${users.length} users`, 
+      `Sync completed - Processed ${updatedApps.length} applications and ${users.length} users`, 
       'COMPLETED'
     );
     
