@@ -59,7 +59,12 @@ export function middleware(request: NextRequest) {
   // Direct authenticated users to dashboard if they try to access login
   if (isAuthenticated && path === '/login') {
     console.log('Authenticated user on login page, redirecting to dashboard');
-    const url = new URL('/tools/shadow-it/', request.url);
+    const url = new URL(
+      new URL(request.url).origin.includes('stitchflow.com') 
+        ? '/tools/shadow-it/' 
+        : '/', 
+      request.url
+    );
     url.searchParams.set('orgId', orgId);
     return NextResponse.redirect(url);
   }
@@ -67,7 +72,13 @@ export function middleware(request: NextRequest) {
   // Direct unauthenticated users to login if they try to access protected routes
   if (!isAuthenticated && !isPublicPath) {
     console.log('Unauthenticated user on protected route, redirecting to login');
-    return NextResponse.redirect(new URL('https://shadow-it.vercel.app/login', request.url));
+    const loginUrl = new URL(
+      new URL(request.url).origin.includes('stitchflow.com') 
+        ? 'https://shadow-it.vercel.app/login' 
+        : '/login', 
+      request.url
+    );
+    return NextResponse.redirect(loginUrl);
   }
 
   // For authenticated users on all other paths, proceed and add headers
