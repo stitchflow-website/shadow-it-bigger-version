@@ -75,21 +75,14 @@ export async function GET(request: Request) {
     
     await googleService.setCredentials(oauthTokens);
 
-    console.log('4. Fetching organization details...');
-    // Get organization details
-    const orgDetails = await googleService.getOrganizationDetails();
-    console.log('Organization details:', {
-      domains: orgDetails.domains?.length,
-      firstDomain: orgDetails.domains?.[0]
-    });
-    
-    const domain = orgDetails.domains[0];
-    console.log('Domain:', domain);
-
     // Get the authenticated user's info
     console.log('Getting authenticated user info...');
     const userInfo = await googleService.getAuthenticatedUserInfo();
     console.log('Authenticated user:', userInfo);
+
+    // Extract domain from user's email
+    const userDomain = userInfo.email.split('@')[1];
+    console.log('User domain:', userDomain);
 
     // Create or update the authenticated user
     const { data: authUser, error: authUserError } = await supabaseAdmin
@@ -109,13 +102,12 @@ export async function GET(request: Request) {
       throw authUserError;
     }
 
-    // Create or get organization
+    // Create or get organization based on user's email domain
     const { data: org, error: orgError } = await supabaseAdmin
       .from('organizations')
       .upsert({
-        google_org_id: domain.customerId,
-        name: domain.domainName,
-        domain: domain.domainName,
+        domain: userDomain,
+        name: userDomain, // Using domain as organization name
       })
       .select()
       .single();
@@ -211,13 +203,11 @@ function determineRiskLevel(scopes: string[] | null | undefined): 'HIGH' | 'MEDI
 
   const highRiskScopes = [
     'https://www.googleapis.com/auth/admin.directory.user',
-    'https://www.googleapis.com/auth/admin.directory.group',
     'https://www.googleapis.com/auth/admin.directory.user.security',
   ];
 
   const mediumRiskScopes = [
     'https://www.googleapis.com/auth/admin.directory.user.readonly',
-    'https://www.googleapis.com/auth/admin.directory.group.readonly',
   ];
 
   if (scopes.some(scope => highRiskScopes.includes(scope))) {

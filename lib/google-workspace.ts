@@ -43,10 +43,23 @@ export class GoogleWorkspaceService {
   }
 
   async getOrganizationDetails() {
-    const response = await this.admin.domains.list({
-      customer: 'my_customer',
-    });
-    return response.data;
+    try {
+      // First try to get user info
+      const userInfo = await this.getAuthenticatedUserInfo();
+      const userDomain = userInfo.email.split('@')[1];
+      
+      // Return a simplified domain object
+      return {
+        domains: [{
+          domainName: userDomain,
+          // We don't have customerId anymore, so we use domain as ID
+          customerId: userDomain
+        }]
+      };
+    } catch (error) {
+      console.error('Error getting organization details:', error);
+      throw error;
+    }
   }
 
   async getUsersList() {
