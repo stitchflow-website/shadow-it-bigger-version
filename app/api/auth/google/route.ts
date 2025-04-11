@@ -92,7 +92,6 @@ export async function GET(request: Request) {
         email: userInfo.email,
         name: userInfo.name,
         avatar_url: userInfo.picture || null,
-        last_login: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .select()
