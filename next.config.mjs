@@ -21,7 +21,7 @@ const nextConfig = {
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
-  assetPrefix:'/tools/shadow-it',
+  assetPrefix:'/tools/shadow-it-scan',
 }
 
 function mergeConfig(nextConfig, userConfig) {
