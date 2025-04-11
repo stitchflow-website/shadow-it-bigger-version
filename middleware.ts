@@ -57,15 +57,15 @@ export function middleware(request: NextRequest) {
   }
   
   // Direct authenticated users to dashboard if they try to access login
-  if (isAuthenticated && path === '/login') {
+  if (isAuthenticated && path === '/tools/shadow-it/login' || path === '/login') {
     console.log('Authenticated user on login page, redirecting to dashboard');
     const url = new URL(
       new URL(request.url).origin.includes('stitchflow.com') 
         ? '/tools/shadow-it/' 
-        : '/', 
+        : '/tools/shadow-it/', 
       request.url
     );
-    url.searchParams.set('orgId', orgId);
+    url.searchParams.set('orgId', orgId || '');
     return NextResponse.redirect(url);
   }
   
@@ -75,7 +75,7 @@ export function middleware(request: NextRequest) {
     const loginUrl = new URL(
       new URL(request.url).origin.includes('stitchflow.com') 
         ? 'https://shadow-it.vercel.app/login' 
-        : '/login', 
+        : 'https://shadow-it.vercel.app/login', 
       request.url
     );
     return NextResponse.redirect(loginUrl);
