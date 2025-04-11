@@ -65,32 +65,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
   
-  // Handle OAuth callback redirects
-  if (path.includes('/auth/google/callback')) {
-    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan' : '/tools/shadow-it-scan/';
-    const redirectUrl = new URL(`${baseUrl}/`, request.url);
-    console.log('Redirecting to:', redirectUrl);
-    return NextResponse.redirect(redirectUrl);
-  }
-  
-  // Direct authenticated users to dashboard if they try to access login
-  if (isAuthenticated && (path === '/tools/shadow-it-scan/login' || path === '/login')) {
-    console.log('Authenticated user on login page, redirecting to dashboard');
-    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan' : '/tools/shadow-it-scan/';
-    const url = new URL(`${baseUrl}/`, request.url);
-    url.searchParams.set('orgId', orgId || '');
-    return NextResponse.redirect(url);
-  }
-  
-  // Direct unauthenticated users to login if they try to access protected routes
-  if (!isAuthenticated && !isPublicPath) {
-    console.log('Unauthenticated user on protected route, redirecting to login');
-    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan/login' : '/tools/shadow-it-scan/login';
-    const loginUrl = new URL(baseUrl, request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // For authenticated users on all other paths, proceed and add headers
+  // For all paths, proceed and add headers
   const response = NextResponse.next();
   if (orgId) {
     response.headers.set('x-organization-id', orgId);
