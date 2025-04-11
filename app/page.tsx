@@ -185,7 +185,7 @@ export default function ShadowITDashboard() {
         }
 
         // Check if there's an active sync for this organization
-        const syncResponse = await fetch(`/api/sync/status?orgId=${orgId}`);
+        const syncResponse = await fetch(`/tools/shadow-it-scan/api/sync/status?orgId=${orgId}`);
         if (syncResponse.ok) {
           const syncData = await syncResponse.json();
           if (syncData && syncData.status === 'IN_PROGRESS') {
@@ -197,7 +197,7 @@ export default function ShadowITDashboard() {
 
         console.log("Fetching applications with orgId:", orgId);
         // Fetch applications from our API
-        const response = await fetch(`/api/applications?orgId=${orgId}`);
+        const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${orgId}`);
         if (!response.ok) {
           throw new Error('Failed to fetch applications');
         }
@@ -585,7 +585,7 @@ export default function ShadowITDashboard() {
   // Handle status change
   const handleStatusChange = async (appId: string, newStatus: string) => {
     try {
-      const response = await fetch('/api/applications', {
+      const response = await fetch('/tools/shadow-it-scan/api/applications', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

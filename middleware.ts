@@ -69,6 +69,7 @@ export function middleware(request: NextRequest) {
   if (path.includes('/auth/google/callback')) {
     const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan' : '';
     const redirectUrl = new URL(`${baseUrl}/`, request.url);
+    console.log('Redirecting to:', redirectUrl);
     return NextResponse.redirect(redirectUrl);
   }
   
