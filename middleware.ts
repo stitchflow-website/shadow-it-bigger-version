@@ -67,7 +67,7 @@ export function middleware(request: NextRequest) {
   
   // Handle OAuth callback redirects
   if (path.includes('/auth/google/callback')) {
-    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan' : '';
+    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan' : '/tools/shadow-it-scan/';
     const redirectUrl = new URL(`${baseUrl}/`, request.url);
     console.log('Redirecting to:', redirectUrl);
     return NextResponse.redirect(redirectUrl);
@@ -76,7 +76,7 @@ export function middleware(request: NextRequest) {
   // Direct authenticated users to dashboard if they try to access login
   if (isAuthenticated && (path === '/tools/shadow-it-scan/login' || path === '/login')) {
     console.log('Authenticated user on login page, redirecting to dashboard');
-    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan' : '';
+    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan' : '/tools/shadow-it-scan/';
     const url = new URL(`${baseUrl}/`, request.url);
     url.searchParams.set('orgId', orgId || '');
     return NextResponse.redirect(url);
@@ -85,7 +85,7 @@ export function middleware(request: NextRequest) {
   // Direct unauthenticated users to login if they try to access protected routes
   if (!isAuthenticated && !isPublicPath) {
     console.log('Unauthenticated user on protected route, redirecting to login');
-    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan/login' : '/login';
+    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan/login' : '/tools/shadow-it-scan/login';
     const loginUrl = new URL(baseUrl, request.url);
     return NextResponse.redirect(loginUrl);
   }
