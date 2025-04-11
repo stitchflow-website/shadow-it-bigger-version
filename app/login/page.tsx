@@ -93,7 +93,7 @@ function LoginContent() {
               size="lg"
               disabled={isLoading}
             >
-              <img src="/google-logo.svg" alt="Google logo" className="h-5 w-5" />
+              <img src="/tools/shadow-it-scan/google-logo.svg" alt="Google logo" className="h-5 w-5" />
               {isLoading ? 'Connecting...' : 'Sign in with Google Workspace'}
             </Button>
           </CardContent>

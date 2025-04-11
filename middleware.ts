@@ -8,7 +8,13 @@ const PUBLIC_PATHS = [
   '/privacy',
   '/terms',
   '/auth/google',
-  '/api/auth/google'  // Add the API route for OAuth callback
+  '/api/auth/google',  // Add the API route for OAuth callback
+  '/tools/shadow-it-scan/login',
+  '/tools/shadow-it-scan/loading',
+  '/tools/shadow-it-scan/privacy',
+  '/tools/shadow-it-scan/terms',
+  '/tools/shadow-it-scan/auth/google',
+  '/tools/shadow-it-scan/api/auth/google'
 ];
 const PUBLIC_FILE_PATTERNS = [
   /\.(?:jpg|jpeg|gif|png|svg|ico)$/,  // images
@@ -22,9 +28,12 @@ const PUBLIC_FILE_PATTERNS = [
 
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const host = request.headers.get('host') || '';
+  const isStitchflowDomain = host.includes('stitchflow.com');
   
-  // Debug cookie info
+  // Debug info
   console.log(`Middleware path: ${path}`);
+  console.log(`Host: ${host}`);
   console.log(`Cookies: ${request.cookies.toString()}`);
   
   // Get authentication cookies
@@ -56,10 +65,18 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
   
+  // Handle OAuth callback redirects
+  if (path.includes('/auth/google/callback')) {
+    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan' : '';
+    const redirectUrl = new URL(`${baseUrl}/`, request.url);
+    return NextResponse.redirect(redirectUrl);
+  }
+  
   // Direct authenticated users to dashboard if they try to access login
   if (isAuthenticated && (path === '/tools/shadow-it-scan/login' || path === '/login')) {
     console.log('Authenticated user on login page, redirecting to dashboard');
-    const url = new URL('/tools/shadow-it-scan/', request.url);
+    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan' : '';
+    const url = new URL(`${baseUrl}/`, request.url);
     url.searchParams.set('orgId', orgId || '');
     return NextResponse.redirect(url);
   }
@@ -67,7 +84,8 @@ export function middleware(request: NextRequest) {
   // Direct unauthenticated users to login if they try to access protected routes
   if (!isAuthenticated && !isPublicPath) {
     console.log('Unauthenticated user on protected route, redirecting to login');
-    const loginUrl = new URL('/tools/shadow-it-scan/login', request.url);
+    const baseUrl = isStitchflowDomain ? '/tools/shadow-it-scan/login' : '/login';
+    const loginUrl = new URL(baseUrl, request.url);
     return NextResponse.redirect(loginUrl);
   }
 
