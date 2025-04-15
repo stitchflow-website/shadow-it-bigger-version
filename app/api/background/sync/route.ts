@@ -55,8 +55,35 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const { organization_id, sync_id, access_token, refresh_token } = await request.json();
+    console.log('1. Starting background sync API endpoint');
     
+    const requestData = await request.json();
+    console.log('2. Received request data:', {
+      organization_id: requestData.organization_id ? 'present' : 'missing',
+      sync_id: requestData.sync_id ? 'present' : 'missing',
+      access_token: requestData.access_token ? 'present' : 'missing',
+      refresh_token: requestData.refresh_token ? 'present' : 'missing',
+      user_email: requestData.user_email ? 'present' : 'missing',
+      user_hd: requestData.user_hd ? 'present' : 'missing'
+    });
+
+    const { organization_id, sync_id, access_token, refresh_token } = requestData;
+
+    // Validate required fields
+    if (!organization_id || !sync_id || !access_token || !refresh_token) {
+      console.error('3. Missing required fields:', {
+        organization_id: !organization_id,
+        sync_id: !sync_id,
+        access_token: !access_token,
+        refresh_token: !refresh_token
+      });
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    console.log('4. All required fields present, sending immediate response');
     // Send immediate response
     const response = NextResponse.json({ message: 'Sync started in background' });
     
@@ -71,6 +98,7 @@ export async function POST(request: Request) {
       );
     });
     
+    console.log('5. Background process triggered');
     return response;
   } catch (error: any) {
     console.error('Error in background sync API:', error);
@@ -83,29 +111,38 @@ export async function POST(request: Request) {
 
 async function backgroundProcess(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {
   try {
-    console.log(`Starting background process for organization: ${organization_id}, sync: ${sync_id}`);
+    console.log(`[Background ${sync_id}] 1. Starting background process for organization: ${organization_id}`);
     
     // Initialize Google Workspace service
+    console.log(`[Background ${sync_id}] 2. Initializing Google Workspace service`);
     const googleService = new GoogleWorkspaceService({
       client_id: process.env.GOOGLE_CLIENT_ID!,
       client_secret: process.env.GOOGLE_CLIENT_SECRET!,
       redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
     });
 
+    console.log(`[Background ${sync_id}] 3. Setting credentials`);
     await googleService.setCredentials({ 
       access_token,
       refresh_token
     });
 
     // Step 1: Fetch users list using pagination (20% progress)
+    console.log(`[Background ${sync_id}] 4. Starting user fetch`);
     await updateSyncStatus(sync_id, 10, 'Fetching users from Google Workspace');
     
     let users = [];
     try {
       users = await googleService.getUsersListPaginated();
-      console.log(`Fetched ${users.length} users`);
-    } catch (userFetchError) {
-      console.error('Error fetching users:', userFetchError);
+      console.log(`[Background ${sync_id}] 5. Successfully fetched ${users.length} users`);
+    } catch (userFetchError: any) {
+      console.error(`[Background ${sync_id}] Error fetching users:`, userFetchError);
+      console.error(`[Background ${sync_id}] Error details:`, {
+        message: userFetchError?.message || 'Unknown error',
+        code: userFetchError?.code,
+        status: userFetchError?.status,
+        stack: userFetchError?.stack
+      });
       await updateSyncStatus(sync_id, -1, 'Failed to fetch users from Google Workspace', 'FAILED');
       throw userFetchError;
     }

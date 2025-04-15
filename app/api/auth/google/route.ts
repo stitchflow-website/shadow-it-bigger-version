@@ -157,22 +157,44 @@ export async function GET(request: Request) {
 
     // Trigger the background data processing job immediately
     const apiUrl = createRedirectUrl('/api/background/sync');
-    fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    console.log('Triggering background sync with URL:', apiUrl);
+    
+    try {
+      const syncPayload = {
         organization_id: org.id,
         sync_id: syncStatus.id,
         access_token: oauthTokens.access_token,
         refresh_token: oauthTokens.refresh_token,
         user_email: userInfo.email,
         user_hd: userInfo.hd
-      }),
-    }).catch(error => {
+      };
+      console.log('Background sync payload:', {
+        ...syncPayload,
+        access_token: syncPayload.access_token ? 'present' : 'missing',
+        refresh_token: syncPayload.refresh_token ? 'present' : 'missing'
+      });
+      
+      const syncResponse = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(syncPayload),
+      });
+      
+      if (!syncResponse.ok) {
+        const errorData = await syncResponse.json();
+        console.error('Background sync request failed:', {
+          status: syncResponse.status,
+          statusText: syncResponse.statusText,
+          error: errorData
+        });
+      } else {
+        console.log('Background sync triggered successfully');
+      }
+    } catch (error) {
       console.error('Error triggering background sync:', error);
-    });
+    }
 
     console.log('Background sync job triggered');
     
