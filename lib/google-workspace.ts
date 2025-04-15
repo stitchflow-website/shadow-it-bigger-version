@@ -261,6 +261,7 @@ export class GoogleWorkspaceService {
     
     try {
       console.log('Starting paginated user list fetch');
+      console.log('Using credentials with scopes:', this.oauth2Client.credentials.scope);
       
       do {
         console.log(`Fetching user page${pageToken ? ' with token: ' + pageToken : ''}`);
@@ -278,7 +279,14 @@ export class GoogleWorkspaceService {
             message: error?.message,
             status: error?.status,
             response: error?.response?.data,
-            scopes: this.oauth2Client.credentials.scope
+            scopes: this.oauth2Client.credentials.scope,
+            credentials: {
+              hasAccess: !!this.oauth2Client.credentials.access_token,
+              hasRefresh: !!this.oauth2Client.credentials.refresh_token,
+              expiry: this.oauth2Client.credentials.expiry_date 
+                ? new Date(this.oauth2Client.credentials.expiry_date).toISOString() 
+                : 'unknown'
+            }
           });
           throw error;
         });
@@ -305,7 +313,8 @@ export class GoogleWorkspaceService {
         code: error?.code,
         status: error?.status,
         response: error?.response?.data,
-        scopes: this.oauth2Client.credentials.scope
+        scopes: this.oauth2Client.credentials.scope,
+        requestedScopes: this.oauth2Client.credentials.scope?.split(' ') || []
       });
       throw error;
     }

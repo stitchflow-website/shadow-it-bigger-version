@@ -84,22 +84,67 @@ export async function POST(request: Request) {
     }
 
     console.log('4. All required fields present, sending immediate response');
-    // Send immediate response
-    const response = NextResponse.json({ message: 'Sync started in background' });
     
-    // Process in background without awaiting
-    backgroundProcess(organization_id, sync_id, access_token, refresh_token).catch(async (error) => {
-      console.error('Background process failed:', error);
+    // Create a record in the database to track this sync job's progress
+    await updateSyncStatus(sync_id, 5, 'Sync started - initializing credentials');
+    
+    try {
+      // Initialize Google Workspace service
+      console.log(`Initializing Google Workspace service for organization: ${organization_id}`);
+      const googleService = new GoogleWorkspaceService({
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
+      });
+
+      // Set credentials
+      console.log('Setting credentials');
+      await googleService.setCredentials({ 
+        access_token,
+        refresh_token
+      });
+      
+      // Update status and trigger the first phase
+      await updateSyncStatus(sync_id, 10, 'Fetching users from Google Workspace');
+      
+      // Make a request to self to start the user fetching process
+      const selfUrl = request.headers.get('host') || 'localhost:3000';
+      const protocol = selfUrl.includes('localhost') ? 'http://' : 'https://';
+      const fetchUsersUrl = `${protocol}${selfUrl}/api/background/sync/users`;
+      
+      console.log(`Triggering user fetch at: ${fetchUsersUrl}`);
+      
+      // Trigger the first phase of processing
+      const fetchResponse = await fetch(fetchUsersUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          organization_id,
+          sync_id,
+          access_token,
+          refresh_token
+        }),
+      });
+      
+      if (!fetchResponse.ok) {
+        console.error('Failed to trigger user fetch:', await fetchResponse.text());
+      } else {
+        console.log('User fetch job triggered successfully');
+      }
+    } catch (error) {
+      console.error('Error initializing background process:', error);
       await updateSyncStatus(
         sync_id,
         -1,
-        `Sync failed: ${error.message}`,
+        `Failed to start background process: ${(error as Error).message}`,
         'FAILED'
       );
-    });
+    }
     
-    console.log('5. Background process triggered');
-    return response;
+    // Send immediate response
+    return NextResponse.json({ message: 'Sync started in background' });
   } catch (error: any) {
     console.error('Error in background sync API:', error);
     return NextResponse.json(
@@ -123,10 +168,10 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
 
     console.log(`[Background ${sync_id}] 3. Setting credentials`);
     try {
-      await googleService.setCredentials({ 
-        access_token,
-        refresh_token
-      });
+    await googleService.setCredentials({ 
+      access_token,
+      refresh_token
+    });
       console.log(`[Background ${sync_id}] Credentials set successfully`);
     } catch (credError: any) {
       console.error(`[Background ${sync_id}] Error setting credentials:`, {
@@ -186,7 +231,7 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
         const fullName = user.name && typeof user.name === 'object' ? 
           (user.name.fullName || `${user.name.givenName || ''} ${user.name.familyName || ''}`.trim() || user.primaryEmail) : 
           user.primaryEmail;
-        
+      
       return {
         google_user_id: user.id,
         email: user.primaryEmail,
@@ -233,7 +278,7 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     let applicationTokens = [];
     try {
       applicationTokens = await googleService.getOAuthTokens();
-      console.log(`Fetched ${applicationTokens.length} application tokens`);
+    console.log(`Fetched ${applicationTokens.length} application tokens`);
     } catch (tokenError) {
       console.error('Error fetching OAuth tokens:', tokenError);
       await updateSyncStatus(sync_id, -1, 'Failed to fetch application data from Google Workspace', 'FAILED');
@@ -309,13 +354,13 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
       
       // Add to batch of applications to upsert
       const appRecord: any = {
-        google_app_id: tokens.map(t => t.clientId).join(','), // Store all client IDs
-        name: appName,
-        category: 'Unknown',
-        risk_level: highestRiskLevel,
-        total_permissions: allScopes.size,
+          google_app_id: tokens.map(t => t.clientId).join(','), // Store all client IDs
+          name: appName,
+          category: 'Unknown',
+          risk_level: highestRiskLevel,
+          total_permissions: allScopes.size,
         all_scopes: Array.from(allScopes),
-        organization_id: organization_id
+          organization_id: organization_id
       };
       
       // Only set the ID if it exists (for updates)
@@ -474,8 +519,8 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
       const scopesArray = Array.from(scopes);
       
       const existingRel = existingRelMap.get(relationKey);
-      
-      if (existingRel) {
+          
+          if (existingRel) {
         // For existing relationships, merge with existing scopes
         const mergedScopes = [...new Set([...existingRel.scopes, ...scopesArray])];
         
@@ -500,11 +545,11 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     
     // Handle updates first
     if (relationsToUpdate.length > 0) {
-      const { error: updateError } = await supabaseAdmin
-        .from('user_applications')
+            const { error: updateError } = await supabaseAdmin
+              .from('user_applications')
         .upsert(relationsToUpdate);
-      
-      if (updateError) {
+            
+            if (updateError) {
         console.error('Error updating user-application relationships:', updateError);
         // Continue with inserts even if updates fail
       }
@@ -514,11 +559,11 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     const batchSize = 50;
     for (let i = 0; i < relationsToInsert.length; i += batchSize) {
       const batch = relationsToInsert.slice(i, i + batchSize);
-      const { error: insertError } = await supabaseAdmin
-        .from('user_applications')
+            const { error: insertError } = await supabaseAdmin
+              .from('user_applications')
         .insert(batch);
-      
-      if (insertError) {
+            
+            if (insertError) {
         console.error(`Error inserting batch ${i / batchSize + 1}:`, insertError);
       }
     }

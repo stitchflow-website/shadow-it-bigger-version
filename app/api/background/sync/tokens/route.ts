@@ -1,0 +1,357 @@
+import { NextResponse } from 'next/server';
+import { GoogleWorkspaceService } from '@/lib/google-workspace';
+import { supabaseAdmin } from '@/lib/supabase';
+import { determineRiskLevel } from '@/lib/risk-assessment';
+
+// Helper function to update sync status
+async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
+  return await supabaseAdmin
+    .from('sync_status')
+    .update({
+      status,
+      progress,
+      message,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', syncId);
+}
+
+// Helper function to extract scopes from a token
+function extractScopesFromToken(token: any): string[] {
+  // If token is undefined or null, return empty array
+  if (!token) return [];
+  
+  let scopes = new Set<string>();
+  
+  // Add scopes from the token if available
+  if (token.scopes && Array.isArray(token.scopes)) {
+    token.scopes.forEach((s: string) => scopes.add(s));
+  }
+  
+  // Check scope_data field
+  if (token.scopeData && Array.isArray(token.scopeData)) {
+    token.scopeData.forEach((sd: any) => {
+      if (sd.scope) scopes.add(sd.scope);
+      if (sd.value) scopes.add(sd.value);
+    });
+  }
+  
+  // Check raw scope string if available
+  if (token.scope && typeof token.scope === 'string') {
+    token.scope.split(/\s+/).forEach((s: string) => scopes.add(s));
+  }
+  
+  // Some scopes might come from a permissions field
+  if (token.permissions && Array.isArray(token.permissions)) {
+    const scopesFromPermissions = token.permissions.map((p: any) => p.scope || p.value || p).filter(Boolean);
+    if (scopesFromPermissions.length > 0) {
+      scopesFromPermissions.forEach((s: string) => scopes.add(s));
+    }
+  }
+  
+  // If we have any scope-like fields, try to extract them
+  const potentialScopeFields = ['scope_string', 'oauth_scopes', 'accessScopes'];
+  for (const field of potentialScopeFields) {
+    if (token[field] && typeof token[field] === 'string' && token[field].includes('://')) {
+      const extractedScopes = token[field].split(/\s+/);
+      extractedScopes.forEach((s: string) => scopes.add(s));
+    }
+  }
+
+  // If no scopes were found, add a placeholder
+  if (scopes.size === 0) {
+    scopes.add('unknown_scope');
+  }
+  
+  return Array.from(scopes);
+}
+
+export const maxDuration = 300; // Set max duration to 300 seconds (5 minutes)
+export const dynamic = 'force-dynamic';
+
+export async function POST(request: Request) {
+  try {
+    console.log('Starting token fetch processing');
+    
+    const requestData = await request.json();
+    const { organization_id, sync_id, access_token, refresh_token, users } = requestData;
+
+    // Validate required fields
+    if (!organization_id || !sync_id || !access_token || !refresh_token) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // Send immediate response
+    const response = NextResponse.json({ message: 'Token fetch started' });
+    
+    // Process in the background
+    processTokens(organization_id, sync_id, access_token, refresh_token, users)
+      .catch(async (error) => {
+        console.error('Token processing failed:', error);
+        await updateSyncStatus(
+          sync_id,
+          -1,
+          `Token fetch failed: ${error.message}`,
+          'FAILED'
+        );
+      });
+    
+    return response;
+  } catch (error: any) {
+    console.error('Error in token fetch API:', error);
+    return NextResponse.json(
+      { error: 'Failed to process tokens' },
+      { status: 500 }
+    );
+  }
+}
+
+async function processTokens(
+  organization_id: string, 
+  sync_id: string, 
+  access_token: string,
+  refresh_token: string,
+  users: Array<{googleId: string, userId: string}> | undefined
+) {
+  try {
+    console.log(`[Tokens ${sync_id}] Starting token fetch for organization: ${organization_id}`);
+    
+    // Initialize Google Workspace service
+    const googleService = new GoogleWorkspaceService({
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
+    });
+
+    console.log(`[Tokens ${sync_id}] Setting credentials`);
+    await googleService.setCredentials({ 
+      access_token,
+      refresh_token
+    });
+    
+    // Create a user map if one was not provided
+    let userMap = new Map<string, string>();
+    if (!users || users.length === 0) {
+      console.log(`[Tokens ${sync_id}] No user mapping provided, fetching from database`);
+      const { data: dbUsers } = await supabaseAdmin
+        .from('users')
+        .select('id, google_user_id')
+        .eq('organization_id', organization_id);
+        
+      if (dbUsers) {
+        dbUsers.forEach(user => {
+          userMap.set(user.google_user_id, user.id);
+        });
+      }
+    } else {
+      console.log(`[Tokens ${sync_id}] Using provided user mapping with ${users.length} entries`);
+      users.forEach(user => {
+        userMap.set(user.googleId, user.userId);
+      });
+    }
+    
+    console.log(`[Tokens ${sync_id}] User map has ${userMap.size} entries`);
+    
+    // Fetch OAuth tokens
+    let applicationTokens = [];
+    try {
+      await updateSyncStatus(sync_id, 40, 'Fetching application tokens from Google Workspace');
+      applicationTokens = await googleService.getOAuthTokens();
+      console.log(`[Tokens ${sync_id}] Fetched ${applicationTokens.length} application tokens`);
+    } catch (tokenError) {
+      console.error(`[Tokens ${sync_id}] Error fetching OAuth tokens:`, tokenError);
+      await updateSyncStatus(sync_id, -1, 'Failed to fetch application tokens from Google Workspace', 'FAILED');
+      throw tokenError;
+    }
+    
+    await updateSyncStatus(sync_id, 50, `Processing ${applicationTokens.length} application tokens`);
+    
+    // Group applications by display name
+    const appNameMap = new Map<string, any[]>();
+    
+    // First pass: Group tokens by application name
+    for (const token of applicationTokens) {
+      const appName = token.displayText || 'Unknown App';
+      
+      if (!appName) {
+        console.warn('Skipping token with missing app name');
+        continue;
+      }
+      
+      if (!appNameMap.has(appName)) {
+        appNameMap.set(appName, []);
+      }
+      
+      // Add token with user info
+      appNameMap.get(appName)!.push(token);
+    }
+    
+    console.log(`[Tokens ${sync_id}] Grouped tokens into ${appNameMap.size} applications`);
+    
+    // Prepare bulk upsert operations
+    const applicationsToUpsert: any[] = [];
+    const userAppRelationsToProcess: { appName: string, userId: string, userEmail: string, token: any }[] = [];
+    
+    // Process each application
+    let appCount = 0;
+    const totalApps = appNameMap.size;
+    
+    for (const [appName, tokens] of appNameMap.entries()) {
+      appCount++;
+      const progressPercent = 50 + Math.floor((appCount / totalApps) * 25);
+      
+      if (appCount % 10 === 0 || appCount === totalApps) {
+        await updateSyncStatus(
+          sync_id, 
+          progressPercent, 
+          `Processing application ${appCount}/${totalApps}`
+        );
+      }
+      
+      // Calculate total unique permissions
+      const allScopes = new Set<string>();
+      tokens.forEach((token: any) => {
+        if (token.scopes && Array.isArray(token.scopes)) {
+          token.scopes.forEach((scope: string) => allScopes.add(scope));
+        }
+      });
+      
+      // Determine highest risk level
+      const highestRiskLevel = tokens.reduce((highest: string, token: any) => {
+        const tokenRisk = determineRiskLevel(token.scopes);
+        if (tokenRisk === 'HIGH') return 'HIGH';
+        if (tokenRisk === 'MEDIUM' && highest !== 'HIGH') return 'MEDIUM';
+        return highest;
+      }, 'LOW');
+      
+      // Check if app already exists
+      const { data: existingApp } = await supabaseAdmin
+        .from('applications')
+        .select('id')
+        .eq('name', appName)
+        .eq('organization_id', organization_id)
+        .maybeSingle();
+      
+      // Add to batch of applications to upsert
+      const appRecord: any = {
+        google_app_id: tokens.map(t => t.clientId).join(','),
+        name: appName,
+        category: 'Unknown',
+        risk_level: highestRiskLevel,
+        total_permissions: allScopes.size,
+        all_scopes: Array.from(allScopes),
+        organization_id: organization_id
+      };
+      
+      // Only set the ID if it exists (for updates)
+      if (existingApp?.id) {
+        appRecord.id = existingApp.id;
+      } else {
+        // Only set management_status for new records
+        appRecord.management_status = 'PENDING';
+      }
+      
+      // Add to the batch
+      applicationsToUpsert.push(appRecord);
+      
+      // Process each token to create user-application relationships
+      for (const token of tokens) {
+        const userKey = token.userKey;
+        if (!userKey) {
+          console.warn('Skipping token with missing user key');
+          continue;
+        }
+        
+        const userId = userMap.get(userKey);
+        if (!userId) {
+          console.warn('No matching user found for token:', userKey);
+          continue;
+        }
+        
+        userAppRelationsToProcess.push({
+          appName,
+          userId,
+          userEmail: token.userEmail || '',
+          token
+        });
+      }
+    }
+    
+    // Bulk upsert all applications at once
+    await updateSyncStatus(sync_id, 75, `Saving ${applicationsToUpsert.length} applications`);
+    
+    try {
+      // Process applications in smaller batches
+      const batchSize = 50;
+      for (let i = 0; i < applicationsToUpsert.length; i += batchSize) {
+        const batch = applicationsToUpsert.slice(i, i + batchSize);
+        const { error } = await supabaseAdmin
+          .from('applications')
+          .upsert(batch);
+          
+        if (error) {
+          console.error(`Error upserting applications batch ${i / batchSize + 1}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error(`[Tokens ${sync_id}] Error during application upsert operations:`, error);
+      throw error;
+    }
+    
+    // Get all applications to create a mapping
+    const { data: allApps, error: fetchAppsError } = await supabaseAdmin
+      .from('applications')
+      .select('id, name')
+      .eq('organization_id', organization_id);
+    
+    if (fetchAppsError) {
+      console.error(`[Tokens ${sync_id}] Error fetching applications after upsert:`, fetchAppsError);
+      throw fetchAppsError;
+    }
+    
+    // Create a mapping of app names to IDs
+    const appIdMap = new Map<string, string>();
+    if (allApps) {
+      allApps.forEach(app => {
+        appIdMap.set(app.name, app.id);
+      });
+    }
+    
+    // Trigger the final phase - the relationships processing
+    await updateSyncStatus(sync_id, 80, 'Saving application token relationships');
+    
+    const host = process.env.VERCEL_URL || 'localhost:3000';
+    const protocol = host.includes('localhost') ? 'http://' : 'https://';
+    const nextUrl = `${protocol}${host}/api/background/sync/relations`;
+    
+    console.log(`Triggering relations processing at: ${nextUrl}`);
+    
+    const nextResponse = await fetch(nextUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        organization_id,
+        sync_id,
+        userAppRelations: userAppRelationsToProcess,
+        appMap: Array.from(appIdMap.entries()).map(([appName, appId]) => ({ appName, appId }))
+      }),
+    });
+    
+    if (!nextResponse.ok) {
+      const errorText = await nextResponse.text();
+      console.error(`Failed to trigger relations processing: ${errorText}`);
+      throw new Error(`Failed to trigger relations processing: ${errorText}`);
+    }
+    
+    console.log(`[Tokens ${sync_id}] Token processing completed successfully`);
+    
+  } catch (error: any) {
+    console.error(`[Tokens ${sync_id}] Error in token processing:`, error);
+    throw error;
+  }
+} 
