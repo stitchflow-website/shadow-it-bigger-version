@@ -55,15 +55,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check if the path is public
-  const isPublicPath = PUBLIC_PATHS.some(publicPath => 
-    path === publicPath || path.startsWith(publicPath)
-  );
-  
   // Skip middleware completely for API routes other than auth
   if (path.startsWith('/api') && !path.startsWith('/api/auth')) {
     return NextResponse.next();
   }
+
+  // Check if the path is public
+  const isPublicPath = PUBLIC_PATHS.some(publicPath => 
+    path === publicPath || path.startsWith(publicPath)
+  );
 
   // If authenticated and on root or login page, redirect to dashboard
   if (isAuthenticated && (path === '/' || path === '/login')) {
