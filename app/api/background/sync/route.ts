@@ -3,12 +3,6 @@ import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel } from '@/lib/risk-assessment';
 
-export const runtime = 'edge';
-
-export const config = {
-  maxDuration: 60 // 1 minute for initial handler
-};
-
 // Helper function to update sync status
 async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
   return await supabaseAdmin
@@ -58,85 +52,28 @@ function formatDate(dateValue: any): string {
 
 export async function POST(request: Request) {
   try {
-    // Parse the request body
-    const body = await request.json();
-    const { organization_id, sync_id, access_token, refresh_token } = body;
-    
-    // Validate required parameters
-    if (!organization_id || !sync_id || !access_token || !refresh_token) {
-      console.error('Missing required parameters for background sync');
-      return NextResponse.json({
-        error: 'Missing required parameters',
-        missing: {
-          organization_id: !organization_id,
-          sync_id: !sync_id,
-          access_token: !access_token,
-          refresh_token: !refresh_token
-        }
-      }, { status: 400 });
-    }
-    
-    // Log the parameters we received (without revealing the tokens)
-    console.log(`Background sync triggered with: orgID: ${organization_id}, syncID: ${sync_id}, tokens present: ${!!access_token && !!refresh_token}`);
+    // This ensures the API responds quickly while processing continues
+    const { organization_id, sync_id, access_token, refresh_token } = await request.json();
     
     // Send immediate response
-    const response = NextResponse.json({ 
-      message: 'Sync started in background',
-      sync_id
-    });
+    const responsePromise = Promise.resolve(
+      NextResponse.json({ message: 'Sync started in background' })
+    );
     
-    // Use a more appropriate approach for Vercel serverless functions
-    // This ensures the function keeps running after response is sent
-    if (process.env.VERCEL) {
-      console.log('Running on Vercel - using waitUntil for background processing');
-      // Use fetch to trigger a separate request to ourselves
-      // This keeps the process alive longer than the initial request
-      const baseUrl = request.headers.get('host') || 'localhost:3000';
-      const protocol = baseUrl.includes('localhost') ? 'http://' : 'https://';
-      const apiUrl = `${protocol}${baseUrl}/api/background/start-sync`;
-      
-      // Log that we're making a separate request
-      console.log(`Triggering background sync via separate request to ${apiUrl}`);
-      
-      try {
-        // Make the request to the separate endpoint as a POST request with the same body
-        const startResponse = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            organization_id,
-            sync_id,
-            access_token,
-            refresh_token
-          })
-        });
-        
-        if (!startResponse.ok) {
-          const errorText = await startResponse.text();
-          console.error(`Error initiating background sync: ${startResponse.status} ${errorText}`);
-        } else {
-          console.log(`Successfully initiated background sync: ${startResponse.status}`);
-        }
-      } catch (error) {
-        console.error('Error making background sync request:', error);
-      }
-    } else {
-      console.log('Running locally - using direct background processing');
-      // In local development, continue using direct background processing
-      backgroundProcess(organization_id, sync_id, access_token, refresh_token);
-    }
+    // Process in background
+    backgroundProcess(organization_id, sync_id, access_token, refresh_token);
     
-    return response;
+    return responsePromise;
   } catch (error: any) {
     console.error('Error in background sync API:', error);
     return NextResponse.json(
-      { error: 'Failed to start background sync', details: error.message },
+      { error: 'Failed to start background sync' },
       { status: 500 }
     );
   }
 }
 
-export async function backgroundProcess(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {
+async function backgroundProcess(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {
   try {
     console.log(`Starting background process for organization: ${organization_id}, sync: ${sync_id}`);
     

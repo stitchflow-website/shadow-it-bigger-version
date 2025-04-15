@@ -2,12 +2,6 @@
   "functions": {
     "app/api/auth/google/route.ts": {
       "maxDuration": 300
-    },
-    "app/api/background/sync/route.ts": {
-      "maxDuration": 60
-    },
-    "app/api/background/start-sync/route.ts": {
-      "maxDuration": 300
     }
   },
   "crons": []
