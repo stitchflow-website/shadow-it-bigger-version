@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
 // Use Edge runtime for better performance
-export const runtime = 'edge';
+export const runtime = 'experimental-edge';
 
 export async function GET(request: Request) {
   try {

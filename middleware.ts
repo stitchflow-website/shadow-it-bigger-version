@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Configure this route to use Edge runtime
-export const runtime = 'edge';
+// Fix runtime to use the correct value for middleware
+export const runtime = 'experimental-edge';
 
 // Define paths that don't require authentication
 const PUBLIC_PATHS = [

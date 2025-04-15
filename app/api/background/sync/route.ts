@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel } from '@/lib/risk-assessment';
 
 // Configure the route to use Edge runtime
-export const runtime = 'edge';
+export const runtime = 'experimental-edge';
 export const maxDuration = 300; // 5 minutes max (supported by Edge functions)
 
 // Helper function to update sync status
