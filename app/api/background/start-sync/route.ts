@@ -4,6 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel } from '@/lib/risk-assessment';
 import { backgroundProcess } from '../sync/route';
 
+export const runtime = 'edge';
+
 export const config = { 
   maxDuration: 300 // 5 minutes max duration
 };

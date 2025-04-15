@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
 
+export const runtime = 'edge';
+
+export const config = {
+  maxDuration: 300 // 5 minutes max for auth handling
+};
+
 // Helper function to safely format date
 function formatDate(dateValue: any): string {
   if (!dateValue) return new Date().toISOString();

@@ -3,6 +3,12 @@ import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel } from '@/lib/risk-assessment';
 
+export const runtime = 'edge';
+
+export const config = {
+  maxDuration: 60 // 1 minute for initial handler
+};
+
 // Helper function to update sync status
 async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
   return await supabaseAdmin
