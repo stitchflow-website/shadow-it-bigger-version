@@ -259,21 +259,55 @@ export class GoogleWorkspaceService {
     let users: any[] = [];
     let pageToken: string | undefined = undefined;
     
-    do {
-      const response: any = await this.admin.users.list({
-        customer: 'my_customer',
-        maxResults: 500,
-        orderBy: 'email',
-        pageToken
+    try {
+      console.log('Starting paginated user list fetch');
+      
+      do {
+        console.log(`Fetching user page${pageToken ? ' with token: ' + pageToken : ''}`);
+        
+        const response: any = await this.admin.users.list({
+          customer: 'my_customer',
+          maxResults: 500,
+          orderBy: 'email',
+          pageToken,
+          viewType: 'admin_view',
+          projection: 'full'
+        }).catch((error: any) => {
+          console.error('Error in users.list API call:', {
+            code: error?.code,
+            message: error?.message,
+            status: error?.status,
+            response: error?.response?.data,
+            scopes: this.oauth2Client.credentials.scope
+          });
+          throw error;
+        });
+        
+        console.log('User page response:', {
+          hasUsers: !!response.data.users,
+          userCount: response.data.users?.length || 0,
+          hasNextPage: !!response.data.nextPageToken
+        });
+        
+        if (response.data.users && response.data.users.length > 0) {
+          users = [...users, ...response.data.users];
+        }
+        
+        pageToken = response.data.nextPageToken;
+      } while (pageToken);
+      
+      console.log(`Successfully fetched ${users.length} total users`);
+      return users;
+    } catch (error: any) {
+      console.error('Error in getUsersListPaginated:', {
+        name: error?.name,
+        message: error?.message,
+        code: error?.code,
+        status: error?.status,
+        response: error?.response?.data,
+        scopes: this.oauth2Client.credentials.scope
       });
-      
-      if (response.data.users && response.data.users.length > 0) {
-        users = [...users, ...response.data.users];
-      }
-      
-      pageToken = response.data.nextPageToken;
-    } while (pageToken);
-    
-    return users;
+      throw error;
+    }
   }
 } 

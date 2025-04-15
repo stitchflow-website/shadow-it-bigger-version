@@ -122,10 +122,22 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     });
 
     console.log(`[Background ${sync_id}] 3. Setting credentials`);
-    await googleService.setCredentials({ 
-      access_token,
-      refresh_token
-    });
+    try {
+      await googleService.setCredentials({ 
+        access_token,
+        refresh_token
+      });
+      console.log(`[Background ${sync_id}] Credentials set successfully`);
+    } catch (credError: any) {
+      console.error(`[Background ${sync_id}] Error setting credentials:`, {
+        message: credError?.message,
+        code: credError?.code,
+        status: credError?.status,
+        stack: credError?.stack
+      });
+      await updateSyncStatus(sync_id, -1, 'Failed to set Google API credentials', 'FAILED');
+      throw credError;
+    }
 
     // Step 1: Fetch users list using pagination (20% progress)
     console.log(`[Background ${sync_id}] 4. Starting user fetch`);
@@ -133,17 +145,27 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
     
     let users = [];
     try {
+      console.log(`[Background ${sync_id}] Calling getUsersListPaginated`);
       users = await googleService.getUsersListPaginated();
       console.log(`[Background ${sync_id}] 5. Successfully fetched ${users.length} users`);
     } catch (userFetchError: any) {
-      console.error(`[Background ${sync_id}] Error fetching users:`, userFetchError);
-      console.error(`[Background ${sync_id}] Error details:`, {
-        message: userFetchError?.message || 'Unknown error',
+      console.error(`[Background ${sync_id}] Error fetching users:`, {
+        name: userFetchError?.name,
+        message: userFetchError?.message,
         code: userFetchError?.code,
         status: userFetchError?.status,
+        response: userFetchError?.response?.data,
         stack: userFetchError?.stack
       });
-      await updateSyncStatus(sync_id, -1, 'Failed to fetch users from Google Workspace', 'FAILED');
+
+      let errorMessage = 'Failed to fetch users from Google Workspace';
+      if (userFetchError?.response?.data?.error?.message) {
+        errorMessage += `: ${userFetchError.response.data.error.message}`;
+      } else if (userFetchError?.message) {
+        errorMessage += `: ${userFetchError.message}`;
+      }
+
+      await updateSyncStatus(sync_id, -1, errorMessage, 'FAILED');
       throw userFetchError;
     }
     

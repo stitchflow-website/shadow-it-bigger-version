@@ -65,17 +65,17 @@ export function middleware(request: NextRequest) {
     path === publicPath || path.startsWith(publicPath)
   );
 
-  // If authenticated and on root or login page, redirect to dashboard
-  if (isAuthenticated && (path === '/' || path === '/login')) {
-    return NextResponse.redirect(`${getBaseUrl()}/dashboard`);
+  // If user is authenticated and trying to access login page, redirect to dashboard
+  if (isAuthenticated && path === '/login') {
+    return NextResponse.redirect(new URL(`/${orgId}`, request.url));
   }
 
-  // If not authenticated and not on a public path, redirect to login
+  // If user is not authenticated and trying to access non-public path, redirect to login
   if (!isAuthenticated && !isPublicPath) {
-    return NextResponse.redirect(`${getBaseUrl()}/login`);
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // For all paths, proceed and add headers
+  // For authenticated users, set organization and user headers
   const response = NextResponse.next();
   if (orgId) {
     response.headers.set('x-organization-id', orgId);
