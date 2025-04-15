@@ -3,9 +3,9 @@ import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel } from '@/lib/risk-assessment';
 
-// Configure the route to use Edge runtime
-export const runtime = 'experimental-edge';
-export const maxDuration = 300; // 5 minutes max (supported by Edge functions)
+// Configure to use Node.js runtime with fluid compute
+export const runtime = 'nodejs';
+export const maxDuration = 300; // 5 minutes max (supported by fluid compute)
 
 // Helper function to update sync status
 async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
@@ -55,29 +55,24 @@ function formatDate(dateValue: any): string {
 }
 
 export async function POST(request: Request) {
-  const { organization_id, sync_id, access_token, refresh_token } = await request.json();
-  
-  // Create a streaming response
-  const encoder = new TextEncoder();
-  const stream = new TransformStream();
-  const writer = stream.writable.getWriter();
-  
-  // Send initial message
-  writer.write(encoder.encode(JSON.stringify({ message: 'Sync started' })));
-  
-  // Process in background without awaiting
-  backgroundProcess(organization_id, sync_id, access_token, refresh_token).catch(error => {
-    console.error('Error in background process:', error);
-  });
-  
-  // Close the stream and return the response
-  writer.close();
-  return new Response(stream.readable, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache',
-    },
-  });
+  try {
+    // This ensures the API responds quickly while processing continues
+    const { organization_id, sync_id, access_token, refresh_token } = await request.json();
+    
+    // Start the background process without awaiting it
+    backgroundProcess(organization_id, sync_id, access_token, refresh_token).catch(error => {
+      console.error('Error in background process:', error);
+    });
+    
+    // Return immediate response
+    return NextResponse.json({ message: 'Sync started in background' });
+  } catch (error: any) {
+    console.error('Error in background sync API:', error);
+    return NextResponse.json(
+      { error: 'Failed to start background sync' },
+      { status: 500 }
+    );
+  }
 }
 
 async function backgroundProcess(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {

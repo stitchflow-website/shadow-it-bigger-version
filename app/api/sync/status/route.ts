@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-// Use Edge runtime for better performance
-export const runtime = 'experimental-edge';
+// Use Node.js runtime with fluid compute
+export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   try {

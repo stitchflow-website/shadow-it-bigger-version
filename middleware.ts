@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Fix runtime to use the correct value for middleware
-export const runtime = 'experimental-edge';
-
 // Define paths that don't require authentication
 const PUBLIC_PATHS = [
   '/login', 

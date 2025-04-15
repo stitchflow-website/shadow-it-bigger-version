@@ -4,11 +4,10 @@
       "maxDuration": 300
     },
     "app/api/background/sync/route.ts": {
-      "maxDuration": 300,
-      "runtime": "experimental-edge"
+      "maxDuration": 300
     },
     "app/api/sync/status/route.ts": {
-      "runtime": "experimental-edge"
+      "maxDuration": 60
     }
   },
   "routes": [
