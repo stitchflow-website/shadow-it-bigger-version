@@ -113,8 +113,7 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
         name: user.name.fullName,
         role: role,
         department: department,
-        organization_id: organization_id,
-        last_login: lastLogin,
+        organization_id: organization_id
       };
     });
     
@@ -219,8 +218,7 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
           management_status: existingApp?.id ? undefined : 'PENDING', // Only set for new apps
           total_permissions: allScopes.size,
           all_scopes: Array.from(allScopes), // Store all unique scopes
-          last_login: formatDate(lastUsedTime),
-          organization_id: organization_id,
+          organization_id: organization_id
         })
         .select('id')
         .single();
@@ -293,7 +291,6 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
               .from('user_applications')
               .update({
                 scopes: mergedScopes, // Merge with existing scopes
-                last_login: formatDate(token.lastTimeUsed),
                 updated_at: new Date().toISOString()
               })
               .eq('id', existingRel.id);
@@ -310,8 +307,7 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
               .insert({
                 user_id: userId,
                 application_id: appData.id,
-                scopes: userScopes,
-                last_login: formatDate(token.lastTimeUsed)
+                scopes: userScopes
               });
             
             if (insertError) {
