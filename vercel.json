@@ -4,10 +4,10 @@
       "maxDuration": 300
     },
     "app/api/background/sync/route.ts": {
-      "maxDuration": 300
+      "maxDuration": 800
     },
     "app/api/sync/status/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 800
     }
   },
   "routes": [
