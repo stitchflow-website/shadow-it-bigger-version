@@ -39,18 +39,32 @@ function formatDate(dateValue: any): string {
 export async function GET(request: Request) {
   try {
     console.log('1. Starting Google OAuth callback...');
-    const { searchParams } = new URL(request.url);
+    const { searchParams, origin } = new URL(request.url);
     const code = searchParams.get('code');
     const error = searchParams.get('error');
+    const referer = request.headers.get('referer') || '';
+    
+    // Determine if the request is coming from the main website
+    const isFromMainSite = referer.includes('localhost') || referer.includes('127.0.0.1');
+    
+    // Helper function to create redirect URL
+    const createRedirectUrl = (path: string) => {
+      if (isFromMainSite) {
+        // Extract the port from referer if it exists
+        const refererUrl = new URL(referer);
+        return `${refererUrl.protocol}//${refererUrl.host}/tools/shadow-it-scan${path}`;
+      }
+      return new URL(path, origin).toString();
+    };
 
     if (error) {
       console.error('OAuth error received:', error);
-      return NextResponse.redirect(new URL('/login?error=' + error, request.url));
+      return NextResponse.redirect(createRedirectUrl('/login?error=' + error));
     }
 
     if (!code) {
       console.error('No authorization code received');
-      return NextResponse.redirect(new URL('/login?error=no_code', request.url));
+      return NextResponse.redirect(createRedirectUrl('/login?error=no_code'));
     }
 
     console.log('2. Initializing Google Workspace service...');
@@ -163,16 +177,19 @@ export async function GET(request: Request) {
 
     console.log('Background sync job triggered');
     
-    // Create the response with redirect
-    const response = NextResponse.redirect(new URL('/loading?syncId=' + syncStatus.id, request.url));
+    // Modify the final redirect to use the helper function
+    const response = NextResponse.redirect(createRedirectUrl('/loading?syncId=' + syncStatus.id));
     
     // Set secure cookies for session management
+    const cookieDomain = isFromMainSite ? new URL(referer).hostname : undefined;
+    
     response.cookies.set('orgId', org.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60,
       path: '/',
+      domain: cookieDomain
     });
     
     response.cookies.set('userEmail', userInfo.email, {
@@ -181,6 +198,7 @@ export async function GET(request: Request) {
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60,
       path: '/',
+      domain: cookieDomain
     });
 
     return response;
@@ -192,8 +210,16 @@ export async function GET(request: Request) {
       stack: error.stack
     });
     
+    const referer = request.headers.get('referer') || '';
+    const isFromMainSite = referer.includes('localhost') || referer.includes('127.0.0.1');
+    
+    // Create redirect URL based on the source
+    const redirectUrl = isFromMainSite
+      ? new URL(referer).origin + '/tools/shadow-it-scan/login?error=auth_failed'
+      : new URL('/login?error=auth_failed', request.url);
+    
     // Clear cookies on error
-    const response = NextResponse.redirect(new URL('/login?error=auth_failed', request.url));
+    const response = NextResponse.redirect(redirectUrl);
     response.cookies.delete('orgId');
     response.cookies.delete('userEmail');
     return response;

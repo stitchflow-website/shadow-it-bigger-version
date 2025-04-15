@@ -36,12 +36,18 @@ function LoginContent() {
       setError(null);
 
       const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-      const redirectUri = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI;
+      let redirectUri = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI;
 
       if (!clientId || !redirectUri) {
         setError("Missing Google OAuth configuration");
         console.error('Missing env variables:', { clientId, redirectUri });
         return;
+      }
+
+      // If we're on localhost, modify the redirect URI to match the main site's domain
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        const baseUrl = `${window.location.protocol}//${window.location.host}`;
+        redirectUri = `${baseUrl}/tools/shadow-it-scan/api/auth/google`;
       }
       
       const scopes = [
