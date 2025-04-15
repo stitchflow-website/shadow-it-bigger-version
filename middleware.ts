@@ -42,6 +42,13 @@ export function middleware(request: NextRequest) {
   const isAuthenticated = orgId && userEmail;
   console.log(`isAuthenticated: ${isAuthenticated}`);
 
+  // Helper function to create base URL
+  const getBaseUrl = () => {
+    const host = request.headers.get('host') || 'localhost:3000';
+    const protocol = host.includes('localhost') ? 'http://' : 'https://';
+    return `${protocol}${host}`;
+  };
+
   // Check if the path is for a public file
   const isPublicFile = PUBLIC_FILE_PATTERNS.some(pattern => pattern.test(path));
   if (isPublicFile) {
@@ -58,18 +65,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // If not authenticated and not on a public path, redirect to login
-  if (!isAuthenticated && !isPublicPath) {
-    const baseUrl = request.headers.get('host') || 'localhost:3000';
-    const protocol = baseUrl.includes('localhost') ? 'http://' : 'https://';
-    return NextResponse.redirect(`${protocol}${baseUrl}/login`);
+  // If authenticated and on root or login page, redirect to dashboard
+  if (isAuthenticated && (path === '/' || path === '/login')) {
+    return NextResponse.redirect(`${getBaseUrl()}/dashboard`);
   }
 
-  // If authenticated and on login page, redirect to root with orgId
-  if (isAuthenticated && path === '/login') {
-    const baseUrl = request.headers.get('host') || 'localhost:3000';
-    const protocol = baseUrl.includes('localhost') ? 'http://' : 'https://';
-    return NextResponse.redirect(`${protocol}${baseUrl}/?orgId=${orgId}`);
+  // If not authenticated and not on a public path, redirect to login
+  if (!isAuthenticated && !isPublicPath) {
+    return NextResponse.redirect(`${getBaseUrl()}/login`);
   }
 
   // For all paths, proceed and add headers

@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-// Use Node.js runtime with fluid compute
-export const runtime = 'nodejs';
-
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -46,22 +43,6 @@ export async function GET(request: Request) {
             return NextResponse.json(null);
           }
           throw error;
-        }
-        
-        // Special handling for sync that's been stuck at 30% for more than 2 minutes
-        if (data.status === 'IN_PROGRESS' && data.progress === 30) {
-          const updatedAt = new Date(data.updated_at);
-          const now = new Date();
-          const diffMinutes = (now.getTime() - updatedAt.getTime()) / (1000 * 60);
-          
-          // If it's been more than 2 minutes at 30%, consider it partial
-          if (diffMinutes > 2) {
-            return NextResponse.json({
-              ...data,
-              status: 'PARTIAL',
-              message: 'Partial data loaded due to timeout. You can still view basic organization information.'
-            });
-          }
         }
         
         return NextResponse.json(data);
