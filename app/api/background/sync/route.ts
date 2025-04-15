@@ -52,7 +52,26 @@ function formatDate(dateValue: any): string {
 
 export async function POST(request: Request) {
   try {
-    const { organization_id, sync_id, access_token, refresh_token } = await request.json();
+    // Parse the request body
+    const body = await request.json();
+    const { organization_id, sync_id, access_token, refresh_token } = body;
+    
+    // Validate required parameters
+    if (!organization_id || !sync_id || !access_token || !refresh_token) {
+      console.error('Missing required parameters for background sync');
+      return NextResponse.json({
+        error: 'Missing required parameters',
+        missing: {
+          organization_id: !organization_id,
+          sync_id: !sync_id,
+          access_token: !access_token,
+          refresh_token: !refresh_token
+        }
+      }, { status: 400 });
+    }
+    
+    // Log the parameters we received (without revealing the tokens)
+    console.log(`Background sync triggered with: orgID: ${organization_id}, syncID: ${sync_id}, tokens present: ${!!access_token && !!refresh_token}`);
     
     // Send immediate response
     const response = NextResponse.json({ 
@@ -73,19 +92,28 @@ export async function POST(request: Request) {
       // Log that we're making a separate request
       console.log(`Triggering background sync via separate request to ${apiUrl}`);
       
-      // Make the request to the separate endpoint
-      fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organization_id,
-          sync_id,
-          access_token,
-          refresh_token
-        })
-      }).catch(error => {
-        console.error('Error initiating background sync:', error);
-      });
+      try {
+        // Make the request to the separate endpoint as a POST request with the same body
+        const startResponse = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organization_id,
+            sync_id,
+            access_token,
+            refresh_token
+          })
+        });
+        
+        if (!startResponse.ok) {
+          const errorText = await startResponse.text();
+          console.error(`Error initiating background sync: ${startResponse.status} ${errorText}`);
+        } else {
+          console.log(`Successfully initiated background sync: ${startResponse.status}`);
+        }
+      } catch (error) {
+        console.error('Error making background sync request:', error);
+      }
     } else {
       console.log('Running locally - using direct background processing');
       // In local development, continue using direct background processing
@@ -96,7 +124,7 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('Error in background sync API:', error);
     return NextResponse.json(
-      { error: 'Failed to start background sync' },
+      { error: 'Failed to start background sync', details: error.message },
       { status: 500 }
     );
   }
