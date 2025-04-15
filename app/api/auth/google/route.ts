@@ -49,17 +49,14 @@ export async function GET(request: Request) {
     
     // Helper function to create redirect URL
     const createRedirectUrl = (path: string) => {
-      if (isFromMainSite) {
-        // Extract the port from referer if it exists
-        const refererUrl = new URL(referer);
-        return `${refererUrl.protocol}//${refererUrl.host}/tools/shadow-it-scan${path}`;
-      }
-      return new URL(path, origin).toString();
+      const baseUrl = request.headers.get('host') || 'localhost:3000';
+      const protocol = baseUrl.includes('localhost') ? 'http://' : 'https://';
+      return `${protocol}${baseUrl}${path}`;
     };
 
     if (error) {
       console.error('OAuth error received:', error);
-      return NextResponse.redirect(createRedirectUrl('/login?error=' + error));
+      return NextResponse.redirect(createRedirectUrl(`/login?error=${error}`));
     }
 
     if (!code) {
@@ -85,8 +82,7 @@ export async function GET(request: Request) {
       scope: oauthTokens.scope,
     });
     
-    console.log('OAuth scopes granted:', oauthTokens.scope);
-    
+    // Set credentials for subsequent API calls
     await googleService.setCredentials(oauthTokens);
 
     // Get the authenticated user's info
@@ -99,27 +95,13 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/login?error=not_workspace_account', request.url));
     }
 
-    // Create or update the authenticated user
-    const { data: authUser, error: authUserError } = await supabaseAdmin
-      .from('users_signedup')
-      .upsert({
-        email: userInfo.email,
-        name: userInfo.name,
-        avatar_url: userInfo.picture || null,
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (authUserError) {
-      console.error('Error upserting authenticated user:', authUserError);
-      throw authUserError;
-    }
-
     // Create organization ID from domain
     const orgId = userInfo.hd.replace(/\./g, '-');
 
-    // Create or get organization
+    // Do minimal database operations in the auth callback
+    // Just create a new sync status and trigger the background job
+    
+    // First get or create the organization with minimal fields
     const { data: org, error: orgError } = await supabaseAdmin
       .from('organizations')
       .upsert({
@@ -128,7 +110,7 @@ export async function GET(request: Request) {
         domain: userInfo.hd,
         updated_at: new Date().toISOString(),
       })
-      .select()
+      .select('id')
       .single();
       
     if (orgError) {
@@ -158,8 +140,23 @@ export async function GET(request: Request) {
       throw syncStatusError;
     }
 
-    // Trigger the background data processing job
-    const apiUrl = new URL('/api/background/sync', request.url).toString();
+    // Store basic user info - the background job will get the rest
+    const { error: basicUserError } = await supabaseAdmin
+      .from('users_signedup')
+      .upsert({
+        email: userInfo.email,
+        name: userInfo.name,
+        avatar_url: userInfo.picture || null,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (basicUserError) {
+      console.error('Error storing basic user info:', basicUserError);
+      // Non-critical, continue anyway
+    }
+
+    // Trigger the background data processing job immediately
+    const apiUrl = createRedirectUrl('/api/background/sync');
     fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -170,6 +167,8 @@ export async function GET(request: Request) {
         sync_id: syncStatus.id,
         access_token: oauthTokens.access_token,
         refresh_token: oauthTokens.refresh_token,
+        user_email: userInfo.email,
+        user_hd: userInfo.hd
       }),
     }).catch(error => {
       console.error('Error triggering background sync:', error);
@@ -178,7 +177,7 @@ export async function GET(request: Request) {
     console.log('Background sync job triggered');
     
     // Modify the final redirect to use the helper function
-    const response = NextResponse.redirect(createRedirectUrl('/loading?syncId=' + syncStatus.id));
+    const response = NextResponse.redirect(createRedirectUrl(`/loading?syncId=${syncStatus.id}`));
     
     // Set secure cookies for session management
     const cookieDomain = isFromMainSite ? new URL(referer).hostname : undefined;
@@ -210,13 +209,9 @@ export async function GET(request: Request) {
       stack: error.stack
     });
     
-    const referer = request.headers.get('referer') || '';
-    const isFromMainSite = referer.includes('localhost') || referer.includes('127.0.0.1');
-    
-    // Create redirect URL based on the source
-    const redirectUrl = isFromMainSite
-      ? new URL(referer).origin + '/tools/shadow-it-scan/login?error=auth_failed'
-      : new URL('/login?error=auth_failed', request.url);
+    const baseUrl = request.headers.get('host') || 'localhost:3000';
+    const protocol = baseUrl.includes('localhost') ? 'http://' : 'https://';
+    const redirectUrl = `${protocol}${baseUrl}/login?error=auth_failed`;
     
     // Clear cookies on error
     const response = NextResponse.redirect(redirectUrl);

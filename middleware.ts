@@ -9,12 +9,7 @@ const PUBLIC_PATHS = [
   '/terms',
   '/auth/google',
   '/api/auth/google',  // Add the API route for OAuth callback
-  '/tools/shadow-it-scan/login',
-  '/tools/shadow-it-scan/loading',
-  '/tools/shadow-it-scan/privacy',
-  '/tools/shadow-it-scan/terms',
-  '/tools/shadow-it-scan/auth/google',
-  '/tools/shadow-it-scan/api/auth/google'
+  '/api/background/sync', // Allow background sync API
 ];
 const PUBLIC_FILE_PATTERNS = [
   /\.(?:jpg|jpeg|gif|png|svg|ico)$/,  // images
@@ -28,13 +23,13 @@ const PUBLIC_FILE_PATTERNS = [
 
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const searchParams = request.nextUrl.searchParams;
   const host = request.headers.get('host') || '';
-  const isStitchflowDomain = host.includes('stitchflow.com');
   
   // Debug info
   console.log(`Middleware path: ${path}`);
   console.log(`Host: ${host}`);
-  console.log(`Cookies: ${request.cookies.toString()}`);
+  console.log(`Search params: ${searchParams.toString()}`);
   
   // Get authentication cookies
   const orgId = request.cookies.get('orgId')?.value;
@@ -58,13 +53,25 @@ export function middleware(request: NextRequest) {
     path === publicPath || path.startsWith(publicPath)
   );
   
-  console.log(`isPublicPath: ${isPublicPath}, orgId: ${orgId}, userEmail: ${userEmail}`);
-  
   // Skip middleware completely for API routes other than auth
   if (path.startsWith('/api') && !path.startsWith('/api/auth')) {
     return NextResponse.next();
   }
-  
+
+  // If not authenticated and not on a public path, redirect to login
+  if (!isAuthenticated && !isPublicPath) {
+    const baseUrl = request.headers.get('host') || 'localhost:3000';
+    const protocol = baseUrl.includes('localhost') ? 'http://' : 'https://';
+    return NextResponse.redirect(`${protocol}${baseUrl}/login`);
+  }
+
+  // If authenticated and on login page, redirect to root with orgId
+  if (isAuthenticated && path === '/login') {
+    const baseUrl = request.headers.get('host') || 'localhost:3000';
+    const protocol = baseUrl.includes('localhost') ? 'http://' : 'https://';
+    return NextResponse.redirect(`${protocol}${baseUrl}/?orgId=${orgId}`);
+  }
+
   // For all paths, proceed and add headers
   const response = NextResponse.next();
   if (orgId) {

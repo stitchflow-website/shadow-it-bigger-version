@@ -20,8 +20,8 @@ const nextConfig = {
     webpackBuildWorker: true,
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
-  },
-  assetPrefix:'/tools/shadow-it-scan',
+  }
+  // assetPrefix:'/tools/shadow-it-scan',
 }
 
 function mergeConfig(nextConfig, userConfig) {

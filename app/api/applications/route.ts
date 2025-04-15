@@ -120,7 +120,7 @@ export async function GET(request: Request) {
         *,
         user_applications:user_applications (
           scopes,
-          user:users!inner (
+          user:users (
             id,
             name,
             email,
@@ -142,15 +142,17 @@ export async function GET(request: Request) {
 
     // Transform the data to match the frontend structure
     const transformedApplications = (applications as ApplicationType[]).map(app => {
-      // Get unique users from user_applications
+      // Get unique users from user_applications, filtering out null users
       const uniqueUsers = Array.from(new Set(
-        app.user_applications
+        (app.user_applications || [])
           .map(ua => ua.user)
           .filter((user): user is UserType => Boolean(user))
       ));
 
       // Get all unique scopes from user_applications
-      const allUserScopes = Array.from(new Set(app.user_applications?.flatMap(ua => ua.scopes || []) || []));
+      const allUserScopes = Array.from(new Set(
+        (app.user_applications || [])?.flatMap(ua => ua.scopes || []) || []
+      ));
       
       // Use the all_scopes field from the application if available, otherwise fallback to user scopes
       const applicationScopes = app.all_scopes || allUserScopes;
@@ -165,8 +167,8 @@ export async function GET(request: Request) {
         userCount: uniqueUsers.length,
         users: uniqueUsers.map(user => {
           // Find this specific user's application
-          const userApp = app.user_applications.find((ua: UserApplicationType) => 
-            ua.user.id === user.id
+          const userApp = (app.user_applications || []).find((ua: UserApplicationType) => 
+            ua.user?.id === user.id
           );
           
           // Get this user's specific scopes (not the application-wide scopes)
@@ -186,7 +188,7 @@ export async function GET(request: Request) {
         riskLevel: transformRiskLevel(app.risk_level),
         riskReason: determineAppRiskReason(app.risk_level, app.total_permissions),
         totalPermissions: app.total_permissions,
-        scopeVariance: calculateScopeVariance(app.user_applications),
+        scopeVariance: calculateScopeVariance(app.user_applications || []),
         logoUrl: logoUrls.primary,
         logoUrlFallback: logoUrls.fallback,
         created_at: app.created_at,
