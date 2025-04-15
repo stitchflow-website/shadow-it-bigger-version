@@ -52,18 +52,47 @@ function formatDate(dateValue: any): string {
 
 export async function POST(request: Request) {
   try {
-    // This ensures the API responds quickly while processing continues
     const { organization_id, sync_id, access_token, refresh_token } = await request.json();
     
     // Send immediate response
-    const responsePromise = Promise.resolve(
-      NextResponse.json({ message: 'Sync started in background' })
-    );
+    const response = NextResponse.json({ 
+      message: 'Sync started in background',
+      sync_id
+    });
     
-    // Process in background
-    backgroundProcess(organization_id, sync_id, access_token, refresh_token);
+    // Use a more appropriate approach for Vercel serverless functions
+    // This ensures the function keeps running after response is sent
+    if (process.env.VERCEL) {
+      console.log('Running on Vercel - using waitUntil for background processing');
+      // Use fetch to trigger a separate request to ourselves
+      // This keeps the process alive longer than the initial request
+      const baseUrl = request.headers.get('host') || 'localhost:3000';
+      const protocol = baseUrl.includes('localhost') ? 'http://' : 'https://';
+      const apiUrl = `${protocol}${baseUrl}/api/background/start-sync`;
+      
+      // Log that we're making a separate request
+      console.log(`Triggering background sync via separate request to ${apiUrl}`);
+      
+      // Make the request to the separate endpoint
+      fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id,
+          sync_id,
+          access_token,
+          refresh_token
+        })
+      }).catch(error => {
+        console.error('Error initiating background sync:', error);
+      });
+    } else {
+      console.log('Running locally - using direct background processing');
+      // In local development, continue using direct background processing
+      backgroundProcess(organization_id, sync_id, access_token, refresh_token);
+    }
     
-    return responsePromise;
+    return response;
   } catch (error: any) {
     console.error('Error in background sync API:', error);
     return NextResponse.json(
@@ -73,7 +102,7 @@ export async function POST(request: Request) {
   }
 }
 
-async function backgroundProcess(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {
+export async function backgroundProcess(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {
   try {
     console.log(`Starting background process for organization: ${organization_id}, sync: ${sync_id}`);
     
