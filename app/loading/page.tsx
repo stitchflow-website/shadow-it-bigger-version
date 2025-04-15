@@ -49,6 +49,13 @@ function LoadingContent() {
             return;
           }
 
+          // If partial completion, offer option to proceed
+          if (data.status === 'PARTIAL') {
+            setMessage('Partial data loaded. You can proceed to dashboard or wait for more data.');
+            // Show a button in the UI to continue
+            return;
+          }
+
           // If failed, show error
           if (data.status === 'FAILED') {
             setError(`Sync failed: ${data.message}`);
@@ -93,6 +100,36 @@ function LoadingContent() {
                 </button>
               </div>
             </div>
+          ) : status === 'PARTIAL' ? (
+            <>
+              <div className="mb-4">
+                <Progress value={75} className="h-2" />
+              </div>
+              <div className="flex justify-between items-center text-sm text-gray-500">
+                <span>{message}</span>
+                <span>75%</span>
+              </div>
+              <div className="mt-4 p-4 bg-yellow-50 rounded-md text-yellow-700">
+                <p>Some of your Google Workspace data was loaded successfully. You may see incomplete application information.</p>
+                <div className="mt-4 flex justify-between">
+                  <button 
+                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                    onClick={() => {
+                      // Restart sync
+                      router.push('/login');
+                    }}
+                  >
+                    Try Again
+                  </button>
+                  <button 
+                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                    onClick={() => router.push('/')}
+                  >
+                    Continue to Dashboard
+                  </button>
+                </div>
+              </div>
+            </>
           ) : (
             <>
               <div className="mb-4">
@@ -108,6 +145,12 @@ function LoadingContent() {
                   <br />
                   This process is running in the background, so you'll be redirected once it completes.
                 </p>
+                {progress === 30 && (
+                  <p className="mt-2 text-blue-600">
+                    Fetching application data can take some time for large organizations.
+                    Please be patient.
+                  </p>
+                )}
               </div>
             </>
           )}
