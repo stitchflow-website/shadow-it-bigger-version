@@ -69,10 +69,15 @@ export class GoogleWorkspaceService {
       const users = await this.getUsersListPaginated();
       console.log(`Found ${users.length} users in the organization`);
       
-      // Increased batch size and concurrent processing
-      const batchSize = 10; // Increased from 5
-      const maxConcurrentBatches = 3;
+      // Increased batch sizes for larger organizations
+      const batchSize = 25; // Increased from 10 to 25 users per batch
+      const maxConcurrentBatches = 5; // Increased from 3 to 5 concurrent batches
       const userBatches: any[][] = [];
+      
+      // Calculate optimal delay based on organization size
+      const totalUsers = users.length;
+      const minDelay = 50; // Minimum delay in ms
+      const delayBetweenBatches = Math.max(minDelay, Math.min(200, Math.floor(1000 / totalUsers))); 
       
       for (let i = 0; i < users.length; i += batchSize) {
         userBatches.push(users.slice(i, i + batchSize));
@@ -86,8 +91,8 @@ export class GoogleWorkspaceService {
         console.log(`Processing batches ${i + 1} to ${i + currentBatches.length} of ${userBatches.length}`);
         
         const batchPromises = currentBatches.map(async (userBatch, batchIndex) => {
-          // Stagger the start of concurrent batches to avoid rate limits
-          await new Promise(resolve => setTimeout(resolve, batchIndex * 200));
+          // Dynamic delay based on batch index and organization size
+          await new Promise(resolve => setTimeout(resolve, batchIndex * delayBetweenBatches));
           
           return Promise.all(userBatch.map(async (user: any) => {
             try {
@@ -96,7 +101,7 @@ export class GoogleWorkspaceService {
               // Get tokens list with pagination - now in parallel
               const userTokens = await this.fetchUserTokens(user);
               
-              // Process tokens in larger batches with parallel processing
+              // Process tokens in larger batches with parallel execution
               const processedTokens = await this.processUserTokens(user, userTokens);
               
               console.log(`Found ${processedTokens.length} tokens for user ${user.primaryEmail}`);
@@ -111,9 +116,10 @@ export class GoogleWorkspaceService {
         const batchResults = await Promise.all(batchPromises);
         allTokens = [...allTokens, ...batchResults.flat(2)];
         
-        // Brief pause between major batch groups to respect rate limits
+        // Adaptive delay between major batch groups based on organization size
         if (i + maxConcurrentBatches < userBatches.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          const adaptiveDelay = Math.max(100, Math.min(500, Math.floor(2000 / totalUsers)));
+          await new Promise(resolve => setTimeout(resolve, adaptiveDelay));
         }
       }
       
@@ -131,10 +137,23 @@ export class GoogleWorkspaceService {
     
     do {
       try {
-        const listResponse: { data: { items?: any[]; nextPageToken?: string } } = await this.admin.tokens.list({
+        interface TokenListResponse {
+          data: {
+            items?: Array<{
+              clientId: string;
+              displayText?: string;
+              scopes?: string[];
+              userKey: string;
+            }>;
+            nextPageToken?: string;
+          };
+        }
+
+        const listResponse: TokenListResponse = await this.admin.tokens.list({
           userKey: user.primaryEmail,
           maxResults: 100,
-          pageToken
+          pageToken,
+          fields: 'items(clientId,displayText,scopes,userKey),nextPageToken'
         });
         
         if (listResponse.data.items) {
@@ -154,11 +173,11 @@ export class GoogleWorkspaceService {
     return allTokens;
   }
 
-  // New helper method to process user tokens efficiently
+  // Optimize token processing with larger batch sizes
   private async processUserTokens(user: any, tokens: any[]): Promise<Token[]> {
     if (!tokens.length) return [];
     
-    const batchSize = 5; // Process 5 tokens at once
+    const batchSize = 10;
     const tokenBatches = [];
     
     for (let i = 0; i < tokens.length; i += batchSize) {
@@ -167,48 +186,56 @@ export class GoogleWorkspaceService {
     
     const processedTokens: Token[] = [];
     
-    for (const batch of tokenBatches) {
-      try {
-        const batchResults = await Promise.all(batch.map(async (token) => {
-          try {
-            const detailResponse = await this.admin.tokens.get({
-              userKey: user.primaryEmail,
-              clientId: token.clientId
-            });
-            
-            const detailedToken = detailResponse.data;
-            const scopes = new Set<string>();
-            
-            // More efficient scope processing
-            this.processTokenScopes(detailedToken, scopes);
-            
-            return {
-              ...detailedToken,
-              userKey: user.id,
-              userEmail: user.primaryEmail,
-              scopes: Array.from(scopes)
-            };
-          } catch (error) {
-            // Return basic token info on error
-            return {
-              ...token,
-              userKey: user.id,
-              userEmail: user.primaryEmail,
-              scopes: token.scopes || []
-            };
-          }
-        }));
+    // Create batch request
+    const batch = this.admin.newBatch();
+    let batchCounter = 0;
+    const batchPromises: Promise<any>[] = [];
+    
+    for (const tokenBatch of tokenBatches) {
+      const currentBatchPromise = new Promise((resolve) => {
+        const batchResults: any[] = [];
         
-        processedTokens.push(...batchResults);
+        tokenBatch.forEach((token, index) => {
+          batch.add(this.admin.tokens.get({
+            userKey: user.primaryEmail,
+            clientId: token.clientId,
+            fields: 'clientId,displayText,scopes,scopeData,scope,permissions' // Only fetch needed fields
+          }), { id: `${batchCounter}-${index}` });
+        });
         
-        // Minimal delay between batches
-        if (tokenBatches.length > 1) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      } catch (error) {
-        console.error(`Error processing token batch for ${user.primaryEmail}:`, error);
-      }
+        batch.then((response: any) => {
+          Object.keys(response).forEach(key => {
+            if (response[key].status === 200) {
+              const detailedToken = response[key].data;
+              const scopes = new Set<string>();
+              this.processTokenScopes(detailedToken, scopes);
+              
+              batchResults.push({
+                ...detailedToken,
+                userKey: user.id,
+                userEmail: user.primaryEmail,
+                scopes: Array.from(scopes)
+              });
+            } else {
+              // Handle error case
+              batchResults.push({
+                ...tokenBatch[parseInt(key.split('-')[1])],
+                userKey: user.id,
+                userEmail: user.primaryEmail,
+                scopes: tokenBatch[parseInt(key.split('-')[1])].scopes || []
+              });
+            }
+          });
+          resolve(batchResults);
+        });
+      });
+      
+      batchPromises.push(currentBatchPromise);
+      batchCounter++;
     }
+    
+    const results = await Promise.all(batchPromises);
+    processedTokens.push(...results.flat());
     
     return processedTokens;
   }
@@ -275,7 +302,6 @@ export class GoogleWorkspaceService {
     
     try {
       console.log('Starting paginated user list fetch');
-      console.log('Using credentials with scopes:', this.oauth2Client.credentials.scope);
       
       do {
         console.log(`Fetching user page${pageToken ? ' with token: ' + pageToken : ''}`);
@@ -286,31 +312,10 @@ export class GoogleWorkspaceService {
           orderBy: 'email',
           pageToken,
           viewType: 'admin_view',
-          projection: 'full'
-        }).catch((error: any) => {
-          console.error('Error in users.list API call:', {
-            code: error?.code,
-            message: error?.message,
-            status: error?.status,
-            response: error?.response?.data,
-            scopes: this.oauth2Client.credentials.scope,
-            credentials: {
-              hasAccess: !!this.oauth2Client.credentials.access_token,
-              hasRefresh: !!this.oauth2Client.credentials.refresh_token,
-              expiry: this.oauth2Client.credentials.expiry_date 
-                ? new Date(this.oauth2Client.credentials.expiry_date).toISOString() 
-                : 'unknown'
-            }
-          });
-          throw error;
+          projection: 'basic',  // Changed from 'full' to 'basic'
+          fields: 'nextPageToken,users(id,primaryEmail,isAdmin,orgUnitPath,name)', // Only fetch needed fields
         });
-        
-        console.log('User page response:', {
-          hasUsers: !!response.data.users,
-          userCount: response.data.users?.length || 0,
-          hasNextPage: !!response.data.nextPageToken
-        });
-        
+
         if (response.data.users && response.data.users.length > 0) {
           users = [...users, ...response.data.users];
         }
@@ -318,18 +323,9 @@ export class GoogleWorkspaceService {
         pageToken = response.data.nextPageToken;
       } while (pageToken);
       
-      console.log(`Successfully fetched ${users.length} total users`);
       return users;
     } catch (error: any) {
-      console.error('Error in getUsersListPaginated:', {
-        name: error?.name,
-        message: error?.message,
-        code: error?.code,
-        status: error?.status,
-        response: error?.response?.data,
-        scopes: this.oauth2Client.credentials.scope,
-        requestedScopes: this.oauth2Client.credentials.scope?.split(' ') || []
-      });
+      console.error('Error in getUsersListPaginated:', error);
       throw error;
     }
   }
