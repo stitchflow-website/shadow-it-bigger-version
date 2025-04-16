@@ -56,10 +56,10 @@ function LoginContent() {
         'https://www.googleapis.com/auth/admin.directory.domain.readonly',
         // Token management - required for accessing OAuth tokens
         'https://www.googleapis.com/auth/admin.directory.user.security',
-        // OAuth token management
-        'https://www.googleapis.com/auth/admin.directory.userschema',
-        'https://www.googleapis.com/auth/admin.directory.user',
-        'https://www.googleapis.com/auth/admin.directory.group.readonly',
+        // // OAuth token management
+        // 'https://www.googleapis.com/auth/admin.directory.userschema',
+        // 'https://www.googleapis.com/auth/admin.directory.user',
+        // 'https://www.googleapis.com/auth/admin.directory.group.readonly',
         // Basic profile info
         'openid',
         'profile',

@@ -69,8 +69,9 @@ export class GoogleWorkspaceService {
       const users = await this.getUsersListPaginated();
       console.log(`Found ${users.length} users in the organization`);
       
-      // Create batches of users to process in parallel
-      const batchSize = 5; // Reduced batch size to avoid rate limits
+      // Increased batch size and concurrent processing
+      const batchSize = 10; // Increased from 5
+      const maxConcurrentBatches = 3;
       const userBatches: any[][] = [];
       
       for (let i = 0; i < users.length; i += batchSize) {
@@ -79,173 +80,181 @@ export class GoogleWorkspaceService {
       
       let allTokens: Token[] = [];
       
-      // Process each batch with exponential backoff retry
-      for (const [batchIndex, userBatch] of userBatches.entries()) {
-        console.log(`Processing batch ${batchIndex + 1}/${userBatches.length} (${userBatch.length} users)`);
+      // Process batches with controlled concurrency
+      for (let i = 0; i < userBatches.length; i += maxConcurrentBatches) {
+        const currentBatches = userBatches.slice(i, i + maxConcurrentBatches);
+        console.log(`Processing batches ${i + 1} to ${i + currentBatches.length} of ${userBatches.length}`);
         
-        // Add delay between batches to respect rate limits
-        if (batchIndex > 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-        
-        // Process users in this batch with retries
-        const batchResults = await Promise.all(
-          userBatch.map(async (user: any) => {
-            let retryCount = 0;
-            const maxRetries = 3;
-            
-            while (retryCount < maxRetries) {
-              try {
-                console.log(`Fetching tokens for user: ${user.primaryEmail} (attempt ${retryCount + 1})`);
-                
-                // Get tokens list with pagination
-                let pageToken: string | undefined = undefined;
-                let userTokensList: any[] = [];
-                
-                do {
-                  const listResponse: { data: { items?: any[]; nextPageToken?: string } } = await this.admin.tokens.list({
-                    userKey: user.primaryEmail,
-                    maxResults: 100,
-                    pageToken
-                  }).catch((error: any) => {
-                    if (error.code === 404) {
-                      console.log(`No tokens found for user: ${user.primaryEmail}`);
-                      return { data: { items: [] } };
-                    }
-                    throw error;
-                  });
-                  
-                  if (listResponse.data.items && listResponse.data.items.length > 0) {
-                    userTokensList = [...userTokensList, ...listResponse.data.items];
-                  }
-                  
-                  pageToken = listResponse.data.nextPageToken;
-                } while (pageToken);
-                
-                // Process tokens in smaller batches
-                const tokenBatchSize = 3;
-                const tokenBatches = [];
-                
-                for (let i = 0; i < userTokensList.length; i += tokenBatchSize) {
-                  tokenBatches.push(userTokensList.slice(i, i + tokenBatchSize));
-                }
-                
-                let userTokens: Token[] = [];
-                
-                for (const tokenBatch of tokenBatches) {
-                  // Add delay between token batches
-                  await new Promise(resolve => setTimeout(resolve, 500));
-                  
-                  const tokenPromises = tokenBatch.map(async (token: any) => {
-                    try {
-                      const detailResponse = await this.admin.tokens.get({
-                        userKey: user.primaryEmail,
-                        clientId: token.clientId
-                      });
-                      
-                      const detailedToken = detailResponse.data;
-                      const scopes = new Set<string>();
-                      
-                      // Efficient scope processing
-                      const processScopes = (scopeArray: string[] | undefined) => {
-                        if (Array.isArray(scopeArray)) {
-                          scopeArray.forEach(s => scopes.add(s));
-                        }
-                      };
-                      
-                      processScopes(detailedToken.scopes);
-                      processScopes(token.scopes);
-                      
-                      if (detailedToken.scopeData) {
-                        detailedToken.scopeData.forEach((sd: any) => {
-                          if (sd.scope) scopes.add(sd.scope);
-                          if (sd.value) scopes.add(sd.value);
-                        });
-                      }
-                      
-                      if (typeof detailedToken.scope === 'string') {
-                        detailedToken.scope.split(/\s+/).forEach((s: string) => scopes.add(s));
-                      }
-                      
-                      // Check for admin applications
-                      if (detailedToken.displayText?.match(/Admin|Google|Workspace/i)) {
-                        const adminScopes = [
-                          'https://www.googleapis.com/auth/admin.directory.device.chromeos',
-                          'https://www.googleapis.com/auth/admin.directory.device.mobile',
-                          'https://www.googleapis.com/auth/admin.directory.group',
-                          'https://www.googleapis.com/auth/admin.directory.group.member',
-                          'https://www.googleapis.com/auth/admin.directory.orgunit',
-                          'https://www.googleapis.com/auth/admin.directory.resource.calendar',
-                          'https://www.googleapis.com/auth/admin.directory.rolemanagement',
-                          'https://www.googleapis.com/auth/admin.directory.user',
-                          'https://www.googleapis.com/auth/admin.directory.user.alias',
-                          'https://www.googleapis.com/auth/admin.directory.user.security'
-                        ];
-                        
-                        if ([...scopes].some(s => s.includes('admin.directory'))) {
-                          adminScopes.forEach(s => scopes.add(s));
-                        }
-                      }
-                      
-                      return {
-                        ...detailedToken,
-                        userKey: user.id,
-                        userEmail: user.primaryEmail,
-                        scopes: Array.from(scopes)
-                      };
-                    } catch (tokenError: any) {
-                      console.error(
-                        `Error fetching detailed token info for ${token.clientId} (user: ${user.primaryEmail}):`,
-                        tokenError.message
-                      );
-                      
-                      // Return basic token info on error
-                      return {
-                        ...token,
-                        userKey: user.id,
-                        userEmail: user.primaryEmail,
-                        scopes: token.scopes || []
-                      };
-                    }
-                  });
-                  
-                  const batchResults = await Promise.all(tokenPromises);
-                  userTokens = [...userTokens, ...batchResults];
-                }
-                
-                console.log(`Found ${userTokens.length} tokens for user ${user.primaryEmail}`);
-                return userTokens;
-              } catch (error: any) {
-                retryCount++;
-                
-                if (retryCount === maxRetries) {
-                  console.error(
-                    `Failed to fetch tokens for user ${user.primaryEmail} after ${maxRetries} attempts:`,
-                    error.message
-                  );
-                  return [];
-                }
-                
-                // Exponential backoff
-                const delay = Math.pow(2, retryCount) * 1000;
-                console.log(`Retrying in ${delay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-              }
+        const batchPromises = currentBatches.map(async (userBatch, batchIndex) => {
+          // Stagger the start of concurrent batches to avoid rate limits
+          await new Promise(resolve => setTimeout(resolve, batchIndex * 200));
+          
+          return Promise.all(userBatch.map(async (user: any) => {
+            try {
+              console.log(`Fetching tokens for user: ${user.primaryEmail}`);
+              
+              // Get tokens list with pagination - now in parallel
+              const userTokens = await this.fetchUserTokens(user);
+              
+              // Process tokens in larger batches with parallel processing
+              const processedTokens = await this.processUserTokens(user, userTokens);
+              
+              console.log(`Found ${processedTokens.length} tokens for user ${user.primaryEmail}`);
+              return processedTokens;
+            } catch (error: any) {
+              console.error(`Error processing user ${user.primaryEmail}:`, error.message);
+              return []; // Return empty array on error to continue with other users
             }
-            
-            return []; // Fallback if all retries fail
-          })
-        );
+          }));
+        });
         
-        allTokens = [...allTokens, ...batchResults.flat()];
-        console.log(`Completed batch ${batchIndex + 1}/${userBatches.length}, total tokens: ${allTokens.length}`);
+        const batchResults = await Promise.all(batchPromises);
+        allTokens = [...allTokens, ...batchResults.flat(2)];
+        
+        // Brief pause between major batch groups to respect rate limits
+        if (i + maxConcurrentBatches < userBatches.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
       
       return allTokens;
     } catch (error) {
       console.error('Error fetching OAuth tokens:', error);
-      throw error; // Propagate error to caller
+      throw error;
     }
+  }
+
+  // New helper method to fetch user tokens with efficient pagination
+  private async fetchUserTokens(user: any): Promise<any[]> {
+    let pageToken: string | undefined = undefined;
+    let allTokens: any[] = [];
+    
+    do {
+      try {
+        const listResponse: { data: { items?: any[]; nextPageToken?: string } } = await this.admin.tokens.list({
+          userKey: user.primaryEmail,
+          maxResults: 100,
+          pageToken
+        });
+        
+        if (listResponse.data.items) {
+          allTokens = [...allTokens, ...listResponse.data.items];
+        }
+        
+        pageToken = listResponse.data.nextPageToken;
+      } catch (error: any) {
+        if (error.code === 404) {
+          console.log(`No tokens found for user: ${user.primaryEmail}`);
+          return [];
+        }
+        throw error;
+      }
+    } while (pageToken);
+    
+    return allTokens;
+  }
+
+  // New helper method to process user tokens efficiently
+  private async processUserTokens(user: any, tokens: any[]): Promise<Token[]> {
+    if (!tokens.length) return [];
+    
+    const batchSize = 5; // Process 5 tokens at once
+    const tokenBatches = [];
+    
+    for (let i = 0; i < tokens.length; i += batchSize) {
+      tokenBatches.push(tokens.slice(i, i + batchSize));
+    }
+    
+    const processedTokens: Token[] = [];
+    
+    for (const batch of tokenBatches) {
+      try {
+        const batchResults = await Promise.all(batch.map(async (token) => {
+          try {
+            const detailResponse = await this.admin.tokens.get({
+              userKey: user.primaryEmail,
+              clientId: token.clientId
+            });
+            
+            const detailedToken = detailResponse.data;
+            const scopes = new Set<string>();
+            
+            // More efficient scope processing
+            this.processTokenScopes(detailedToken, scopes);
+            
+            return {
+              ...detailedToken,
+              userKey: user.id,
+              userEmail: user.primaryEmail,
+              scopes: Array.from(scopes)
+            };
+          } catch (error) {
+            // Return basic token info on error
+            return {
+              ...token,
+              userKey: user.id,
+              userEmail: user.primaryEmail,
+              scopes: token.scopes || []
+            };
+          }
+        }));
+        
+        processedTokens.push(...batchResults);
+        
+        // Minimal delay between batches
+        if (tokenBatches.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.error(`Error processing token batch for ${user.primaryEmail}:`, error);
+      }
+    }
+    
+    return processedTokens;
+  }
+
+  // New helper method for efficient scope processing
+  private processTokenScopes(token: any, scopes: Set<string>): void {
+    // Process direct scopes
+    if (Array.isArray(token.scopes)) {
+      token.scopes.forEach((s: string) => scopes.add(s));
+    }
+    
+    // Process scope data
+    if (Array.isArray(token.scopeData)) {
+      token.scopeData.forEach((sd: any) => {
+        if (sd.scope) scopes.add(sd.scope);
+        if (sd.value) scopes.add(sd.value);
+      });
+    }
+    
+    // Process string scope
+    if (typeof token.scope === 'string') {
+      token.scope.split(/\s+/).forEach((s: string) => scopes.add(s));
+    }
+    
+    // Process admin scopes
+    if (token.displayText?.match(/Admin|Google|Workspace/i) && 
+        [...scopes].some(s => s.includes('admin.directory'))) {
+      this.addAdminScopes(scopes);
+    }
+  }
+
+  // Helper for admin scopes
+  private addAdminScopes(scopes: Set<string>): void {
+    const adminScopes = [
+      'https://www.googleapis.com/auth/admin.directory.device.chromeos',
+      'https://www.googleapis.com/auth/admin.directory.device.mobile',
+      'https://www.googleapis.com/auth/admin.directory.group',
+      'https://www.googleapis.com/auth/admin.directory.group.member',
+      'https://www.googleapis.com/auth/admin.directory.orgunit',
+      'https://www.googleapis.com/auth/admin.directory.resource.calendar',
+      'https://www.googleapis.com/auth/admin.directory.rolemanagement',
+      'https://www.googleapis.com/auth/admin.directory.user',
+      'https://www.googleapis.com/auth/admin.directory.user.alias',
+      'https://www.googleapis.com/auth/admin.directory.user.security'
+    ];
+    adminScopes.forEach(s => scopes.add(s));
   }
 
   async getToken(code: string) {
