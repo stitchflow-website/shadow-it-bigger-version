@@ -795,22 +795,22 @@ export default function ShadowITDashboard() {
   // Update the getCategoryColor function for charts
   const getCategoryColor = (category: string): string => {
     const categoryColors: Record<string, string> = {
-      "Analytics & Business Intelligence": "#64B5F6", // darker pastel blue
-      "Cloud Platforms & Infrastructure": "#BA68C8", // darker pastel purple
-      "Customer Success & Support": "#81C784", // darker pastel green
-      "Design & Creative Tools": "#F06292", // darker pastel pink
-      "Developer & Engineering Tools": "#9575CD", // darker pastel violet
-      "Finance & Accounting": "#4DD0E1", // darker pastel cyan
-      "Human Resources & People Management": "#4FC3F7", // darker pastel light blue
-      "IT Operations & Security": "#FF8A65", // darker pastel coral
-      "Identity & Access Management": "#FFD54F", // darker pastel amber
-      "Productivity & Collaboration": "#9575CD", // darker pastel purple
-      "Project Management": "#FFF176", // darker pastel yellow
-      "Sales & Marketing": "#FFB74D", // darker pastel orange
-      Others: "#BDBDBD", // darker light gray
+      "Analytics & Business Intelligence": "#3B82F6", // bright blue
+      "Cloud Platforms & Infrastructure": "#8B5CF6", // bright purple
+      "Customer Success & Support": "#10B981", // emerald green
+      "Design & Creative Tools": "#EC4899", // bright pink
+      "Developer & Engineering Tools": "#6366F1", // indigo
+      "Finance & Accounting": "#06B6D4", // cyan
+      "Human Resources & People Management": "#0EA5E9", // sky blue
+      "IT Operations & Security": "#EF4444", // red
+      "Identity & Access Management": "#F59E0B", // amber
+      "Productivity & Collaboration": "#6366F1", // indigo
+      "Project Management": "#FBBF24", // yellow
+      "Sales & Marketing": "#F97316", // orange
+      Others: "#6B7280", // gray
     }
 
-    return categoryColors[category] || "#BDBDBD"
+    return categoryColors[category] || "#6B7280" // default to gray
   }
 
   // Generate monthly active users data
@@ -906,22 +906,22 @@ export default function ShadowITDashboard() {
   const CategoryBadge = ({ category }: { category: string }) => {
     const getCategoryColor = (category: string) => {
       const categoryColors: Record<string, string> = {
-        "Analytics & Business Intelligence": "bg-blue-50 text-blue-700",
-        "Cloud Platforms & Infrastructure": "bg-purple-50 text-purple-700",
-        "Customer Success & Support": "bg-green-50 text-green-700",
-        "Design & Creative Tools": "bg-pink-50 text-pink-700",
-        "Developer & Engineering Tools": "bg-violet-50 text-violet-700",
-        "Finance & Accounting": "bg-cyan-50 text-cyan-700",
-        "Human Resources & People Management": "bg-sky-50 text-sky-700",
-        "IT Operations & Security": "bg-red-50 text-red-700",
-        "Identity & Access Management": "bg-amber-50 text-amber-700",
-        "Productivity & Collaboration": "bg-purple-50 text-purple-700",
-        "Project Management": "bg-yellow-50 text-yellow-700",
-        "Sales & Marketing": "bg-orange-50 text-orange-700",
-        Others: "bg-gray-50 text-gray-700",
+        "Analytics & Business Intelligence": "bg-blue-100 text-blue-600",
+        "Cloud Platforms & Infrastructure": "bg-purple-100 text-purple-600",
+        "Customer Success & Support": "bg-emerald-100 text-emerald-600",
+        "Design & Creative Tools": "bg-pink-100 text-pink-600",
+        "Developer & Engineering Tools": "bg-indigo-100 text-indigo-600",
+        "Finance & Accounting": "bg-cyan-100 text-cyan-600",
+        "Human Resources & People Management": "bg-sky-100 text-sky-600",
+        "IT Operations & Security": "bg-red-100 text-red-600",
+        "Identity & Access Management": "bg-amber-100 text-amber-600",
+        "Productivity & Collaboration": "bg-indigo-100 text-indigo-600",
+        "Project Management": "bg-yellow-100 text-yellow-600",
+        "Sales & Marketing": "bg-orange-100 text-orange-600",
+        Others: "bg-gray-100 text-gray-600",
       }
 
-      return categoryColors[category] || "bg-gray-50 text-gray-700"
+      return categoryColors[category] || "bg-gray-100 text-gray-600"
     }
 
     const displayName = category.length > 15 ? category.substring(0, 15) + "..." : category

@@ -262,7 +262,7 @@ async function processRelations(
         try {
           const { error: insertError } = await supabaseAdmin
             .from('user_applications')
-            .insert(batch);
+            .upsert(batch, { onConflict: 'user_id,application_id' });
                 
           if (insertError) {
             console.error(`Error inserting batch ${i / batchSize + 1}:`, insertError);

@@ -248,16 +248,13 @@ async function processTokens(
         organization_id: organization_id
       };
       
-      // Only set the ID if it exists (for updates)
-      if (existingApp?.id) {
-        appRecord.id = existingApp.id;
+      if (!existingApp) {
+        applicationsToUpsert.push(appRecord);
       } else {
-        // Only set management_status for new records
-        appRecord.management_status = 'PENDING';
+        // Update existing app but include the ID
+        appRecord.id = existingApp.id;
+        applicationsToUpsert.push(appRecord);
       }
-      
-      // Add to the batch
-      applicationsToUpsert.push(appRecord);
       
       // Process each token to create user-application relationships
       for (const token of tokens) {
@@ -282,52 +279,84 @@ async function processTokens(
       }
     }
     
-    // Bulk upsert all applications at once
+    // Save applications in batches
     await updateSyncStatus(sync_id, 75, `Saving ${applicationsToUpsert.length} applications`);
     
+    let upsertError = null;
     try {
-      // Process applications in smaller batches
-      const batchSize = 50;
-      for (let i = 0; i < applicationsToUpsert.length; i += batchSize) {
-        const batch = applicationsToUpsert.slice(i, i + batchSize);
-        const { error } = await supabaseAdmin
-          .from('applications')
-          .upsert(batch);
-          
-        if (error) {
-          console.error(`Error upserting applications batch ${i / batchSize + 1}:`, error);
-        }
-      }
-    } catch (error) {
-      console.error(`[Tokens ${sync_id}] Error during application upsert operations:`, error);
-      throw error;
+      const { error } = await supabaseAdmin
+        .from('applications')
+        .upsert(applicationsToUpsert);
+        
+      upsertError = error;
+    } catch (err) {
+      console.error('Error during application upsert:', err);
+      upsertError = err;
     }
     
-    // Get all applications to create a mapping
-    const { data: allApps, error: fetchAppsError } = await supabaseAdmin
+    if (upsertError) {
+      console.error(`[Tokens ${sync_id}] Error upserting applications:`, upsertError);
+      await updateSyncStatus(sync_id, -1, 'Failed to save application data', 'FAILED');
+      throw upsertError;
+    }
+    
+    // Get the latest application IDs for the relationship mapping
+    const { data: dbApps } = await supabaseAdmin
       .from('applications')
       .select('id, name')
       .eq('organization_id', organization_id);
     
-    if (fetchAppsError) {
-      console.error(`[Tokens ${sync_id}] Error fetching applications after upsert:`, fetchAppsError);
-      throw fetchAppsError;
-    }
-    
-    // Create a mapping of app names to IDs
-    const appIdMap = new Map<string, string>();
-    if (allApps) {
-      allApps.forEach(app => {
-        appIdMap.set(app.name, app.id);
+    // Create a mapping for quick lookup (app name -> app ID)
+    const appNameToIdMap = new Map<string, string>();
+    if (dbApps) {
+      dbApps.forEach(app => {
+        appNameToIdMap.set(app.name, app.id);
       });
     }
+    
+    // Get URL info for API calls
+    const selfUrl = request.headers.get('host') || process.env.VERCEL_URL || 'localhost:3000';
+    const protocol = selfUrl.includes('localhost') ? 'http://' : 'https://';
+    
+    // Trigger app categorization process
+    const categorizeUrl = `${protocol}${selfUrl}/api/background/sync/categorize`;
+    
+    console.log(`[Tokens ${sync_id}] Triggering app categorization at: ${categorizeUrl}`);
+    
+    try {
+      const categorizeResponse = await fetch(categorizeUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          organization_id,
+          sync_id
+        }),
+      });
+      
+      if (!categorizeResponse.ok) {
+        const errorText = await categorizeResponse.text();
+        console.warn(`[Tokens ${sync_id}] Failed to trigger app categorization: ${errorText}`);
+        // Continue with relation processing even if categorization fails
+      } else {
+        console.log(`[Tokens ${sync_id}] App categorization job triggered successfully`);
+      }
+    } catch (categorizationError) {
+      console.warn(`[Tokens ${sync_id}] Error triggering categorization:`, categorizationError);
+      // Continue with relation processing even if categorization fails
+    }
+    
+    // Prepare user app relationships for the next phase
+    await updateSyncStatus(sync_id, 80, `Preparing user-application relationships`);
+    
+    // Construct a data structure for relations processing
+    const appMap = Array.from(appNameToIdMap.entries()).map(([appName, appId]) => ({ appName, appId }));
     
     // Trigger the final phase - the relationships processing
     await updateSyncStatus(sync_id, 80, 'Saving application token relationships');
     
-    // Get the host from multiple possible sources to ensure reliability
-    const selfUrl = request.headers.get('host') || process.env.VERCEL_URL || 'localhost:3000';
-    const protocol = selfUrl.includes('localhost') ? 'http://' : 'https://';
+    // Use the same URL variables defined earlier
     const nextUrl = `${protocol}${selfUrl}/api/background/sync/relations`;
     
     console.log(`Triggering relations processing at: ${nextUrl}`);
@@ -342,7 +371,7 @@ async function processTokens(
           organization_id,
           sync_id,
           userAppRelations: userAppRelationsToProcess,
-          appMap: Array.from(appIdMap.entries()).map(([appName, appId]) => ({ appName, appId }))
+          appMap: appMap
         }),
       });
       

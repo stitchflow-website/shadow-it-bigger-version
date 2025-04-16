@@ -109,7 +109,7 @@ export async function GET(request: Request) {
         name: userInfo.hd,
         domain: userInfo.hd,
         updated_at: new Date().toISOString(),
-      })
+      }, { onConflict: 'google_org_id' })
       .select('id')
       .single();
       
