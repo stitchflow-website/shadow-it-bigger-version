@@ -3,15 +3,26 @@ import { supabaseAdmin } from '@/lib/supabase';
 
 // Helper function to update sync status
 async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
-  return await supabaseAdmin
-    .from('sync_status')
-    .update({
-      status,
-      progress,
-      message,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', syncId);
+  try {
+    const { error } = await supabaseAdmin
+      .from('sync_status')
+      .update({
+        status,
+        progress,
+        message,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', syncId);
+      
+    if (error) {
+      console.error(`Error updating sync status: ${error.message}`);
+    }
+    
+    return { success: !error };
+  } catch (err) {
+    console.error('Unexpected error in updateSyncStatus:', err);
+    return { success: false };
+  }
 }
 
 // Helper function to extract scopes from a token
@@ -243,6 +254,7 @@ async function processRelations(
     }
     
     // Process inserts in smaller batches
+    let insertSuccess = true;
     if (relationsToInsert.length > 0) {
       const batchSize = 50;
       for (let i = 0; i < relationsToInsert.length; i += batchSize) {
@@ -254,18 +266,25 @@ async function processRelations(
                 
           if (insertError) {
             console.error(`Error inserting batch ${i / batchSize + 1}:`, insertError);
+            insertSuccess = false;
           }
         } catch (insertError) {
           console.error(`Error inserting batch ${i / batchSize + 1}:`, insertError);
+          insertSuccess = false;
         }
       }
     }
     
     // Finalize (100% progress)
+    let finalMessage = `Sync completed successfully - Processed all data`;
+    if (!insertSuccess) {
+      finalMessage = `Sync completed with some issues - User and application data was saved, but some relationships may be incomplete`;
+    }
+    
     await updateSyncStatus(
       sync_id, 
       100, 
-      `Sync completed successfully - Processed all data`,
+      finalMessage,
       'COMPLETED'
     );
     
@@ -273,6 +292,15 @@ async function processRelations(
     
   } catch (error: any) {
     console.error(`[Relations ${sync_id}] Error in relations processing:`, error);
-    throw error;
+    
+    // Even if there was an error, mark as completed with partial data
+    await updateSyncStatus(
+      sync_id, 
+      95, 
+      `Sync completed with partial data - Some user-application relationships could not be processed: ${error.message}`,
+      'COMPLETED'
+    );
+    
+    // Don't rethrow the error - we've handled it
   }
 } 

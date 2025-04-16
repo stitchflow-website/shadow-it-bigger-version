@@ -88,8 +88,8 @@ export async function POST(request: Request) {
     // Send immediate response
     const response = NextResponse.json({ message: 'Token fetch started' });
     
-    // Process in the background
-    processTokens(organization_id, sync_id, access_token, refresh_token, users)
+    // Process in the background - pass the request object
+    processTokens(organization_id, sync_id, access_token, refresh_token, users, request)
       .catch(async (error) => {
         console.error('Token processing failed:', error);
         await updateSyncStatus(
@@ -115,7 +115,8 @@ async function processTokens(
   sync_id: string, 
   access_token: string,
   refresh_token: string,
-  users: Array<{googleId: string, userId: string}> | undefined
+  users: Array<{googleId: string, userId: string}> | undefined,
+  request: Request
 ) {
   try {
     console.log(`[Tokens ${sync_id}] Starting token fetch for organization: ${organization_id}`);
@@ -324,32 +325,54 @@ async function processTokens(
     // Trigger the final phase - the relationships processing
     await updateSyncStatus(sync_id, 80, 'Saving application token relationships');
     
-    const host = process.env.VERCEL_URL || 'localhost:3000';
-    const protocol = host.includes('localhost') ? 'http://' : 'https://';
-    const nextUrl = `${protocol}${host}/api/background/sync/relations`;
+    // Get the host from multiple possible sources to ensure reliability
+    const selfUrl = request.headers.get('host') || process.env.VERCEL_URL || 'localhost:3000';
+    const protocol = selfUrl.includes('localhost') ? 'http://' : 'https://';
+    const nextUrl = `${protocol}${selfUrl}/api/background/sync/relations`;
     
     console.log(`Triggering relations processing at: ${nextUrl}`);
     
-    const nextResponse = await fetch(nextUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        organization_id,
-        sync_id,
-        userAppRelations: userAppRelationsToProcess,
-        appMap: Array.from(appIdMap.entries()).map(([appName, appId]) => ({ appName, appId }))
-      }),
-    });
-    
-    if (!nextResponse.ok) {
-      const errorText = await nextResponse.text();
-      console.error(`Failed to trigger relations processing: ${errorText}`);
-      throw new Error(`Failed to trigger relations processing: ${errorText}`);
+    try {
+      const nextResponse = await fetch(nextUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          organization_id,
+          sync_id,
+          userAppRelations: userAppRelationsToProcess,
+          appMap: Array.from(appIdMap.entries()).map(([appName, appId]) => ({ appName, appId }))
+        }),
+      });
+      
+      if (!nextResponse.ok) {
+        const errorText = await nextResponse.text();
+        console.error(`Failed to trigger relations processing: ${nextResponse.status} ${nextResponse.statusText}`);
+        console.error(`Response details: ${errorText}`);
+        
+        // Despite the error, mark as partially complete since we have user and app data
+        await updateSyncStatus(
+          sync_id, 
+          90, 
+          `Completed with partial data. User and app information was saved, but relationships could not be processed.`,
+          'COMPLETED'
+        );
+        return;
+      }
+      
+      console.log(`[Tokens ${sync_id}] Token processing completed successfully`);
+    } catch (error: any) {
+      console.error(`[Tokens ${sync_id}] Error triggering relations processing:`, error);
+      
+      // Mark as partially complete
+      await updateSyncStatus(
+        sync_id, 
+        90, 
+        `Completed with partial data. User and app information was saved, but relationships could not be processed: ${error.message}`,
+        'COMPLETED'
+      );
     }
-    
-    console.log(`[Tokens ${sync_id}] Token processing completed successfully`);
     
   } catch (error: any) {
     console.error(`[Tokens ${sync_id}] Error in token processing:`, error);
