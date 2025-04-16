@@ -67,7 +67,7 @@ export function middleware(request: NextRequest) {
 
   // If user is authenticated and trying to access login page, redirect to dashboard
   if (isAuthenticated && path === '/login') {
-    return NextResponse.redirect(new URL(`/${orgId}`, request.url));
+    return NextResponse.redirect(new URL(`/?orgId=${orgId}`, request.url));
   }
 
   // If user is not authenticated and trying to access non-public path, redirect to login
