@@ -42,6 +42,11 @@ export class GoogleWorkspaceService {
     this.oauth2Client.setCredentials(tokens);
   }
 
+  // New method to get current credentials
+  getCredentials() {
+    return this.oauth2Client.credentials;
+  }
+
   async getUsersList() {
     const response = await this.admin.users.list({
       customer: 'my_customer',

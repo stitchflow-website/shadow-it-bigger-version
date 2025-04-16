@@ -5,15 +5,26 @@ import { determineRiskLevel } from '@/lib/risk-assessment';
 
 // Helper function to update sync status
 async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
-  return await supabaseAdmin
-    .from('sync_status')
-    .update({
-      status,
-      progress,
-      message,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', syncId);
+  try {
+    const { error } = await supabaseAdmin
+      .from('sync_status')
+      .update({
+        status,
+        progress,
+        message,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', syncId);
+      
+    if (error) {
+      console.error(`Error updating sync status: ${error.message}`);
+    }
+    
+    return { success: !error };
+  } catch (err) {
+    console.error('Unexpected error in updateSyncStatus:', err);
+    return { success: false };
+  }
 }
 
 // Helper function to safely format date
@@ -68,7 +79,7 @@ export async function POST(request: Request) {
       user_hd: requestData.user_hd ? 'present' : 'missing'
     });
 
-    const { organization_id, sync_id, access_token, refresh_token } = requestData;
+    const { organization_id, sync_id, access_token, refresh_token, user_email, user_hd } = requestData;
 
     // Validate required fields
     if (!organization_id || !sync_id || !access_token || !refresh_token) {
@@ -102,11 +113,28 @@ export async function POST(request: Request) {
       console.log('Setting credentials');
       await googleService.setCredentials({ 
         access_token,
-        refresh_token
+        refresh_token,
+        expiry_date: Date.now() + 3600 * 1000 // Add expiry_date to help with token refresh
       });
       
       // Update status and trigger the first phase
       await updateSyncStatus(sync_id, 10, 'Fetching users from Google Workspace');
+      
+      // Store user info in case we need it for future token refresh
+      if (user_email && user_hd) {
+        try {
+          await supabaseAdmin
+            .from('sync_status')
+            .update({
+              user_email: user_email,
+              user_domain: user_hd
+            })
+            .eq('id', sync_id);
+        } catch (userInfoError) {
+          console.error('Error storing user info in sync status:', userInfoError);
+          // Non-critical, continue anyway
+        }
+      }
       
       // Make a request to self to start the user fetching process
       const selfUrl = request.headers.get('host') || 'localhost:3000';
@@ -130,11 +158,20 @@ export async function POST(request: Request) {
       });
       
       if (!fetchResponse.ok) {
-        console.error('Failed to trigger user fetch:', await fetchResponse.text());
+        const errorText = await fetchResponse.text();
+        console.error('Failed to trigger user fetch:', errorText);
+        
+        // If this initial request fails, we should update the sync status
+        await updateSyncStatus(
+          sync_id,
+          -1,
+          `Failed to start user fetch: ${fetchResponse.status} ${fetchResponse.statusText}`,
+          'FAILED'
+        );
       } else {
         console.log('User fetch job triggered successfully');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error initializing background process:', error);
       await updateSyncStatus(
         sync_id,
@@ -145,11 +182,15 @@ export async function POST(request: Request) {
     }
     
     // Send immediate response
-    return NextResponse.json({ message: 'Sync started in background' });
+    return NextResponse.json({ 
+      message: 'Sync started in background',
+      syncId: sync_id,
+      organizationId: organization_id
+    });
   } catch (error: any) {
     console.error('Error in background sync API:', error);
     return NextResponse.json(
-      { error: 'Failed to start background sync' },
+      { error: 'Failed to start background sync', details: error.message },
       { status: 500 }
     );
   }

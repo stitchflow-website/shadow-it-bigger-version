@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
 
 function LoadingContent() {
   const router = useRouter();
@@ -14,6 +15,8 @@ function LoadingContent() {
   const [status, setStatus] = useState('IN_PROGRESS');
   const [message, setMessage] = useState('Starting data sync...');
   const [error, setError] = useState<string | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [authRedirected, setAuthRedirected] = useState(false);
 
   useEffect(() => {
     if (!syncId) {
@@ -39,12 +42,20 @@ function LoadingContent() {
           setProgress(data.progress);
           setStatus(data.status);
           setMessage(data.message || 'Processing your data...');
+          
+          if (data.organization_id) {
+            setOrgId(data.organization_id);
+          }
 
           // If completed, redirect to dashboard
           if (data.status === 'COMPLETED') {
             // Wait a moment to show 100% before redirecting
             setTimeout(() => {
-              router.push('/');
+              if (data.organization_id) {
+                router.push(`/?orgId=${data.organization_id}`);
+              } else {
+                router.push('/');
+              }
             }, 1500);
             return;
           }
@@ -57,6 +68,18 @@ function LoadingContent() {
         }
       } catch (err) {
         console.error('Error in sync status check:', err);
+        
+        // Special handling for authentication errors
+        if (!authRedirected && (err instanceof Error) && err.message.includes('Authentication')) {
+          setAuthRedirected(true);
+          // Add a delay before redirecting to login
+          setTimeout(() => {
+            router.push('/login');
+          }, 2000);
+          setError('Authentication error. Redirecting to login...');
+          return;
+        }
+        
         setError('An unexpected error occurred. Please refresh the page or contact support.');
       }
     };
@@ -69,7 +92,16 @@ function LoadingContent() {
 
     // Clean up on unmount
     return () => clearInterval(intervalId);
-  }, [syncId, router]);
+  }, [syncId, router, authRedirected]);
+
+  // Function to manually go to dashboard
+  const goToDashboard = () => {
+    if (orgId) {
+      router.push(`/?orgId=${orgId}`);
+    } else {
+      router.push('/');
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -85,12 +117,12 @@ function LoadingContent() {
             <div className="text-red-500 mb-4 p-4 bg-red-50 rounded-md">
               {error}
               <div className="mt-4">
-                <button 
+                <Button 
+                  onClick={goToDashboard}
                   className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                  onClick={() => router.push('/')}
                 >
                   Go to Dashboard
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -108,6 +140,17 @@ function LoadingContent() {
                   <br />
                   This process is running in the background, so you'll be redirected once it completes.
                 </p>
+                {progress >= 50 && (
+                  <div className="mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={goToDashboard}
+                      className="mt-2"
+                    >
+                      View Progress in Dashboard
+                    </Button>
+                  </div>
+                )}
               </div>
             </>
           )}

@@ -4,15 +4,26 @@ import { supabaseAdmin } from '@/lib/supabase';
 
 // Helper function to update sync status
 async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
-  return await supabaseAdmin
-    .from('sync_status')
-    .update({
-      status,
-      progress,
-      message,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', syncId);
+  try {
+    const { error } = await supabaseAdmin
+      .from('sync_status')
+      .update({
+        status,
+        progress,
+        message,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', syncId);
+      
+    if (error) {
+      console.error(`Error updating sync status: ${error.message}`);
+    }
+    
+    return { success: !error };
+  } catch (err) {
+    console.error('Unexpected error in updateSyncStatus:', err);
+    return { success: false };
+  }
 }
 
 export const maxDuration = 300; // Set max duration to 300 seconds (5 minutes)
@@ -35,10 +46,14 @@ export async function POST(request: Request) {
     }
 
     // Send immediate response
-    const response = NextResponse.json({ message: 'User fetch started' });
+    const response = NextResponse.json({ 
+      message: 'User fetch started',
+      syncId: sync_id,
+      organizationId: organization_id
+    });
     
     // Process in the background
-    processUsers(organization_id, sync_id, access_token, refresh_token)
+    processUsers(organization_id, sync_id, access_token, refresh_token, request)
       .catch(async (error) => {
         console.error('User processing failed:', error);
         await updateSyncStatus(
@@ -53,13 +68,19 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('Error in user fetch API:', error);
     return NextResponse.json(
-      { error: 'Failed to process users' },
+      { error: 'Failed to process users', details: error.message },
       { status: 500 }
     );
   }
 }
 
-async function processUsers(organization_id: string, sync_id: string, access_token: string, refresh_token: string) {
+async function processUsers(
+  organization_id: string, 
+  sync_id: string, 
+  access_token: string, 
+  refresh_token: string,
+  originalRequest: Request
+) {
   try {
     console.log(`[Users ${sync_id}] Starting user fetch for organization: ${organization_id}`);
     
@@ -72,7 +93,8 @@ async function processUsers(organization_id: string, sync_id: string, access_tok
 
     await googleService.setCredentials({ 
       access_token,
-      refresh_token
+      refresh_token,
+      expiry_date: Date.now() + 3600 * 1000 // Add expiry_date to help with token refresh
     });
     
     await updateSyncStatus(sync_id, 15, 'Fetching users from Google Workspace');
@@ -96,6 +118,15 @@ async function processUsers(organization_id: string, sync_id: string, access_tok
         errorMessage += `: ${userFetchError.response.data.error.message}`;
       } else if (userFetchError?.message) {
         errorMessage += `: ${userFetchError.message}`;
+      }
+
+      // Check if this is an auth error
+      const isAuthError = 
+        userFetchError?.response?.status === 401 || 
+        (userFetchError?.message && userFetchError.message.toLowerCase().includes('auth'));
+      
+      if (isAuthError) {
+        errorMessage = 'Authentication error: Unable to access Google Workspace. Please re-authenticate.';
       }
 
       await updateSyncStatus(sync_id, -1, errorMessage, 'FAILED');
@@ -164,12 +195,17 @@ async function processUsers(organization_id: string, sync_id: string, access_tok
     // Update status and trigger token fetch process
     await updateSyncStatus(sync_id, 30, 'Fetching application data from Google Workspace');
     
-    // Trigger the next phase of the process - token fetch
-    const host = process.env.VERCEL_URL || 'localhost:3000';
+    // Get the current host from the request
+    const host = originalRequest.headers.get('host') || process.env.VERCEL_URL || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http://' : 'https://';
     const nextUrl = `${protocol}${host}/api/background/sync/tokens`;
     
     console.log(`Triggering token fetch at: ${nextUrl}`);
+
+    // Get the latest tokens in case they were refreshed during user fetching
+    const credentials = googleService.getCredentials();
+    const current_access_token = credentials.access_token || access_token;
+    const current_refresh_token = credentials.refresh_token || refresh_token;
 
     const nextResponse = await fetch(nextUrl, {
       method: 'POST',
@@ -179,8 +215,8 @@ async function processUsers(organization_id: string, sync_id: string, access_tok
       body: JSON.stringify({
         organization_id,
         sync_id,
-        access_token,
-        refresh_token,
+        access_token: current_access_token,
+        refresh_token: current_refresh_token,
         users: Array.from(userMap.entries()).map(([googleId, userId]) => ({ googleId, userId }))
       }),
     });
@@ -188,7 +224,7 @@ async function processUsers(organization_id: string, sync_id: string, access_tok
     if (!nextResponse.ok) {
       const errorText = await nextResponse.text();
       console.error(`Failed to trigger token fetch: ${errorText}`);
-      throw new Error(`Failed to trigger token fetch: ${errorText}`);
+      throw new Error(`Failed to trigger token fetch: ${nextResponse.status} ${nextResponse.statusText}`);
     }
     
     console.log('User processing completed successfully, tokens processing triggered');
