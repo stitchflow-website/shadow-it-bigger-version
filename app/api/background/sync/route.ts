@@ -52,6 +52,7 @@ function formatDate(dateValue: any): string {
 
 export const maxDuration = 300; // Set max duration to 300 seconds (5 minutes)
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
 
 export async function POST(request: Request) {
   try {

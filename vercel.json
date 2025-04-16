@@ -2,7 +2,13 @@
   "functions": {
     "app/api/auth/google/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/background/sync/**/*": {
+      "maxDuration": 900
     }
   },
-  "crons": []
+  "crons": [],
+  "experimental": {
+    "enableFluidCompute": true
+  }
 } 
