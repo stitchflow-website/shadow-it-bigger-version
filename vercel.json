@@ -4,12 +4,8 @@
       "maxDuration": 300
     },
     "app/api/background/sync/**/*": {
-      "maxDuration": 800,
-      "runtime": "nodejs"
+      "maxDuration": 800
     }
   },
-  "crons": [],
-  "experimental": {
-    "enableFluidCompute": true
-  }
+  "crons": []
 } 
