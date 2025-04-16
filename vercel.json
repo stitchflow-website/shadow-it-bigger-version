@@ -4,7 +4,8 @@
       "maxDuration": 300
     },
     "app/api/background/sync/**/*": {
-      "maxDuration": 900
+      "maxDuration": 800,
+      "runtime": "nodejs"
     }
   },
   "crons": [],
