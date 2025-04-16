@@ -1,7 +1,8 @@
 {
+  "buildCommand": "next build",
   "functions": {
-    "api/**/*.ts": {
-      "maxDuration": 60
+    "app/api/**/*": {
+      "maxDuration": 300
     }
   },
   "crons": []
