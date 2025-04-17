@@ -9,6 +9,7 @@ import Link from 'next/link';
 function LoginContent() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loginProvider, setLoginProvider] = useState<'google' | 'microsoft' | null>(null);
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -16,13 +17,19 @@ function LoginContent() {
     if (errorParam) {
       switch (errorParam) {
         case 'no_code':
-          setError('No authorization code received from Google');
+          setError('No authorization code received');
           break;
         case 'auth_failed':
           setError('Authentication failed. Please try again.');
           break;
         case 'not_workspace_account':
           setError('Please sign in with a Google Workspace account. Personal Gmail accounts are not supported.');
+          break;
+        case 'not_work_account':
+          setError('Please sign in with a Microsoft work or school account. Personal Microsoft accounts are not supported.');
+          break;
+        case 'config_missing':
+          setError('Authentication configuration is missing. Please contact support.');
           break;
         default:
           setError('An error occurred during authentication');
@@ -33,6 +40,7 @@ function LoginContent() {
   const handleGoogleLogin = () => {
     try {
       setIsLoading(true);
+      setLoginProvider('google');
       setError(null);
 
       const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -80,6 +88,66 @@ function LoginContent() {
       console.error('Login error:', err);
       setError('Failed to initialize login. Please try again.');
       setIsLoading(false);
+      setLoginProvider(null);
+    }
+  };
+
+  const handleMicrosoftLogin = () => {
+    try {
+      console.log('Starting Microsoft login flow...');
+      setIsLoading(true);
+      setLoginProvider('microsoft');
+      setError(null);
+
+      const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
+      let redirectUri = process.env.NEXT_PUBLIC_MICROSOFT_REDIRECT_URI;
+
+      console.log('Microsoft client ID:', clientId?.substring(0, 8) + '...');
+      console.log('Microsoft redirect URI:', redirectUri);
+
+      if (!clientId || !redirectUri) {
+        setError("Missing Microsoft OAuth configuration");
+        console.error('Missing env variables:', { 
+          clientId: clientId ? 'present' : 'missing',
+          redirectUri: redirectUri ? 'present' : 'missing'
+        });
+        setIsLoading(false);
+        setLoginProvider(null);
+        return;
+      }
+
+      // If we're on localhost, update the redirect URI
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        redirectUri = window.location.origin + '/api/auth/microsoft';
+        console.log('Updated redirect URI for localhost:', redirectUri);
+      }
+      
+      const scopes = [
+        // Microsoft Graph API scopes
+        'User.Read',
+        'Directory.Read.All',
+        'offline_access', // For refresh tokens
+        'openid',
+        'profile',
+        'email'
+      ].join(' ');
+
+      console.log('Microsoft scopes:', scopes);
+      const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+      authUrl.searchParams.append('client_id', clientId);
+      authUrl.searchParams.append('redirect_uri', redirectUri);
+      authUrl.searchParams.append('response_type', 'code');
+      authUrl.searchParams.append('scope', scopes);
+      authUrl.searchParams.append('response_mode', 'query');
+      authUrl.searchParams.append('prompt', 'consent');
+
+      console.log('Redirecting to Microsoft auth URL:', authUrl.toString());
+      window.location.href = authUrl.toString();
+    } catch (err) {
+      console.error('Microsoft login error:', err);
+      setError('Failed to initialize Microsoft login. Please try again.');
+      setIsLoading(false);
+      setLoginProvider(null);
     }
   };
 
@@ -90,7 +158,7 @@ function LoginContent() {
           <CardHeader>
             <CardTitle>Welcome to Shadow IT Scanner</CardTitle>
             <CardDescription>
-              Sign in with your Google Workspace account to manage your organization's applications.
+              Sign in with your organization account to manage your applications.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -99,15 +167,27 @@ function LoginContent() {
                 {error}
               </div>
             )}
-            <Button 
-              onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-              size="lg"
-              disabled={isLoading}
-            >
-              <img src="/google-logo.svg" alt="Google logo" className="h-5 w-5" />
-              {isLoading ? 'Connecting...' : 'Sign in with Google Workspace'}
-            </Button>
+            <div className="flex flex-col space-y-4">
+              <Button 
+                onClick={handleGoogleLogin}
+                className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                size="lg"
+                disabled={isLoading}
+              >
+                <img src="/google-logo.svg" alt="Google logo" className="h-5 w-5" />
+                {isLoading && loginProvider === 'google' ? 'Connecting...' : 'Sign in with Google Workspace'}
+              </Button>
+              
+              <Button 
+                onClick={handleMicrosoftLogin}
+                className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                size="lg"
+                disabled={isLoading}
+              >
+                <img src="/microsoft-logo.svg" alt="Microsoft logo" className="h-5 w-5" />
+                {isLoading && loginProvider === 'microsoft' ? 'Connecting...' : 'Sign in with Microsoft Entra ID'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -188,7 +188,7 @@ Respond with only the category name as a string.`;
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o-mini',
         messages: [
           { 
             role: 'system', 
