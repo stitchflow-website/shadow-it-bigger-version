@@ -21,83 +21,59 @@ const PUBLIC_FILE_PATTERNS = [
   /^\/manifest\.json$/,                // manifest file
 ];
 
-export function middleware(request: NextRequest) {
-  const path = request.nextUrl.pathname;
-  const searchParams = request.nextUrl.searchParams;
-  const host = request.headers.get('host') || '';
+// This function runs on every request
+export async function middleware(request: NextRequest) {
+  console.log('Middleware path:', request.nextUrl.pathname);
   
-  // Debug info
-  console.log(`Middleware path: ${path}`);
-  console.log(`Host: ${host}`);
-  console.log(`Search params: ${searchParams.toString()}`);
+  // Skip auth check for public routes
+  const publicRoutes = [
+    '/login',
+    '/api/auth/google',
+    '/api/auth/microsoft',
+    '/api/auth/session',
+    '/loading', // Add loading page to public routes
+    '/google-logo.svg',
+    '/microsoft-logo.svg',
+    '/privacy',
+    '/terms',
+  ];
   
-  // Get authentication cookies
-  const orgId = request.cookies.get('orgId')?.value;
-  const userEmail = request.cookies.get('userEmail')?.value;
-  
-  console.log(`orgId cookie: ${orgId}`);
-  console.log(`userEmail cookie: ${userEmail}`);
-  
-  // Check if the user is authenticated
-  const isAuthenticated = orgId && userEmail;
-  console.log(`isAuthenticated: ${isAuthenticated}`);
-
-  // Helper function to create base URL
-  const getBaseUrl = () => {
-    const host = request.headers.get('host') || 'localhost:3000';
-    const protocol = host.includes('localhost') ? 'http://' : 'https://';
-    return `${protocol}${host}`;
-  };
-
-  // Check if the path is for a public file
-  const isPublicFile = PUBLIC_FILE_PATTERNS.some(pattern => pattern.test(path));
-  if (isPublicFile) {
-    return NextResponse.next();
-  }
-
-  // Skip middleware completely for API routes other than auth
-  if (path.startsWith('/api') && !path.startsWith('/api/auth')) {
-    return NextResponse.next();
-  }
-
-  // Check if the path is public
-  const isPublicPath = PUBLIC_PATHS.some(publicPath => 
-    path === publicPath || path.startsWith(publicPath)
+  // Check if current URL is a public route
+  const isPublicRoute = publicRoutes.some(route => 
+    request.nextUrl.pathname === route || request.nextUrl.pathname.startsWith(route)
   );
-
-  // If user is authenticated and trying to access login page, redirect to dashboard
-  if (isAuthenticated && path === '/login') {
-    return NextResponse.redirect(new URL(`/?orgId=${orgId}`, request.url));
-  }
-
-  // If user is not authenticated and trying to access non-public path, redirect to login
-  if (!isAuthenticated && !isPublicPath) {
+  
+  // Just check for the presence of user_info cookie for now
+  const userInfo = request.cookies.get('user_info')?.value;
+  const isAuthenticated = !!userInfo;
+  
+  console.log('isAuthenticated:', isAuthenticated, 'isPublicRoute:', isPublicRoute);
+  
+  // Redirect logic
+  if (!isAuthenticated && !isPublicRoute) {
+    // Redirect to login page if not authenticated and trying to access protected route
     return NextResponse.redirect(new URL('/login', request.url));
   }
-
-  // For authenticated users, set organization and user headers
-  const response = NextResponse.next();
-  if (orgId) {
-    response.headers.set('x-organization-id', orgId);
+  
+  if (isAuthenticated && request.nextUrl.pathname === '/login') {
+    // Redirect to home page if already authenticated and trying to access login page
+    return NextResponse.redirect(new URL('/', request.url));
   }
-  if (userEmail) {
-    response.headers.set('x-user-email', userEmail);
-  }
-
-  return response;
+  
+  // Continue with the request
+  return NextResponse.next();
 }
 
-// Configure the paths that middleware should run on
+// Configure which routes use this middleware
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
-     * 1. _next/static (static files)
-     * 2. _next/image (image optimization files)
-     * 3. favicon.ico (favicon file)
-     * 4. public folder
-     * 5. images in various formats
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public folder
      */
-    '/((?!_next/static|_next/image|favicon.ico|public/|assets/|images/|.*\\.(?:jpg|jpeg|gif|png|svg|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
   ],
 }; 

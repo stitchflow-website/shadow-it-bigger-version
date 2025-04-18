@@ -166,7 +166,8 @@ export async function GET(request: Request) {
         access_token: oauthTokens.access_token,
         refresh_token: oauthTokens.refresh_token,
         user_email: userInfo.email,
-        user_hd: userInfo.hd
+        user_hd: userInfo.hd,
+        provider: 'google'
       };
       console.log('Background sync payload:', {
         ...syncPayload,
@@ -201,20 +202,17 @@ export async function GET(request: Request) {
     // Modify the final redirect to use the helper function
     const response = NextResponse.redirect(createRedirectUrl(`/loading?syncId=${syncStatus.id}`));
     
-    // Set secure cookies for session management
+    // Set secure cookies for session management using same approach as Microsoft
     const cookieDomain = isFromMainSite ? new URL(referer).hostname : undefined;
     
-    response.cookies.set('orgId', org.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60,
-      path: '/',
-      domain: cookieDomain
-    });
-    
-    response.cookies.set('userEmail', userInfo.email, {
-      httpOnly: true,
+    response.cookies.set('user_info', JSON.stringify({
+      id: userInfo.id || userInfo.sub,
+      email: userInfo.email,
+      name: userInfo.name,
+      org_id: org.id,
+      provider: 'google'
+    }), {
+      httpOnly: false, // Allow JavaScript access
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60,
@@ -237,8 +235,7 @@ export async function GET(request: Request) {
     
     // Clear cookies on error
     const response = NextResponse.redirect(redirectUrl);
-    response.cookies.delete('orgId');
-    response.cookies.delete('userEmail');
+    response.cookies.delete('user_info');
     return response;
   }
 }
