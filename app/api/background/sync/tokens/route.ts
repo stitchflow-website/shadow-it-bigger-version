@@ -318,34 +318,25 @@ async function processTokens(
     const selfUrl = request.headers.get('host') || process.env.VERCEL_URL || 'localhost:3000';
     const protocol = selfUrl.includes('localhost') ? 'http://' : 'https://';
     
-    // Trigger app categorization process
+    // Trigger app categorization process in parallel
     const categorizeUrl = `${protocol}${selfUrl}/api/background/sync/categorize`;
     
     console.log(`[Tokens ${sync_id}] Triggering app categorization at: ${categorizeUrl}`);
     
-    try {
-      const categorizeResponse = await fetch(categorizeUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          organization_id,
-          sync_id
-        }),
-      });
-      
-      if (!categorizeResponse.ok) {
-        const errorText = await categorizeResponse.text();
-        console.warn(`[Tokens ${sync_id}] Failed to trigger app categorization: ${errorText}`);
-        // Continue with relation processing even if categorization fails
-      } else {
-        console.log(`[Tokens ${sync_id}] App categorization job triggered successfully`);
-      }
-    } catch (categorizationError) {
-      console.warn(`[Tokens ${sync_id}] Error triggering categorization:`, categorizationError);
-      // Continue with relation processing even if categorization fails
-    }
+    // Fire and forget - don't await the response
+    fetch(categorizeUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        organization_id,
+        sync_id
+      }),
+    }).catch(error => {
+      console.warn(`[Tokens ${sync_id}] Error triggering categorization:`, error);
+      // Continue with main sync process even if categorization fails
+    });
     
     // Prepare user app relationships for the next phase
     await updateSyncStatus(sync_id, 80, `Preparing user-application relationships`);

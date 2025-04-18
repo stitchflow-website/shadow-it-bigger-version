@@ -87,7 +87,7 @@ export class GoogleWorkspaceService {
         
         const batchPromises = currentBatches.map(async (userBatch, batchIndex) => {
           // Stagger the start of concurrent batches to avoid rate limits
-          await new Promise(resolve => setTimeout(resolve, batchIndex * 200));
+          await new Promise(resolve => setTimeout(resolve, batchIndex * 100));
           
           return Promise.all(userBatch.map(async (user: any) => {
             try {
@@ -114,6 +114,8 @@ export class GoogleWorkspaceService {
         // Brief pause between major batch groups to respect rate limits
         if (i + maxConcurrentBatches < userBatches.length) {
           await new Promise(resolve => setTimeout(resolve, 500));
+          // This 500ms pause between major batch groups helps prevent
+          // overwhelming the API with too many requests in a short time
         }
       }
       

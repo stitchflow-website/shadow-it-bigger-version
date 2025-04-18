@@ -17,6 +17,37 @@ function LoadingContent() {
   const [error, setError] = useState<string | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [authRedirected, setAuthRedirected] = useState(false);
+  const [stuckSync, setStuckSync] = useState(false);
+  const [lastProgressUpdate, setLastProgressUpdate] = useState<number>(Date.now());
+
+  // Function to manually complete a stuck sync
+  const completeStuckSync = async () => {
+    if (!syncId) return;
+    
+    try {
+      const response = await fetch('/api/background/sync/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ syncId }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to complete sync: ${response.statusText}`);
+      }
+      
+      // Redirect to dashboard after completion
+      if (orgId) {
+        router.push(`/?orgId=${orgId}`);
+      } else {
+        router.push('/');
+      }
+    } catch (err) {
+      console.error('Error completing sync:', err);
+      setError('Failed to complete sync. Please try refreshing the page.');
+    }
+  };
 
   useEffect(() => {
     if (!syncId) {
@@ -27,7 +58,6 @@ function LoadingContent() {
     // Function to check sync status
     const checkSyncStatus = async () => {
       try {
-        // Use the API endpoint instead of direct Supabase access
         const response = await fetch(`/api/sync/status?syncId=${syncId}`);
         
         if (!response.ok) {
@@ -47,9 +77,10 @@ function LoadingContent() {
             setOrgId(data.organization_id);
           }
 
-          // If completed, redirect to dashboard
-          if (data.status === 'COMPLETED') {
-            // Wait a moment to show 100% before redirecting
+          // If main sync is complete (progress >= 85%), redirect to dashboard
+          // This means we don't wait for categorization to complete
+          if (data.progress >= 85 || data.status === 'COMPLETED') {
+            // Wait a moment to show progress before redirecting
             setTimeout(() => {
               if (data.organization_id) {
                 router.push(`/?orgId=${data.organization_id}`);
@@ -69,10 +100,8 @@ function LoadingContent() {
       } catch (err) {
         console.error('Error in sync status check:', err);
         
-        // Special handling for authentication errors
         if (!authRedirected && (err instanceof Error) && err.message.includes('Authentication')) {
           setAuthRedirected(true);
-          // Add a delay before redirecting to login
           setTimeout(() => {
             router.push('/login');
           }, 2000);
@@ -152,6 +181,19 @@ function LoadingContent() {
                   </div>
                 )}
               </div>
+              {/* Add a button to manually complete sync if it seems stuck */}
+              {stuckSync && progress >= 75 && progress < 100 && status === 'IN_PROGRESS' && (
+                <div className="mt-4">
+                  <p className="text-amber-600 mb-2">Sync seems to be taking longer than expected.</p>
+                  <Button
+                    variant="secondary"
+                    onClick={completeStuckSync}
+                    className="mt-2"
+                  >
+                    Manually Complete Sync
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </CardContent>

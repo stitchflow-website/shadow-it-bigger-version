@@ -48,53 +48,40 @@ export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
 
 export async function POST(request: Request) {
   try {
-    console.log('Starting application categorization');
-    
     const requestData = await request.json();
-    const { organization_id, sync_id } = requestData;
+    const { organization_id } = requestData;
 
-    // Validate required fields
-    if (!organization_id || !sync_id) {
+    if (!organization_id) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing organization_id' },
         { status: 400 }
       );
     }
 
-    // Send immediate response
-    const response = NextResponse.json({ message: 'Categorization started' });
-    
-    // Process in the background
-    categorizeApplications(organization_id, sync_id)
-      .catch(async (error) => {
-        console.error('Categorization failed:', error);
-        await updateSyncStatus(
-          sync_id,
-          -1,
-          `Categorization failed: ${error.message}`,
-          'FAILED'
-        );
+    // Start categorization in background without blocking
+    categorizeApplications(organization_id)
+      .catch(error => {
+        console.error('Background categorization failed:', error);
       });
-    
-    return response;
+
+    // Return immediate success response
+    return NextResponse.json({ 
+      message: 'Application categorization started in background',
+      status: 'IN_PROGRESS'
+    });
+
   } catch (error: any) {
     console.error('Error in categorization API:', error);
     return NextResponse.json(
-      { error: 'Failed to categorize applications', details: error.message },
+      { error: 'Failed to start categorization', details: error.message },
       { status: 500 }
     );
   }
 }
 
-async function categorizeApplications(
-  organization_id: string, 
-  sync_id: string
-) {
+async function categorizeApplications(organization_id: string) {
   try {
-    console.log(`[Categorize ${sync_id}] Starting categorization for organization: ${organization_id}`);
-    
-    // Update status
-    await updateSyncStatus(sync_id, 76, 'Categorizing applications');
+    console.log(`[Categorize] Starting background categorization for organization: ${organization_id}`);
     
     // Fetch all applications that need categorization
     const { data: applications, error: fetchError } = await supabaseAdmin
@@ -104,16 +91,36 @@ async function categorizeApplications(
       .or('category.is.null,category.eq.Unknown');
     
     if (fetchError) {
-      console.error(`[Categorize ${sync_id}] Error fetching applications:`, fetchError);
+      console.error(`[Categorize] Error fetching applications:`, fetchError);
       throw fetchError;
     }
     
-    console.log(`[Categorize ${sync_id}] Found ${applications?.length || 0} applications to categorize`);
+    console.log(`[Categorize] Found ${applications?.length || 0} applications to categorize`);
     
     if (!applications || applications.length === 0) {
-      console.log(`[Categorize ${sync_id}] No applications need categorization`);
-      await updateSyncStatus(sync_id, 78, 'No applications needed categorization');
+      console.log(`[Categorize] No applications need categorization`);
       return;
+    }
+
+    // Initialize categorization status for all applications
+    const categorizationStatuses = applications.map(app => ({
+      application_id: app.id,
+      organization_id: organization_id,
+      status: 'IN_PROGRESS' as const,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
+
+    // Insert initial status records
+    const { error: statusError } = await supabaseAdmin
+      .from('categorization_status')
+      .upsert(categorizationStatuses, { 
+        onConflict: 'application_id',
+        ignoreDuplicates: false
+      });
+
+    if (statusError) {
+      console.error(`[Categorize] Error initializing categorization status:`, statusError);
     }
     
     // Process applications in batches to avoid rate limits and timeout
@@ -125,28 +132,67 @@ async function categorizeApplications(
       
       // Categorize each application in the batch
       const categorizedBatch = await Promise.all(batch.map(async (app) => {
-        const category = await categorizeApplication(app.name, app.all_scopes);
-        return {
-          id: app.id,
-          category
-        };
+        try {
+          const category = await categorizeApplication(app.name, app.all_scopes);
+          return {
+            id: app.id,
+            category,
+            success: true
+          };
+        } catch (error) {
+          console.error(`[Categorize] Error categorizing app ${app.id}:`, error);
+          return {
+            id: app.id,
+            success: false
+          };
+        }
       }));
       
       // Update the database with the categorized applications
       for (const app of categorizedBatch) {
+        if (!app.success) {
+          // Update status to failed
+          await supabaseAdmin
+            .from('categorization_status')
+            .update({ 
+              status: 'FAILED',
+              updated_at: new Date().toISOString()
+            })
+            .eq('application_id', app.id);
+          continue;
+        }
+
+        // Update application category
         const { error: updateError } = await supabaseAdmin
           .from('applications')
           .update({ category: app.category })
           .eq('id', app.id);
           
         if (updateError) {
-          console.warn(`[Categorize ${sync_id}] Error updating category for app ${app.id}:`, updateError);
+          console.warn(`[Categorize] Error updating category for app ${app.id}:`, updateError);
+          // Update status to failed
+          await supabaseAdmin
+            .from('categorization_status')
+            .update({ 
+              status: 'FAILED',
+              updated_at: new Date().toISOString()
+            })
+            .eq('application_id', app.id);
+          continue;
         }
+
+        // Update categorization status to completed
+        await supabaseAdmin
+          .from('categorization_status')
+          .update({ 
+            status: 'COMPLETED',
+            updated_at: new Date().toISOString()
+          })
+          .eq('application_id', app.id);
       }
       
       processed += batch.length;
-      const progress = 76 + Math.floor((processed / applications.length) * 2);
-      await updateSyncStatus(sync_id, progress, `Categorized ${processed}/${applications.length} applications`);
+      console.log(`[Categorize] Processed ${processed}/${applications.length} applications`);
       
       // Pause briefly between batches to avoid overwhelming the API
       if (i + batchSize < applications.length) {
@@ -154,11 +200,10 @@ async function categorizeApplications(
       }
     }
     
-    console.log(`[Categorize ${sync_id}] Categorization completed for ${processed} applications`);
-    await updateSyncStatus(sync_id, 78, `Completed categorization of ${processed} applications`);
+    console.log(`[Categorize] Background categorization completed for ${processed} applications`);
     
   } catch (error: any) {
-    console.error(`[Categorize ${sync_id}] Error during categorization:`, error);
+    console.error(`[Categorize] Error during background categorization:`, error);
     throw error;
   }
 }
@@ -188,7 +233,7 @@ Respond with only the category name as a string.`;
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o-mini',
         messages: [
           { 
             role: 'system', 

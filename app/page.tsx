@@ -795,22 +795,22 @@ export default function ShadowITDashboard() {
   // Update the getCategoryColor function for charts
   const getCategoryColor = (category: string): string => {
     const categoryColors: Record<string, string> = {
-      "Analytics & Business Intelligence": "#3B82F6", // bright blue
-      "Cloud Platforms & Infrastructure": "#8B5CF6", // bright purple
-      "Customer Success & Support": "#10B981", // emerald green
-      "Design & Creative Tools": "#EC4899", // bright pink
-      "Developer & Engineering Tools": "#6366F1", // indigo
-      "Finance & Accounting": "#06B6D4", // cyan
-      "Human Resources & People Management": "#0EA5E9", // sky blue
-      "IT Operations & Security": "#EF4444", // red
-      "Identity & Access Management": "#F59E0B", // amber
-      "Productivity & Collaboration": "#6366F1", // indigo
-      "Project Management": "#FBBF24", // yellow
-      "Sales & Marketing": "#F97316", // orange
-      Others: "#6B7280", // gray
+      "Analytics & Business Intelligence": "#93C5FD", // blue-300
+      "Cloud Platforms & Infrastructure": "#C4B5FD", // purple-300
+      "Customer Success & Support": "#86EFAC", // green-300
+      "Design & Creative Tools": "#F9A8D4", // pink-300
+      "Developer & Engineering Tools": "#A5B4FC", // violet-300
+      "Finance & Accounting": "#67E8F9", // cyan-300
+      "Human Resources & People Management": "#7DD3FC", // sky-300
+      "IT Operations & Security": "#FCA5A5", // red-300
+      "Identity & Access Management": "#FCD34D", // amber-300
+      "Productivity & Collaboration": "#C4B5FD", // purple-300
+      "Project Management": "#FDE047", // yellow-300
+      "Sales & Marketing": "#FDBA74", // orange-300
+      Others: "#D1D5DB", // gray-300
     }
 
-    return categoryColors[category] || "#6B7280" // default to gray
+    return categoryColors[category] || "#D1D5DB" // default to gray-300
   }
 
   // Generate monthly active users data
