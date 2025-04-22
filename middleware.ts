@@ -6,6 +6,7 @@ const PUBLIC_PATHS = [
   '/login', 
   '/loading',
   '/privacy',
+  '/public',
   '/terms',
   '/auth/google',
   '/api/auth/google',  // Add the API route for OAuth callback
@@ -25,17 +26,24 @@ const PUBLIC_FILE_PATTERNS = [
 export async function middleware(request: NextRequest) {
   console.log('Middleware path:', request.nextUrl.pathname);
   
-  // Skip auth check for public routes
+  // Skip auth check for public routes and internal API calls
   const publicRoutes = [
     '/login',
     '/api/auth/google',
     '/api/auth/microsoft',
-    '/api/auth/session',
-    '/loading', // Add loading page to public routes
-    '/google-logo.svg',
-    '/microsoft-logo.svg',
-    '/privacy',
-    '/terms',
+    '/api/background/sync',
+    '/api/background/sync/google',
+    '/api/background/sync/microsoft',
+    '/api/background/sync/tokens',
+    '/api/background/sync/users',
+    '/api/background/sync/relations',
+    '/api/background/sync/categorize',
+    '/api/categorize',  // Add the categorization API
+    '/loading',
+    '/api/sync/status',
+    '/favicon.ico',
+    '/images',  // Add images directory
+    '/.*\\.(?:jpg|jpeg|gif|png|svg|ico|css|js)$'
   ];
   
   // Check if current URL is a public route
@@ -43,11 +51,14 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname === route || request.nextUrl.pathname.startsWith(route)
   );
   
-  // Just check for the presence of user_info cookie for now
-  const userInfo = request.cookies.get('user_info')?.value;
-  const isAuthenticated = !!userInfo;
+  // Check for internal API calls with service role key
+  const isInternalApiCall = request.headers.get('Authorization')?.includes(process.env.SUPABASE_SERVICE_ROLE_KEY || '');
   
-  console.log('isAuthenticated:', isAuthenticated, 'isPublicRoute:', isPublicRoute);
+  // Just check for the presence of user_info cookie for now
+  const userInfo = request.cookies.get('orgId')?.value;
+  const isAuthenticated = !!userInfo || isInternalApiCall;
+  
+  console.log('isAuthenticated:', isAuthenticated, 'isPublicRoute:', isPublicRoute, 'isInternalApiCall:', isInternalApiCall);
   
   // Redirect logic
   if (!isAuthenticated && !isPublicRoute) {
@@ -55,9 +66,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
   
-  if (isAuthenticated && request.nextUrl.pathname === '/login') {
+  if (isAuthenticated && request.nextUrl.pathname === '/login' && !isInternalApiCall) {
     // Redirect to home page if already authenticated and trying to access login page
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect(new URL(`/?orgId=${request.cookies.get('orgId')?.value}`, request.url));
   }
   
   // Continue with the request

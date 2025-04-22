@@ -7,7 +7,8 @@ ADD COLUMN IF NOT EXISTS microsoft_id_token text;
 
 -- Add Microsoft app ID field to applications table
 ALTER TABLE applications
-ADD COLUMN IF NOT EXISTS microsoft_app_id text;
+ADD COLUMN IF NOT EXISTS microsoft_app_id text,
+ADD COLUMN IF NOT EXISTS user_count integer DEFAULT 0;
 
 -- Create index for Microsoft user ID
 CREATE INDEX IF NOT EXISTS idx_users_microsoft_user_id ON users(microsoft_user_id);

@@ -18,27 +18,162 @@ const categories = [
   "Others"
 ];
 
-// Helper function to update sync status
-async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
+// Helper function to update categorization status
+export async function updateCategorizationStatus(statusId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
   try {
+    const updateData: any = {
+      status,
+      updated_at: new Date().toISOString()
+    };
+
+    // Only include progress and message if the columns exist
+    if (progress !== undefined) {
+      updateData.progress = progress;
+    }
+    if (message) {
+      updateData.message = message;
+    }
+
     const { error } = await supabaseAdmin
-      .from('sync_status')
-      .update({
-        status,
-        progress,
-        message,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', syncId);
+      .from('categorization_status')
+      .update(updateData)
+      .eq('id', statusId);
       
     if (error) {
-      console.error(`Error updating sync status: ${error.message}`);
+      console.error(`Error updating categorization status: ${error.message}`);
+      return false;
     }
     
-    return { success: !error };
+    return true;
   } catch (err) {
-    console.error('Unexpected error in updateSyncStatus:', err);
-    return { success: false };
+    console.error('Unexpected error in updateCategorizationStatus:', err);
+    return false;
+  }
+}
+
+// Helper function to create a new categorization status
+export async function createCategorizationStatus(organizationId: string, applicationId?: string) {
+  try {
+    const insertData: any = {
+      organization_id: organizationId,
+      status: 'PENDING',
+      progress: 0,
+      message: 'Initializing categorization process',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    // Only include application_id if provided
+    if (applicationId) {
+      insertData.application_id = applicationId;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('categorization_status')
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating categorization status:', error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Unexpected error in createCategorizationStatus:', error);
+    return null;
+  }
+}
+
+export async function categorizeApplications(organization_id: string, categorization_id: string) {
+  try {
+    console.log(`[Categorize] Starting categorization for organization: ${organization_id}`);
+    
+    await updateCategorizationStatus(categorization_id, 10, 'Fetching applications to categorize');
+    
+    // Fetch all applications that need categorization
+    const { data: applications, error: fetchError } = await supabaseAdmin
+      .from('applications')
+      .select('id, name, all_scopes, category, microsoft_app_id')
+      .eq('organization_id', organization_id)
+      .or('category.is.null,category.eq.uncategorized,category.eq.Unknown,category.eq.Others');
+    
+    if (fetchError) {
+      console.error(`[Categorize] Error fetching applications:`, fetchError);
+      await updateCategorizationStatus(categorization_id, 0, 'Error fetching applications', 'ERROR');
+      throw fetchError;
+    }
+    
+    console.log(`[Categorize] Found ${applications?.length || 0} applications to categorize`);
+    
+    if (!applications || applications.length === 0) {
+      console.log(`[Categorize] No applications need categorization`);
+      await updateCategorizationStatus(categorization_id, 100, 'No applications needed categorization', 'COMPLETED');
+      return;
+    }
+
+    // Process applications in smaller batches for better progress tracking
+    const batchSize = 5;
+    let categorizedCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < applications.length; i += batchSize) {
+      const batch = applications.slice(i, i + batchSize);
+      
+      // Process each application in the batch
+      await Promise.all(batch.map(async (app) => {
+        try {
+          // Determine category based on name and scopes
+          const category = await categorizeApplication(app.name, app.all_scopes || [], !!app.microsoft_app_id);
+          console.log(`[Categorize] Determined category for ${app.name}: ${category}`);
+          
+          // Update application with new category
+          const { error: updateError } = await supabaseAdmin
+            .from('applications')
+            .update({ 
+              category,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', app.id);
+            
+          if (updateError) {
+            console.error(`[Categorize] Error updating category for app ${app.id}:`, updateError);
+            errorCount++;
+          } else {
+            console.log(`[Categorize] Successfully categorized app ${app.name} as ${category}`);
+            categorizedCount++;
+          }
+        } catch (error) {
+          console.error(`[Categorize] Error processing app ${app.name}:`, error);
+          errorCount++;
+        }
+      }));
+
+      // Update progress after each batch
+      const progress = Math.min(Math.round((i + batch.length) / applications.length * 100), 99);
+      await updateCategorizationStatus(
+        categorization_id,
+          progress,
+        `Processed ${i + batch.length} of ${applications.length} applications`
+      );
+    }
+    
+    // Final update
+    const finalStatus = errorCount > 0 ? 'COMPLETED_WITH_ERRORS' : 'COMPLETED';
+    const finalMessage = `Completed categorization. Success: ${categorizedCount}, Errors: ${errorCount}`;
+    console.log(`[Categorize] ${finalMessage}`);
+    await updateCategorizationStatus(categorization_id, 100, finalMessage, finalStatus);
+    
+  } catch (error: any) {
+    console.error(`[Categorize] Error in categorizeApplications:`, error);
+    await updateCategorizationStatus(
+      categorization_id,
+      0,
+      `Categorization failed: ${error.message}`,
+      'FAILED'
+    );
+    throw error;
   }
 }
 
@@ -48,180 +183,69 @@ export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
 
 export async function POST(request: Request) {
   try {
-    const requestData = await request.json();
-    const { organization_id } = requestData;
+    const { organization_id } = await request.json();
 
     if (!organization_id) {
-      return NextResponse.json(
-        { error: 'Missing organization_id' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Organization ID is required' }, { status: 400 });
     }
 
-    // Start categorization in background without blocking
-    categorizeApplications(organization_id)
-      .catch(error => {
-        console.error('Background categorization failed:', error);
-      });
-
-    // Return immediate success response
-    return NextResponse.json({ 
-      message: 'Application categorization started in background',
-      status: 'IN_PROGRESS'
-    });
-
-  } catch (error: any) {
-    console.error('Error in categorization API:', error);
-    return NextResponse.json(
-      { error: 'Failed to start categorization', details: error.message },
-      { status: 500 }
-    );
-  }
-}
-
-async function categorizeApplications(organization_id: string) {
-  try {
-    console.log(`[Categorize] Starting background categorization for organization: ${organization_id}`);
-    
-    // Fetch all applications that need categorization
-    const { data: applications, error: fetchError } = await supabaseAdmin
-      .from('applications')
-      .select('id, name, all_scopes, category')
-      .eq('organization_id', organization_id)
-      .or('category.is.null,category.eq.Unknown');
-    
-    if (fetchError) {
-      console.error(`[Categorize] Error fetching applications:`, fetchError);
-      throw fetchError;
-    }
-    
-    console.log(`[Categorize] Found ${applications?.length || 0} applications to categorize`);
-    
-    if (!applications || applications.length === 0) {
-      console.log(`[Categorize] No applications need categorization`);
-      return;
-    }
-
-    // Initialize categorization status for all applications
-    const categorizationStatuses = applications.map(app => ({
-      application_id: app.id,
-      organization_id: organization_id,
-      status: 'IN_PROGRESS' as const,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }));
-
-    // Insert initial status records
-    const { error: statusError } = await supabaseAdmin
+    // Create a new categorization status record
+    const { data: statusRecord, error: statusError } = await supabaseAdmin
       .from('categorization_status')
-      .upsert(categorizationStatuses, { 
-        onConflict: 'application_id',
-        ignoreDuplicates: false
-      });
+      .insert({
+        organization_id,
+        status: 'PENDING',
+        progress: 0,
+        message: 'Initializing categorization process',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
 
     if (statusError) {
-      console.error(`[Categorize] Error initializing categorization status:`, statusError);
+      console.error('Error creating categorization status:', statusError);
+      return NextResponse.json({ error: 'Failed to create categorization status' }, { status: 500 });
     }
-    
-    // Process applications in batches to avoid rate limits and timeout
-    const batchSize = 10;
-    let processed = 0;
-    
-    for (let i = 0; i < applications.length; i += batchSize) {
-      const batch = applications.slice(i, Math.min(i + batchSize, applications.length));
-      
-      // Categorize each application in the batch
-      const categorizedBatch = await Promise.all(batch.map(async (app) => {
-        try {
-          const category = await categorizeApplication(app.name, app.all_scopes);
-          return {
-            id: app.id,
-            category,
-            success: true
-          };
-        } catch (error) {
-          console.error(`[Categorize] Error categorizing app ${app.id}:`, error);
-          return {
-            id: app.id,
-            success: false
-          };
-        }
-      }));
-      
-      // Update the database with the categorized applications
-      for (const app of categorizedBatch) {
-        if (!app.success) {
-          // Update status to failed
-          await supabaseAdmin
-            .from('categorization_status')
-            .update({ 
-              status: 'FAILED',
-              updated_at: new Date().toISOString()
-            })
-            .eq('application_id', app.id);
-          continue;
-        }
 
-        // Update application category
-        const { error: updateError } = await supabaseAdmin
-          .from('applications')
-          .update({ category: app.category })
-          .eq('id', app.id);
-          
-        if (updateError) {
-          console.warn(`[Categorize] Error updating category for app ${app.id}:`, updateError);
-          // Update status to failed
-          await supabaseAdmin
-            .from('categorization_status')
-            .update({ 
-              status: 'FAILED',
-              updated_at: new Date().toISOString()
-            })
-            .eq('application_id', app.id);
-          continue;
-        }
+    // Start categorization in the background
+    categorizeApplications(organization_id, statusRecord.id).catch(error => {
+      console.error('Background categorization failed:', error);
+      updateCategorizationStatus(
+        statusRecord.id,
+        0,
+        `Categorization failed: ${error.message}`,
+        'FAILED'
+      );
+    });
 
-        // Update categorization status to completed
-        await supabaseAdmin
-          .from('categorization_status')
-          .update({ 
-            status: 'COMPLETED',
-            updated_at: new Date().toISOString()
-          })
-          .eq('application_id', app.id);
-      }
-      
-      processed += batch.length;
-      console.log(`[Categorize] Processed ${processed}/${applications.length} applications`);
-      
-      // Pause briefly between batches to avoid overwhelming the API
-      if (i + batchSize < applications.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-    }
-    
-    console.log(`[Categorize] Background categorization completed for ${processed} applications`);
-    
-  } catch (error: any) {
-    console.error(`[Categorize] Error during background categorization:`, error);
-    throw error;
+    // Return the status record ID immediately
+    return NextResponse.json({ 
+      message: 'Categorization process started',
+      categorization_id: statusRecord.id
+    });
+
+  } catch (error) {
+    console.error('[Categorize] Error in categorization route:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 // Function to categorize an application using ChatGPT
-async function categorizeApplication(appName: string, scopes: string[] = []): Promise<string> {
+async function categorizeApplication(appName: string, scopes: string[] = [], isMicrosoftApp: boolean = false): Promise<string> {
   try {
-    // If OpenAI API key is not set, use a heuristic approach
+    // If OpenAI API key is not set, use heuristic approach
     if (!process.env.OPENAI_API_KEY) {
-      return categorizeWithHeuristics(appName, scopes);
+      return categorizeWithHeuristics(appName, scopes, isMicrosoftApp);
     }
 
     // Prepare the prompt with application name and scopes
-    const prompt = `Please categorize the following application into exactly one of these categories:
+    const prompt = `Please categorize the following ${isMicrosoftApp ? 'Microsoft' : ''} application into exactly one of these categories:
 ${categories.join(', ')}
 
 Application name: ${appName}
 ${scopes && scopes.length > 0 ? `Scopes/Permissions: ${scopes.slice(0, 20).join(', ')}${scopes.length > 20 ? '...' : ''}` : ''}
+${isMicrosoftApp ? 'Note: This is a Microsoft application, so consider Microsoft-specific services and products in your categorization.' : ''}
 
 Respond with only the category name as a string.`;
 
@@ -233,7 +257,7 @@ Respond with only the category name as a string.`;
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-3.5-turbo',
         messages: [
           { 
             role: 'system', 
@@ -250,7 +274,7 @@ Respond with only the category name as a string.`;
     
     if (!response.ok) {
       console.error('Error from OpenAI API:', data);
-      return 'Others'; // Fallback
+      return categorizeWithHeuristics(appName, scopes, isMicrosoftApp); // Fallback to heuristics
     }
 
     // Extract the category from the response
@@ -263,81 +287,99 @@ Respond with only the category name as a string.`;
       c.toLowerCase().includes(result.toLowerCase())
     );
     
-    return category || 'Others';
+    return category || categorizeWithHeuristics(appName, scopes, isMicrosoftApp);
   } catch (error) {
     console.error('Error categorizing with ChatGPT:', error);
-    return categorizeWithHeuristics(appName, scopes);
+    return categorizeWithHeuristics(appName, scopes, isMicrosoftApp);
   }
 }
 
 // Fallback function that uses simple heuristics to categorize applications
-function categorizeWithHeuristics(appName: string, scopes: string[] = []): string {
+function categorizeWithHeuristics(appName: string, scopes: string[] = [], isMicrosoftApp: boolean = false): string {
   const nameAndScopes = `${appName.toLowerCase()} ${scopes.join(' ').toLowerCase()}`;
 
-  // Define keywords mapped to categories
-  const categoryKeywords: Record<string, string[]> = {
-    "Analytics & Business Intelligence": [
-      'analytics', 'dashboard', 'report', 'bi', 'data', 'metric', 'insight', 'chart', 'tableau', 
-      'looker', 'powerbi', 'metabase', 'amplitude', 'mixpanel'
-    ],
-    "Cloud Platforms & Infrastructure": [
-      'cloud', 'aws', 'azure', 'gcp', 'infrastructure', 'platform', 'hosting', 'server', 'compute',
-      'iaas', 'paas', 'heroku', 'kubernetes', 'docker', 'vercel', 'netlify'
-    ],
-    "Customer Success & Support": [
-      'customer', 'support', 'ticket', 'help desk', 'service desk', 'zendesk', 'intercom', 'freshdesk',
-      'helpdesk', 'customer success', 'chat', 'feedback', 'survey'
-    ],
-    "Design & Creative Tools": [
-      'design', 'figma', 'sketch', 'adobe', 'canva', 'creative', 'prototyping', 'ux', 'ui',
-      'illustrator', 'photoshop', 'indesign', 'video', 'audio', 'edit'
-    ],
-    "Developer & Engineering Tools": [
-      'developer', 'engineering', 'code', 'git', 'github', 'gitlab', 'bitbucket', 'programming',
-      'ide', 'api', 'ci/cd', 'jenkins', 'jira', 'confluence', 'atlassian', 'postman', 'testing'
-    ],
-    "Finance & Accounting": [
-      'finance', 'accounting', 'invoice', 'expense', 'tax', 'payment', 'billing', 'quickbooks',
-      'xero', 'stripe', 'paypal', 'budget', 'financial', 'bank'
-    ],
-    "Human Resources & People Management": [
-      'hr', 'human resources', 'recruiting', 'talent', 'payroll', 'employee', 'benefits', 'workday',
-      'bamboo', 'gusto', 'zenefits', 'performance', 'engagement', 'survey'
+  // Define Microsoft-specific keywords for categories
+  const microsoftKeywords: Record<string, string[]> = {
+    "Identity & Access Management": [
+      'azure ad', 'active directory', 'entra', 'identity', 'authentication', 'access', 'login',
+      'directory', 'credential', 'permission', 'role', 'security', 'token', 'oauth', 'sso'
     ],
     "IT Operations & Security": [
-      'it', 'security', 'monitoring', 'logging', 'alert', 'incident', 'devops', 'sysadmin',
-      'network', 'firewall', 'vpn', 'siem', 'backup', 'identity'
+      'intune', 'defender', 'security', 'compliance', 'monitor', 'audit', 'log', 'operation',
+      'admin', 'management', 'policy', 'endpoint', 'device', 'sentinel'
     ],
-    "Identity & Access Management": [
-      'identity', 'authentication', 'access', 'sso', 'okta', 'auth0', 'oauth', 'iam',
-      'login', 'mfa', '2fa', 'permission', 'user management'
+    "Developer & Engineering Tools": [
+      'visual studio', 'azure devops', 'github', 'dev center', 'dev', 'api', 'test', 'tool',
+      'development', 'engineering', 'build', 'deploy', 'code', 'repository', 'git', 'pipeline'
     ],
     "Productivity & Collaboration": [
-      'productivity', 'collaboration', 'document', 'chat', 'messaging', 'email', 'meeting', 'video',
-      'conference', 'slack', 'zoom', 'google', 'microsoft', 'office', 'notion', 'asana', 'basecamp'
+      'office', 'teams', 'outlook', 'sharepoint', 'onedrive', 'exchange', 'communication',
+      'chat', 'meet', 'collaborate', 'share', 'document', 'file'
+    ],
+    "Cloud Platforms & Infrastructure": [
+      'azure', 'cloud', 'infrastructure', 'platform', 'service', 'resource', 'compute',
+      'storage', 'network', 'container', 'kubernetes', 'function'
+    ]
+  };
+
+  // Define general keywords for categories
+  const generalKeywords: Record<string, string[]> = {
+    "Analytics & Business Intelligence": [
+      'analytics', 'dashboard', 'report', 'bi', 'data', 'metric', 'insight', 'chart',
+      'powerbi', 'power bi', 'azure analysis'
+    ],
+    "Customer Success & Support": [
+      'support', 'ticket', 'help', 'customer', 'service', 'chat', 'feedback',
+      'dynamics crm', 'dynamics 365', 'customer service'
+    ],
+    "Design & Creative Tools": [
+      'design', 'creative', 'image', 'photo', 'video', 'media', 'art', 'graphic',
+      'visio', 'designer'
+    ],
+    "Finance & Accounting": [
+      'finance', 'accounting', 'payment', 'invoice', 'expense', 'budget', 'tax',
+      'dynamics finance', 'microsoft financials'
+    ],
+    "Human Resources & People Management": [
+      'hr', 'people', 'employee', 'recruit', 'talent', 'hiring', 'onboard', 'payroll',
+      'dynamics hr', 'talent management', 'viva'
     ],
     "Project Management": [
-      'project', 'task', 'manage', 'agile', 'scrum', 'kanban', 'trello', 'asana', 'monday',
-      'wrike', 'clickup', 'jira', 'roadmap', 'plan', 'schedule'
+      'project', 'task', 'manage', 'plan', 'agile', 'sprint', 'board', 'timeline',
+      'project online', 'planner', 'azure boards'
     ],
     "Sales & Marketing": [
-      'sales', 'marketing', 'crm', 'lead', 'campaign', 'email', 'social', 'advertising', 'seo', 'content',
-      'hubspot', 'marketo', 'salesforce', 'mailchimp', 'hootsuite', 'buffer'
+      'sales', 'crm', 'lead', 'market', 'brand', 'campaign', 'social', 'email',
+      'dynamics sales', 'dynamics marketing', 'dynamics 365'
     ]
   };
 
   // Score each category based on keyword matches
   const scores: Record<string, number> = {};
   
-  for (const [category, keywords] of Object.entries(categoryKeywords)) {
-    scores[category] = 0;
+  // If it's a Microsoft app, first check Microsoft-specific categories
+  if (isMicrosoftApp) {
+    for (const [category, keywords] of Object.entries(microsoftKeywords)) {
+      scores[category] = 0;
+      for (const keyword of keywords) {
+        const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+        if (regex.test(nameAndScopes)) {
+          scores[category] += 3; // Higher weight for Microsoft-specific matches
+        } else if (nameAndScopes.includes(keyword)) {
+          scores[category] += 2;
+        }
+      }
+    }
+  }
+
+  // Then check general categories
+  for (const [category, keywords] of Object.entries(generalKeywords)) {
+    scores[category] = scores[category] || 0;
     for (const keyword of keywords) {
-      // Check for exact word match with word boundaries
       const regex = new RegExp(`\\b${keyword}\\b`, 'i');
       if (regex.test(nameAndScopes)) {
         scores[category] += 2;
       } else if (nameAndScopes.includes(keyword)) {
-        // Partial match
         scores[category] += 1;
       }
     }

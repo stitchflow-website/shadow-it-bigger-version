@@ -26,6 +26,9 @@ ALTER TABLE applications ADD COLUMN IF NOT EXISTS management_status TEXT CHECK (
 -- Add all_scopes column to applications table to store all unique scopes
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS all_scopes TEXT[] DEFAULT '{}';
 
+-- Add user_count column to applications table
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS user_count INTEGER DEFAULT 0;
+
 -- Migration to remove last_login column
 -- Remove last_login from users_signedup table if it exists
 ALTER TABLE users_signedup DROP COLUMN IF EXISTS last_login;

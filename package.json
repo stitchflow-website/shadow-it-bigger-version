@@ -9,7 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@azure/identity": "^4.9.0",
     "@hookform/resolvers": "^3.9.1",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
     "@radix-ui/react-aspect-ratio": "^1.1.1",
@@ -47,6 +49,7 @@
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "crypto-browserify": "^3.12.1",
+    "date-fns": "^4.1.0",
     "embla-carousel-react": "8.5.1",
     "google-auth-library": "^9.6.3",
     "googleapis": "^133.0.0",

@@ -148,6 +148,8 @@ export default function ShadowITDashboard() {
     periodicReviewEnabled: true,
   })
 
+  const [authProvider, setAuthProvider] = useState<'google' | 'microsoft' | null>(null);
+
   // Fetch and process data
   useEffect(() => {
     const fetchData = async () => {
@@ -216,6 +218,11 @@ export default function ShadowITDashboard() {
     };
 
     fetchData();
+  }, []);
+
+  useEffect(() => {
+    const provider = localStorage.getItem('auth_provider') as 'google' | 'microsoft' | null;
+    setAuthProvider(provider);
   }, []);
 
   // Helper function to parse CSV row handling quoted values
@@ -1322,29 +1329,31 @@ export default function ShadowITDashboard() {
                         ))}
                       </select>
                     </div>
-                    <div className="min-w-[150px]">
-                      <div className="flex justify-between items-center mb-1">
-                        <Label className="text-sm font-medium text-gray-700">Risk Level</Label>
-                        {filterRisk && (
-                          <button
-                            onClick={() => setFilterRisk(null)}
-                            className="text-xs text-primary hover:text-primary/80 transition-colors"
-                          >
-                            Clear filter
-                          </button>
-                        )}
+                    {authProvider === 'google' && (
+                      <div className="min-w-[150px]">
+                        <div className="flex justify-between items-center mb-1">
+                          <Label className="text-sm font-medium text-gray-700">Risk Level</Label>
+                          {filterRisk && (
+                            <button
+                              onClick={() => setFilterRisk(null)}
+                              className="text-xs text-primary hover:text-primary/80 transition-colors"
+                            >
+                              Clear filter
+                            </button>
+                          )}
+                        </div>
+                        <select
+                          className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                          value={filterRisk || ""}
+                          onChange={(e) => setFilterRisk(e.target.value || null)}
+                        >
+                          <option value="">All Risk Levels</option>
+                          <option value="Low">Low</option>
+                          <option value="Medium">Medium</option>
+                          <option value="High">High</option>
+                        </select>
                       </div>
-                      <select
-                        className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
-                        value={filterRisk || ""}
-                        onChange={(e) => setFilterRisk(e.target.value || null)}
-                      >
-                        <option value="">All Risk Levels</option>
-                        <option value="Low">Low</option>
-                        <option value="Medium">Medium</option>
-                        <option value="High">High</option>
-                      </select>
-                    </div>
+                    )}
                     <div className="min-w-[150px]">
                       <div className="flex justify-between items-center mb-1">
                         <Label className="text-sm font-medium text-gray-700">App Status</Label>
@@ -1376,48 +1385,52 @@ export default function ShadowITDashboard() {
                   <Table>
                       <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
                         <TableRow className="border-b border-gray-100">
-                          <TableHead className="w-[250px] cursor-pointer rounded-tl-lg bg-transparent" onClick={() => handleSort("name")}>
-                          <div className="flex items-center">
-                            Application
-                            {getSortIcon("name")}
-                          </div>
-                        </TableHead>
-                        <TableHead className="w-[180px] cursor-pointer" onClick={() => handleSort("category")}>
-                          <div className="flex items-center">
-                            Category
-                            {getSortIcon("category")}
-                          </div>
-                        </TableHead>
-                        <TableHead className="text-center cursor-pointer" onClick={() => handleSort("userCount")}>
-                          <div className="flex items-center justify-center">
-                            Users
-                            {getSortIcon("userCount")}
-                          </div>
-                        </TableHead>
-                        <TableHead className="text-center cursor-pointer" onClick={() => handleSort("riskLevel")}>
-                          <div className="flex items-center justify-center">
-                            Risk
-                            {getSortIcon("riskLevel")}
-                          </div>
-                        </TableHead>
-                        <TableHead
-                          className="text-center cursor-pointer"
-                          onClick={() => handleSort("totalPermissions")}
-                        >
-                          <div className="flex items-center justify-center">
-                            Total Scope Permissions
-                            {getSortIcon("totalPermissions")}
-                          </div>
-                        </TableHead>
-                        <TableHead className="cursor-pointer" onClick={() => handleSort("managementStatus")}>
-                          <div className="flex items-center">
-                            Status
-                            {getSortIcon("managementStatus")}
-                          </div>
-                        </TableHead>
-                          <TableHead className="text-center rounded-tr-lg">User Access</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                          <TableHead className={`${authProvider === 'google' ? 'w-[250px]' : 'w-[260px]'} cursor-pointer rounded-tl-lg bg-transparent`} onClick={() => handleSort("name")}>
+                            <div className="flex items-center">
+                              Application
+                              {getSortIcon("name")}
+                            </div>
+                          </TableHead>
+                          <TableHead className={`${authProvider === 'google' ? 'w-[180px]' : 'w-[200px]'} cursor-pointer`} onClick={() => handleSort("category")}>
+                            <div className="flex items-center">
+                              Category
+                              {getSortIcon("category")}
+                            </div>
+                          </TableHead>
+                          <TableHead className={`${authProvider === 'google' ? '' : 'w-[200px]'} text-center cursor-pointer`} onClick={() => handleSort("userCount")}>
+                            <div className="flex items-center justify-center">
+                              Users
+                              {getSortIcon("userCount")}
+                            </div>
+                          </TableHead>
+                          {authProvider === 'google' && (
+                            <>
+                              <TableHead className="text-center cursor-pointer" onClick={() => handleSort("riskLevel")}>
+                                <div className="flex items-center justify-center">
+                                  Risk
+                                  {getSortIcon("riskLevel")}
+                                </div>
+                              </TableHead>
+                              <TableHead
+                                className="text-center cursor-pointer"
+                                onClick={() => handleSort("totalPermissions")}
+                              >
+                                <div className="flex items-center justify-center">
+                                  Total Scope Permissions
+                                  {getSortIcon("totalPermissions")}
+                                </div>
+                              </TableHead>
+                            </>
+                          )}
+                          <TableHead className={`${authProvider === 'google' ? '' : 'w-[200px]'} cursor-pointer`} onClick={() => handleSort("managementStatus")}>
+                            <div className="flex items-center">
+                              Status
+                              {getSortIcon("managementStatus")}
+                            </div>
+                          </TableHead>
+                          <TableHead className={`${authProvider === 'google' ? '' : 'w-[200px]'} text-center rounded-tr-lg`}>User Access</TableHead>
+                        </TableRow>
+                      </TableHeader>
                     <TableBody>
                         {currentApps.length === 0 ? (
                         <TableRow>
@@ -1485,36 +1498,40 @@ export default function ShadowITDashboard() {
                                   </Tooltip>
                                 </TooltipProvider>
                             </TableCell>
-                            <TableCell className="text-center">
-                              <TooltipProvider>
-                                  <Tooltip delayDuration={300}>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center justify-center">
-                                      <RiskBadge level={app.riskLevel} />
-                                    </div>
-                                  </TooltipTrigger>
-                                    <TooltipContent side="right" className="p-2">
-                                      <p className="text-sm">{app.riskReason}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </TableCell>
-                              <TableCell className="text-center">
-                                <TooltipProvider>
-                                  <Tooltip delayDuration={300}>
-                                    <TooltipTrigger asChild>
-                                      <div className="text-center">{app.totalPermissions}</div>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right" className="p-2">
-                                      <div className="max-h-48 overflow-y-auto space-y-1">
-                                        {app.scopes.map((scope, idx) => (
-                                          <p key={idx} className="text-sm">{scope}</p>
-                                        ))}
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </TableCell>
+                            {authProvider === 'google' && (
+                              <>
+                                <TableCell>
+                                  <TooltipProvider>
+                                      <Tooltip delayDuration={300}>
+                                      <TooltipTrigger asChild>
+                                        <div className="flex items-center justify-center">
+                                          <RiskBadge level={app.riskLevel} />
+                                        </div>
+                                      </TooltipTrigger>
+                                        <TooltipContent side="right" className="p-2">
+                                          <p className="text-sm">{app.riskReason}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <TooltipProvider>
+                                      <Tooltip delayDuration={300}>
+                                      <TooltipTrigger asChild>
+                                        <div className="text-center">{app.totalPermissions}</div>
+                                      </TooltipTrigger>
+                                        <TooltipContent side="right" className="p-2">
+                                          <div className="max-h-48 overflow-y-auto space-y-1">
+                                            {app.scopes.map((scope, idx) => (
+                                              <p key={idx} className="text-sm">{scope}</p>
+                                            ))}
+                                          </div>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                </TableCell>
+                              </>
+                            )}
                             <TableCell>
                               <select
                                 className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
@@ -1608,6 +1625,7 @@ export default function ShadowITDashboard() {
             // Replace the dashboard view section with the following:
             // Dashboard view with charts - updated to match the requested charts
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
               {/* Application Distribution by Category */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
                 <h3 className="text-lg font-medium text-gray-900">App Distribution by Category</h3>
@@ -1743,24 +1761,192 @@ export default function ShadowITDashboard() {
                 </div>
               </div>
 
-              {/* Risk Level Distribution */}
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-                <h3 className="text-lg font-medium text-gray-900">Risk Level Distribution</h3>
-                <p className="text-sm text-gray-500 mb-4">Number of applications by risk level</p>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={getRiskChartData()} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                      <YAxis
-                        dataKey="name"
-                        type="category"
-                        axisLine={false}
-                        tickLine={false}
-                        width={80} 
-                        tick={(props) => {
-                          const { x, y, payload } = props;
-                          return (
+              {authProvider === 'google' && (
+                <>
+                  {/* Risk Level Distribution */}
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                    <h3 className="text-lg font-medium text-gray-900">Risk Level Distribution</h3>
+                    <p className="text-sm text-gray-500 mb-4">Number of applications by risk level</p>
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={getRiskChartData()} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                          <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
+                          <YAxis
+                            dataKey="name"
+                            type="category"
+                            axisLine={false}
+                            tickLine={false}
+                            width={80} 
+                            tick={(props) => {
+                              const { x, y, payload } = props;
+                              return (
+                                <g transform={`translate(${x},${y})`}>
+                                  <text
+                                    x={-3}
+                                    y={0}
+                                    dy={4}
+                                    textAnchor="end"
+                                    fill="#111827"
+                                    fontSize={12}
+                                    className="cursor-pointer hover:fill-primary transition-colors"
+                                    onClick={() => {
+                                      // Clear all filters first
+                                      setFilterCategory(null);
+                                      setFilterManaged(null);
+                                      // Set the new risk filter
+                                      setFilterRisk(payload.value);
+                                      setMainView("list");
+                                    }}
+                                  >
+                                    {payload.value}
+                                  </text>
+                                </g>
+                              );
+                            }}
+                          />
+                          <Bar 
+                            dataKey="value" 
+                            name="Applications" 
+                            radius={[0, 4, 4, 0]} 
+                            barSize={30}
+                            strokeWidth={1}
+                            stroke="#fff"
+                            cursor="pointer"
+                            onClick={(data) => {
+                              // Clear all filters first
+                              setFilterCategory(null);
+                              setFilterManaged(null);
+                              // Set the new risk filter
+                              setFilterRisk(data.name);
+                              setMainView("list");
+                            }}
+                          >
+                            {getRiskChartData().map((entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={entry.color}
+                                fillOpacity={1}
+                              />
+                            ))}
+                          </Bar>
+                          <RechartsTooltip
+                            formatter={(value) => [`${value} applications`, ""]}
+                            contentStyle={{ 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e5e7eb', 
+                              borderRadius: '8px', 
+                              padding: '4px 12px',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                              fontFamily: 'inherit',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}
+                            labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                            itemStyle={{ color: '#111827', fontWeight: 600 }}
+                            separator=": "
+                            cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Apps by Scope Permissions */}
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                    <h3 className="text-lg font-medium text-gray-900">Top Apps by Scope Permissions</h3>
+                    <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
+                    <div className="h-96">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={getTop10AppsByPermissions()} layout="vertical" margin={{ left: 150 }}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                          <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
+                          <YAxis
+                            dataKey="name"
+                            type="category"
+                            axisLine={false}
+                            tickLine={false}
+                            width={140}
+                            tick={{ fill: '#111827', fontSize: 12 }}
+                          />
+                          <Bar 
+                            dataKey="value" 
+                            name="Permissions" 
+                            radius={[0, 4, 4, 0]} 
+                            barSize={20}
+                            strokeWidth={1}
+                            stroke="#fff"
+                            cursor="pointer"
+                            onClick={(data) => {
+                              const app = applications.find(a => a.name === data.name);
+                              if (app) {
+                                setMainView("list");
+                                setSelectedAppId(app.id);
+                                setIsUserModalOpen(true);
+                              }
+                            }}
+                          >
+                            {getTop10AppsByPermissions().map((entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={entry.color} 
+                                fillOpacity={1}
+                              />
+                            ))}
+                          </Bar>
+                          <RechartsTooltip
+                            formatter={(value) => [`${value} permissions`, ""]}
+                            contentStyle={{ 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e5e7eb', 
+                              borderRadius: '8px', 
+                              padding: '4px 12px',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                              fontFamily: 'inherit',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}
+                            labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                            itemStyle={{ color: '#111827', fontWeight: 600 }}
+                            separator=": "
+                            cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Application Similarity Groups */}
+              {authProvider === 'google' && (
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 col-span-2">
+                  <h3 className="text-lg font-medium text-gray-900">Application Similarity Groups</h3>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Groups of applications that share similar characteristics and usage patterns.
+                  </p>
+                  <div className="h-[500px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={applications.map(app => ({
+                          name: app.name,
+                          users: app.userCount,
+                          permissions: app.totalPermissions,
+                          similar: getSimilarApps(app, applications).length,
+                          category: app.category,
+                        }))}
+                        layout="vertical"
+                        margin={{ left: 150, right: 20, top: 20, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                        <XAxis type="number" />
+                        <YAxis
+                          type="category"
+                          dataKey="name"
+                          width={140}
+                          tick={({ x, y, payload }) => (
                             <g transform={`translate(${x},${y})`}>
                               <text
                                 x={-3}
@@ -1771,238 +1957,76 @@ export default function ShadowITDashboard() {
                                 fontSize={12}
                                 className="cursor-pointer hover:fill-primary transition-colors"
                                 onClick={() => {
-                                  // Clear all filters first
-                                  setFilterCategory(null);
-                                  setFilterManaged(null);
-                                  // Set the new risk filter
-                                  setFilterRisk(payload.value);
-                                  setMainView("list");
+                                  const app = applications.find(a => a.name === payload.value);
+                                  if (app) {
+                                    setMainView("list");
+                                    setSelectedAppId(app.id);
+                                    setIsUserModalOpen(true);
+                                  }
                                 }}
                               >
                                 {payload.value}
                               </text>
                             </g>
-                          );
-                        }}
-                      />
-                      <Bar 
-                        dataKey="value" 
-                        name="Applications" 
-                        radius={[0, 4, 4, 0]} 
-                        barSize={30}
-                        strokeWidth={1}
-                        stroke="#fff"
-                        cursor="pointer"
-                        onClick={(data) => {
-                          // Clear all filters first
-                          setFilterCategory(null);
-                          setFilterManaged(null);
-                          // Set the new risk filter
-                          setFilterRisk(data.name);
-                          setMainView("list");
-                        }}
-                      >
-                        {getRiskChartData().map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill={entry.color}
-                            fillOpacity={1}
-                          />
-                        ))}
-                      </Bar>
-                      <RechartsTooltip
-                        formatter={(value) => [`${value} applications`, ""]}
-                        contentStyle={{ 
-                          backgroundColor: 'white', 
-                          border: '1px solid #e5e7eb', 
-                          borderRadius: '8px', 
-                          padding: '4px 12px',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                          fontFamily: 'inherit',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px'
-                        }}
-                        labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                        itemStyle={{ color: '#111827', fontWeight: 600 }}
-                        separator=": "
-                        cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Apps by Scope Permissions */}
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-                <h3 className="text-lg font-medium text-gray-900">Top Apps by Scope Permissions</h3>
-                <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
-                <div className="h-96">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={getTop10AppsByPermissions()} layout="vertical" margin={{ left: 150 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                      <YAxis
-                        dataKey="name"
-                        type="category"
-                        axisLine={false}
-                        tickLine={false}
-                        width={140}
-                        tick={{ fill: '#111827', fontSize: 12 }}
-                      />
-                      <Bar 
-                        dataKey="value" 
-                        name="Permissions" 
-                        radius={[0, 4, 4, 0]} 
-                        barSize={20}
-                        strokeWidth={1}
-                        stroke="#fff"
-                        cursor="pointer"
-                        onClick={(data) => {
-                          const app = applications.find(a => a.name === data.name);
-                          if (app) {
-                            setMainView("list");
-                            setSelectedAppId(app.id);
-                            setIsUserModalOpen(true);
-                          }
-                        }}
-                      >
-                        {getTop10AppsByPermissions().map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill={entry.color} 
-                            fillOpacity={1}
-                          />
-                        ))}
-                      </Bar>
-                      <RechartsTooltip
-                        formatter={(value) => [`${value} permissions`, ""]}
-                        contentStyle={{ 
-                          backgroundColor: 'white', 
-                          border: '1px solid #e5e7eb', 
-                          borderRadius: '8px', 
-                          padding: '4px 12px',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                          fontFamily: 'inherit',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px'
-                        }}
-                        labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                        itemStyle={{ color: '#111827', fontWeight: 600 }}
-                        separator=": "
-                        cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Application Similarity Groups */}
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 col-span-2">
-                <h3 className="text-lg font-medium text-gray-900">Application Similarity Groups</h3>
-                <p className="text-sm text-gray-500 mb-4">
-                  Groups of applications that share similar characteristics and usage patterns.
-                </p>
-                <div className="h-[500px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={applications.map(app => ({
-                        name: app.name,
-                        users: app.userCount,
-                        permissions: app.totalPermissions,
-                        similar: getSimilarApps(app, applications).length,
-                        category: app.category,
-                      }))}
-                      layout="vertical"
-                      margin={{ left: 150, right: 20, top: 20, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                      <XAxis type="number" />
-                      <YAxis
-                        type="category"
-                        dataKey="name"
-                        width={140}
-                        tick={({ x, y, payload }) => (
-                          <g transform={`translate(${x},${y})`}>
-                            <text
-                              x={-3}
-                              y={0}
-                              dy={4}
-                              textAnchor="end"
-                              fill="#111827"
-                              fontSize={12}
-                              className="cursor-pointer hover:fill-primary transition-colors"
+                          )}
+                        />
+                        <Bar
+                          dataKey="users"
+                          stackId="a"
+                          name="Users"
+                          fill="#4B5563"
+                          radius={[0, 4, 4, 0]}
+                        >
+                          {applications.map((app, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={getCategoryColor(app.category)}
+                              fillOpacity={0.8}
+                              cursor="pointer"
                               onClick={() => {
-                                const app = applications.find(a => a.name === payload.value);
-                                if (app) {
-                                  setMainView("list");
-                                  setSelectedAppId(app.id);
-                                  setIsUserModalOpen(true);
-                                }
+                                setMainView("list");
+                                setSelectedAppId(app.id);
+                                setIsUserModalOpen(true);
                               }}
-                            >
-                              {payload.value}
-                            </text>
-                          </g>
-                        )}
-                      />
-                      <Bar
-                        dataKey="users"
-                        stackId="a"
-                        name="Users"
-                        fill="#4B5563"
-                        radius={[0, 4, 4, 0]}
-                      >
-                        {applications.map((app, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={getCategoryColor(app.category)}
-                            fillOpacity={0.8}
-                            cursor="pointer"
-                            onClick={() => {
-                              setMainView("list");
-                              setSelectedAppId(app.id);
-                              setIsUserModalOpen(true);
-                            }}
-                          />
-                        ))}
-                      </Bar>
-                      <RechartsTooltip
-                        content={({ active, payload, label }) => {
-                          if (active && payload && payload.length) {
-                            const app = applications.find(a => a.name === label);
-                            if (!app) return null;
+                            />
+                          ))}
+                        </Bar>
+                        <RechartsTooltip
+                          content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              const app = applications.find(a => a.name === label);
+                              if (!app) return null;
 
-                            const similarApps = getSimilarApps(app, applications);
-                            return (
-                              <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
-                                <p className="font-medium">{label}</p>
-                                <p className="text-sm text-gray-500">{app.category}</p>
-                                <div className="text-sm mt-2">
-                                  <div className="font-medium">Similar Apps:</div>
-                                  <div className="mt-1 space-y-1">
-                                    {similarApps.map(({ app: similarApp, score }, index) => (
-                                      <div key={index} className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(similarApp.category) }} />
-                                        <span>{similarApp.name}</span>
-                                        <span className="text-gray-500">({Math.round(score * 100)}% match)</span>
-                                      </div>
-                                    ))}
+                              const similarApps = getSimilarApps(app, applications);
+                              return (
+                                <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
+                                  <p className="font-medium">{label}</p>
+                                  <p className="text-sm text-gray-500">{app.category}</p>
+                                  <div className="text-sm mt-2">
+                                    <div className="font-medium">Similar Apps:</div>
+                                    <div className="mt-1 space-y-1">
+                                      {similarApps.map(({ app: similarApp, score }, index) => (
+                                        <div key={index} className="flex items-center gap-2">
+                                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(similarApp.category) }} />
+                                          <span>{similarApp.name}</span>
+                                          <span className="text-gray-500">({Math.round(score * 100)}% match)</span>
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                        cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                      />
-                      <Legend />
-                    </BarChart>
-                  </ResponsiveContainer>
+                              );
+                            }
+                            return null;
+                          }}
+                          cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                        />
+                        <Legend />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -2093,10 +2117,12 @@ export default function ShadowITDashboard() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm text-muted-foreground font-medium">Risk:</span>
-                      <RiskBadge level={selectedApp.riskLevel} />
-                    </div>
+                    {authProvider === 'google' && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm text-muted-foreground font-medium">Risk:</span>
+                        <RiskBadge level={selectedApp.riskLevel} />
+                      </div>
+                    )}
                     <div className="flex items-center gap-1">
                       <span className="text-sm text-muted-foreground font-medium">Status:</span>
                       <select
@@ -2120,10 +2146,12 @@ export default function ShadowITDashboard() {
                       <dt className="text-muted-foreground font-medium">Category</dt>
                       <dd className="font-medium">{selectedApp.category}</dd>
                     </div>
-                    <div>
-                      <dt className="text-muted-foreground font-medium">Total Scope Permissions</dt>
-                      <dd className="font-medium">{selectedApp.totalPermissions}</dd>
-                    </div>
+                    {authProvider === 'google' && (
+                      <div>
+                        <dt className="text-muted-foreground font-medium">Total Scope Permissions</dt>
+                        <dd className="font-medium">{selectedApp.totalPermissions}</dd>
+                      </div>
+                    )}
                     <div>
                       <dt className="text-muted-foreground font-medium">Created</dt>
                       <dd className="font-medium">{selectedApp.created_at && formatDate(selectedApp.created_at)}</dd>
@@ -2653,7 +2681,7 @@ export default function ShadowITDashboard() {
                 </div>
 
                 {/* User Limit Threshold */}
-                <div className="space-y-2">
+                {/* <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="font-medium">User Limit Threshold</Label>
@@ -2674,10 +2702,10 @@ export default function ShadowITDashboard() {
                       min="1"
                     />
                   )}
-                </div>
+                </div> */}
 
                 {/* Periodic Review */}
-                <div className="space-y-2">
+                {/* <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="font-medium">Periodic Review</Label>
@@ -2701,7 +2729,7 @@ export default function ShadowITDashboard() {
                       <option value="6">Every 6 Months</option>
                     </select>
                   )}
-                </div>
+                </div> */}
               </div>
 
               <div className="flex justify-end gap-3 mt-6 pt-6 border-t">

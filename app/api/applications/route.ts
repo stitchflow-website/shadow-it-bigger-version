@@ -30,6 +30,7 @@ type ApplicationType = {
   user_applications: UserApplicationType[];
   all_scopes?: string[];
   created_at: string;
+  microsoft_app_id?: string;
 }
 
 // Helper to generate app logo URL from logo.dev
@@ -149,13 +150,16 @@ export async function GET(request: Request) {
           .filter((user): user is UserType => Boolean(user))
       ));
 
+      // Check if this is a Microsoft app
+      const isMicrosoftApp = Boolean(app.microsoft_app_id);
+
       // Get all unique scopes from user_applications
-      const allUserScopes = Array.from(new Set(
+      const allUserScopes = isMicrosoftApp ? [] : Array.from(new Set(
         (app.user_applications || [])?.flatMap(ua => ua.scopes || []) || []
       ));
       
       // Use the all_scopes field from the application if available, otherwise fallback to user scopes
-      const applicationScopes = app.all_scopes || allUserScopes;
+      const applicationScopes = isMicrosoftApp ? [] : (app.all_scopes || allUserScopes);
 
       // Get logo URLs
       const logoUrls = getAppLogoUrl(app.name);
@@ -172,7 +176,7 @@ export async function GET(request: Request) {
           );
           
           // Get this user's specific scopes (not the application-wide scopes)
-          const userScopes = userApp?.scopes || [];
+          const userScopes = isMicrosoftApp ? [] : (userApp?.scopes || []);
           
           return {
             id: user.id,
@@ -180,15 +184,18 @@ export async function GET(request: Request) {
             name: user.name,
             email: user.email,
             scopes: userScopes,
+            scopesMessage: isMicrosoftApp ? "Scope details not available for Microsoft applications" : undefined,
             created_at: user.created_at,
-            riskLevel: determineRiskLevel(userScopes),
-            riskReason: determineRiskReason(userScopes)
+            riskLevel: isMicrosoftApp ? 'LOW' : determineRiskLevel(userScopes),
+            riskReason: isMicrosoftApp ? 'Microsoft application permissions are managed through Azure AD' : determineRiskReason(userScopes)
           };
         }),
         riskLevel: transformRiskLevel(app.risk_level),
-        riskReason: determineAppRiskReason(app.risk_level, app.total_permissions),
-        totalPermissions: app.total_permissions,
-        scopeVariance: calculateScopeVariance(app.user_applications || []),
+        riskReason: isMicrosoftApp ? 
+          'Microsoft application permissions are managed through Azure AD' : 
+          determineAppRiskReason(app.risk_level, app.total_permissions),
+        totalPermissions: isMicrosoftApp ? 0 : app.total_permissions,
+        scopeVariance: isMicrosoftApp ? { userGroups: 0, scopeGroups: 0 } : calculateScopeVariance(app.user_applications || []),
         logoUrl: logoUrls.primary,
         logoUrlFallback: logoUrls.fallback,
         created_at: app.created_at,
@@ -196,8 +203,10 @@ export async function GET(request: Request) {
         ownerEmail: '',
         notes: '',
         scopes: applicationScopes,
+        scopesMessage: isMicrosoftApp ? "Scope details not available for Microsoft applications" : undefined,
         isInstalled: app.management_status === 'MANAGED',
-        isAuthAnonymously: false
+        isAuthAnonymously: false,
+        provider: isMicrosoftApp ? 'microsoft' : 'google'
       };
     });
 

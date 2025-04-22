@@ -180,54 +180,9 @@ async function processUsers(
     
     if (usersError) throw usersError;
     
-    // Get all users for this organization to create a mapping
-    const { data: createdUsers } = await supabaseAdmin
-      .from('users')
-      .select('id, google_user_id')
-      .eq('organization_id', organization_id);
+    await updateSyncStatus(sync_id, 30, 'User sync completed');
     
-    // Create a mapping for quick lookup
-    const userMap = new Map();
-    createdUsers?.forEach(user => {
-      userMap.set(user.google_user_id, user.id);
-    });
-    
-    // Update status and trigger token fetch process
-    await updateSyncStatus(sync_id, 30, 'Fetching application data from Google Workspace');
-    
-    // Get the current host from the request
-    const host = originalRequest.headers.get('host') || process.env.VERCEL_URL || 'localhost:3000';
-    const protocol = host.includes('localhost') ? 'http://' : 'https://';
-    const nextUrl = `${protocol}${host}/api/background/sync/tokens`;
-    
-    console.log(`Triggering token fetch at: ${nextUrl}`);
-
-    // Get the latest tokens in case they were refreshed during user fetching
-    const credentials = googleService.getCredentials();
-    const current_access_token = credentials.access_token || access_token;
-    const current_refresh_token = credentials.refresh_token || refresh_token;
-
-    const nextResponse = await fetch(nextUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        organization_id,
-        sync_id,
-        access_token: current_access_token,
-        refresh_token: current_refresh_token,
-        users: Array.from(userMap.entries()).map(([googleId, userId]) => ({ googleId, userId }))
-      }),
-    });
-    
-    if (!nextResponse.ok) {
-      const errorText = await nextResponse.text();
-      console.error(`Failed to trigger token fetch: ${errorText}`);
-      throw new Error(`Failed to trigger token fetch: ${nextResponse.status} ${nextResponse.statusText}`);
-    }
-    
-    console.log('User processing completed successfully, tokens processing triggered');
+    console.log('User processing completed successfully');
     
   } catch (error: any) {
     console.error('Error in user processing:', error);

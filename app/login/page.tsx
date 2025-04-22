@@ -83,6 +83,8 @@ function LoginContent() {
       authUrl.searchParams.append('access_type', 'offline');
       authUrl.searchParams.append('prompt', 'consent');
 
+      localStorage.setItem('auth_provider', 'google');
+
       window.location.href = authUrl.toString();
     } catch (err) {
       console.error('Login error:', err);
@@ -126,6 +128,9 @@ function LoginContent() {
         // Microsoft Graph API scopes
         'User.Read',
         'Directory.Read.All',
+        'Application.Read.All',     // For reading application info
+        'DelegatedPermissionGrant.ReadWrite.All', // For reading delegated permissions
+        'AppRoleAssignment.ReadWrite.All',        // For reading application role assignments
         'offline_access', // For refresh tokens
         'openid',
         'profile',
@@ -142,6 +147,7 @@ function LoginContent() {
       authUrl.searchParams.append('prompt', 'consent');
 
       console.log('Redirecting to Microsoft auth URL:', authUrl.toString());
+      localStorage.setItem('auth_provider', 'microsoft');
       window.location.href = authUrl.toString();
     } catch (err) {
       console.error('Microsoft login error:', err);
@@ -174,7 +180,7 @@ function LoginContent() {
                 size="lg"
                 disabled={isLoading}
               >
-                <img src="/google-logo.svg" alt="Google logo" className="h-5 w-5" />
+                <img src="/images/google-logo.svg" alt="Google logo" className="h-5 w-5" />
                 {isLoading && loginProvider === 'google' ? 'Connecting...' : 'Sign in with Google Workspace'}
               </Button>
               
@@ -184,7 +190,7 @@ function LoginContent() {
                 size="lg"
                 disabled={isLoading}
               >
-                <img src="/microsoft-logo.svg" alt="Microsoft logo" className="h-5 w-5" />
+                <img src="/images/microsoft-logo.svg" alt="Microsoft logo" className="h-5 w-5" />
                 {isLoading && loginProvider === 'microsoft' ? 'Connecting...' : 'Sign in with Microsoft Entra ID'}
               </Button>
             </div>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel } from '@/lib/risk-assessment';
+import crypto from 'crypto';
 
 // Helper function to update sync status
 async function updateSyncStatus(syncId: string, progress: number, message: string, status: string = 'IN_PROGRESS') {
@@ -245,16 +246,19 @@ async function processTokens(
         risk_level: highestRiskLevel,
         total_permissions: allScopes.size,
         all_scopes: Array.from(allScopes),
-        organization_id: organization_id
+        organization_id: organization_id,
+        updated_at: new Date().toISOString()
       };
       
-      if (!existingApp) {
-        applicationsToUpsert.push(appRecord);
-      } else {
-        // Update existing app but include the ID
+      if (existingApp) {
+        // Update existing app with its ID
         appRecord.id = existingApp.id;
-        applicationsToUpsert.push(appRecord);
+      } else {
+        // Generate a new UUID for new applications
+        appRecord.id = crypto.randomUUID();
       }
+      
+      applicationsToUpsert.push(appRecord);
       
       // Process each token to create user-application relationships
       for (const token of tokens) {

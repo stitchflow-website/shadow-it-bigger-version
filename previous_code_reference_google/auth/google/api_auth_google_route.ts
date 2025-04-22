@@ -137,76 +137,109 @@ export async function GET(request: Request) {
 
     if (syncStatusError) {
       console.error('Error creating sync status:', syncStatusError);
-      return NextResponse.redirect(new URL('/login?error=sync_failed', request.url));
+      throw syncStatusError;
     }
 
-    // Create URL for loading page with syncId parameter
-    const redirectUrl = new URL('/loading', request.url);
-    if (syncStatus?.id) {
-      redirectUrl.searchParams.set('syncId', syncStatus.id);
+    // Store basic user info - the background job will get the rest
+    const { error: basicUserError } = await supabaseAdmin
+      .from('users_signedup')
+      .upsert({
+        email: userInfo.email,
+        name: userInfo.name,
+        avatar_url: userInfo.picture || null,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (basicUserError) {
+      console.error('Error storing basic user info:', basicUserError);
+      // Non-critical, continue anyway
     }
 
-    console.log('Setting cookies and redirecting to:', redirectUrl.toString());
+    // Trigger the background data processing job immediately
+    const apiUrl = createRedirectUrl('/api/background/sync');
+    console.log('Triggering background sync with URL:', apiUrl);
     
-    // Create the response with redirect
-    const response = NextResponse.redirect(redirectUrl);
+    try {
+      const syncPayload = {
+        organization_id: org.id,
+        sync_id: syncStatus.id,
+        access_token: oauthTokens.access_token,
+        refresh_token: oauthTokens.refresh_token,
+        user_email: userInfo.email,
+        user_hd: userInfo.hd
+      };
+      console.log('Background sync payload:', {
+        ...syncPayload,
+        access_token: syncPayload.access_token ? 'present' : 'missing',
+        refresh_token: syncPayload.refresh_token ? 'present' : 'missing'
+      });
+      
+      const syncResponse = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(syncPayload),
+      });
+      
+      if (!syncResponse.ok) {
+        const errorData = await syncResponse.json();
+        console.error('Background sync request failed:', {
+          status: syncResponse.status,
+          statusText: syncResponse.statusText,
+          error: errorData
+        });
+      } else {
+        console.log('Background sync triggered successfully');
+      }
+    } catch (error) {
+      console.error('Error triggering background sync:', error);
+    }
 
-    // Set necessary cookies - using consistent naming convention
+    console.log('Background sync job triggered');
+    
+    // Modify the final redirect to use the helper function
+    const response = NextResponse.redirect(createRedirectUrl(`/loading?syncId=${syncStatus.id}`));
+    
+    // Set secure cookies for session management
+    const cookieDomain = isFromMainSite ? new URL(referer).hostname : undefined;
+    
     response.cookies.set('orgId', org.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      path: '/'
+      maxAge: 7 * 24 * 60 * 60,
+      path: '/',
+      domain: cookieDomain
     });
     
     response.cookies.set('userEmail', userInfo.email, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      path: '/'
-    });
-
-    // Store basic user info in the background
-    Promise.resolve(
-      supabaseAdmin
-        .from('users_signedup')
-        .upsert({
-          email: userInfo.email,
-          name: userInfo.name,
-          avatar_url: userInfo.picture || null,
-          updated_at: new Date().toISOString(),
-        })
-    )
-      .then(() => {
-        console.log('Basic user info stored');
-      })
-      .catch((error: Error) => {
-        console.error('Error storing basic user info:', error);
-      });
-    // Trigger the background sync in a non-blocking way
-    const apiUrl = createRedirectUrl('/api/background/sync');
-    Promise.resolve(fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        organization_id: org.id,
-        sync_id: syncStatus.id,
-        access_token: oauthTokens.access_token,
-        refresh_token: oauthTokens.refresh_token,
-        user_email: userInfo.email,
-        user_hd: userInfo.hd,
-        provider: 'google'
-      }),
-    })).catch(error => {
-      console.error('Error triggering background sync:', error);
+      maxAge: 7 * 24 * 60 * 60,
+      path: '/',
+      domain: cookieDomain
     });
 
     return response;
-  } catch (error) {
-    console.error('Auth error:', error);
-    return NextResponse.redirect(new URL('/login?error=unknown', request.url));
+  } catch (error: any) {
+    console.error('Auth callback error:', {
+      name: error.name,
+      message: error.message,
+      details: error.details || 'No additional details',
+      stack: error.stack
+    });
+    
+    const baseUrl = request.headers.get('host') || 'localhost:3000';
+    const protocol = baseUrl.includes('localhost') ? 'http://' : 'https://';
+    const redirectUrl = `${protocol}${baseUrl}/login?error=auth_failed`;
+    
+    // Clear cookies on error
+    const response = NextResponse.redirect(redirectUrl);
+    response.cookies.delete('orgId');
+    response.cookies.delete('userEmail');
+    return response;
   }
 }
 

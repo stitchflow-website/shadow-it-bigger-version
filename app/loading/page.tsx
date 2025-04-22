@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 
+type Provider = 'microsoft' | 'google' | null;
+
 function LoadingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -13,12 +15,26 @@ function LoadingContent() {
   
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('IN_PROGRESS');
-  const [message, setMessage] = useState('Starting data sync...');
+  const [message, setMessage] = useState('Initializing...');
   const [error, setError] = useState<string | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [authRedirected, setAuthRedirected] = useState(false);
   const [stuckSync, setStuckSync] = useState(false);
   const [lastProgressUpdate, setLastProgressUpdate] = useState<number>(Date.now());
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [provider, setProvider] = useState<Provider>(null);
+
+  // Function to get provider-specific text
+  const getProviderName = () => {
+    switch (provider) {
+      case 'microsoft':
+        return 'Microsoft Entra ID';
+      case 'google':
+        return 'Google Workspace';
+      default:
+        return 'your organization';
+    }
+  };
 
   // Function to manually complete a stuck sync
   const completeStuckSync = async () => {
@@ -50,7 +66,10 @@ function LoadingContent() {
   };
 
   useEffect(() => {
+    console.log('Loading page mounted, syncId:', syncId);
+    
     if (!syncId) {
+      console.error('No syncId provided');
       router.push('/');
       return;
     }
@@ -58,6 +77,7 @@ function LoadingContent() {
     // Function to check sync status
     const checkSyncStatus = async () => {
       try {
+        console.log('Checking sync status for ID:', syncId);
         const response = await fetch(`/api/sync/status?syncId=${syncId}`);
         
         if (!response.ok) {
@@ -67,19 +87,39 @@ function LoadingContent() {
         }
 
         const data = await response.json();
+        console.log('Sync status data:', data);
         
         if (data) {
-          setProgress(data.progress);
-          setStatus(data.status);
+          setProgress(data.progress || 0);
+          setStatus(data.status || 'IN_PROGRESS');
           setMessage(data.message || 'Processing your data...');
+          setIsInitialLoad(false);
+          
+          // Determine provider from the sync record
+          if (data.access_token) {
+            // Check token audience or other properties to determine provider
+            const provider = data.access_token.includes('microsoft') ? 'microsoft' : 'google';
+            setProvider(provider);
+          }
           
           if (data.organization_id) {
             setOrgId(data.organization_id);
           }
 
+          // Update last progress timestamp
+          if (data.progress !== progress) {
+            setLastProgressUpdate(Date.now());
+          }
+
+          // Check for stuck sync (no progress for 30 seconds and not complete)
+          const timeSinceLastUpdate = Date.now() - lastProgressUpdate;
+          if (timeSinceLastUpdate > 30000 && data.status === 'IN_PROGRESS') {
+            setStuckSync(true);
+          }
+
           // If main sync is complete (progress >= 85%), redirect to dashboard
-          // This means we don't wait for categorization to complete
           if (data.progress >= 85 || data.status === 'COMPLETED') {
+            console.log('Sync complete, redirecting to dashboard');
             // Wait a moment to show progress before redirecting
             setTimeout(() => {
               if (data.organization_id) {
@@ -93,6 +133,7 @@ function LoadingContent() {
 
           // If failed, show error
           if (data.status === 'FAILED') {
+            console.error('Sync failed:', data.message);
             setError(`Sync failed: ${data.message}`);
             return;
           }
@@ -116,12 +157,22 @@ function LoadingContent() {
     // Check status immediately
     checkSyncStatus();
 
-    // Then set up polling
-    const intervalId = setInterval(checkSyncStatus, 2000);
+    // Then set up polling with a shorter initial interval
+    const initialInterval = setInterval(checkSyncStatus, 1000); // Check every second initially
+
+    // After 10 seconds, switch to a longer interval
+    const timeoutId = setTimeout(() => {
+      clearInterval(initialInterval);
+      const regularInterval = setInterval(checkSyncStatus, 3000); // Then every 3 seconds
+      return () => clearInterval(regularInterval);
+    }, 10000);
 
     // Clean up on unmount
-    return () => clearInterval(intervalId);
-  }, [syncId, router, authRedirected]);
+    return () => {
+      clearInterval(initialInterval);
+      clearTimeout(timeoutId);
+    };
+  }, [syncId, router, authRedirected, progress, lastProgressUpdate]);
 
   // Function to manually go to dashboard
   const goToDashboard = () => {
@@ -165,9 +216,15 @@ function LoadingContent() {
               </div>
               <div className="mt-8 text-center text-gray-500 text-sm">
                 <p>
-                  We're scanning your Google Workspace to discover all connected applications.
-                  <br />
-                  This process is running in the background, so you'll be redirected once it completes.
+                  {isInitialLoad ? (
+                    "Initializing connection..."
+                  ) : (
+                    <>
+                      We're scanning {getProviderName()} to discover all connected applications.
+                      <br />
+                      This process is running in the background, so you'll be redirected once it completes.
+                    </>
+                  )}
                 </p>
                 {progress >= 50 && (
                   <div className="mt-4">
@@ -181,7 +238,6 @@ function LoadingContent() {
                   </div>
                 )}
               </div>
-              {/* Add a button to manually complete sync if it seems stuck */}
               {stuckSync && progress >= 75 && progress < 100 && status === 'IN_PROGRESS' && (
                 <div className="mt-4">
                   <p className="text-amber-600 mb-2">Sync seems to be taking longer than expected.</p>
@@ -204,18 +260,7 @@ function LoadingContent() {
 
 export default function LoadingPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Card className="w-[600px]">
-          <CardContent className="flex justify-center items-center py-10">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-              <p>Loading...</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    }>
+    <Suspense fallback={<div>Loading...</div>}>
       <LoadingContent />
     </Suspense>
   );
