@@ -313,11 +313,25 @@ async function processTokens(
           continue;
         }
         
+        // Extract only the necessary parts of the token to avoid serialization issues
+        const simplifiedToken = {
+          scopes: token.scopes || [],
+          scopeData: token.scopeData || [],
+          scope: token.scope || '',
+          permissions: token.permissions || [],
+          displayText: token.displayText || ''
+        };
+        
+        // Log the first token for debugging
+        if (userAppRelationsToProcess.length === 0) {
+          console.log('First token example (simplified):', JSON.stringify(simplifiedToken));
+        }
+        
         userAppRelationsToProcess.push({
           appName,
           userId,
           userEmail: userEmail || '',
-          token
+          token: simplifiedToken
         });
       }
     }
@@ -454,4 +468,4 @@ async function processTokens(
     console.error(`[Tokens ${sync_id}] Error in token processing:`, error);
     throw error;
   }
-} 
+}
