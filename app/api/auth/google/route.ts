@@ -141,7 +141,7 @@ export async function GET(request: Request) {
     }
 
     // Create URL for loading page with syncId parameter
-    const redirectUrl = new URL('/tools/shadow-it-scan/loading', request.url);
+    const redirectUrl = new URL('http://localhost:3001/tools/shadow-it-scan/loading');
     if (syncStatus?.id) {
       redirectUrl.searchParams.set('syncId', syncStatus.id);
     }
