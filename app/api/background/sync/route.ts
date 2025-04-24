@@ -47,20 +47,26 @@ export async function POST(request: NextRequest) {
           'api/background/sync/microsoft'
         ];
 
-    // Extract the base URL with the correct protocol
-    const baseUrl = new URL('/', request.url).origin;
+    // Extract the host from the URL
+    const urlObj = new URL(request.url);
+    const host = urlObj.hostname === 'localhost' ? urlObj.host : urlObj.hostname;
+    
+    // Force HTTP for localhost development, otherwise use HTTPS
+    const protocol = host.includes('localhost') ? 'http://' : 'https://';
+    const baseUrl = `${protocol}${host}`;
+    
     console.log(`Using base URL: ${baseUrl}`);
 
     // Call each endpoint in sequence
     for (const endpoint of endpoints) {
       try {
-        // Try first without the /tools/shadow-it-scan prefix
-        const fullUrl = `${baseUrl}/${endpoint}`;
-        console.log(`Calling ${fullUrl}...`);
+        // Try first with the /tools/shadow-it-scan prefix as per next.config.js assetPrefix
+        const prefixedUrl = `${baseUrl}/tools/shadow-it-scan/${endpoint}`;
+        console.log(`Calling ${prefixedUrl}...`);
         let response;
         
         try {
-          response = await fetch(fullUrl, {
+          response = await fetch(prefixedUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -74,11 +80,11 @@ export async function POST(request: NextRequest) {
             }),
           });
         } catch (fetchError) {
-          console.log(`Error with ${fullUrl}, trying with /tools/shadow-it-scan/ prefix...`);
-          // If the first attempt fails, try with the prefix
-          const prefixedUrl = `${baseUrl}/tools/shadow-it-scan/${endpoint}`;
-          console.log(`Calling ${prefixedUrl}...`);
-          response = await fetch(prefixedUrl, {
+          console.log(`Error with ${prefixedUrl}, trying without /tools/shadow-it-scan/ prefix...`);
+          // If the first attempt fails, try without the prefix
+          const directUrl = `${baseUrl}/${endpoint}`;
+          console.log(`Calling ${directUrl}...`);
+          response = await fetch(directUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
