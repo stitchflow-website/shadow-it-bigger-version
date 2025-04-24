@@ -139,15 +139,36 @@ async function processTokens(
     let userMap = new Map<string, string>();
     if (!users || users.length === 0) {
       console.log(`[Tokens ${sync_id}] No user mapping provided, fetching from database`);
-      const { data: dbUsers } = await supabaseAdmin
+      
+      // First try to fetch users with their Google user IDs
+      const { data: dbUsers, error: userError } = await supabaseAdmin
         .from('users')
-        .select('id, google_user_id')
+        .select('id, google_user_id, email')
         .eq('organization_id', organization_id);
+      
+      if (userError) {
+        console.error(`[Tokens ${sync_id}] Error fetching users:`, userError);
+      }
         
-      if (dbUsers) {
+      if (dbUsers && dbUsers.length > 0) {
+        console.log(`[Tokens ${sync_id}] Found ${dbUsers.length} users in the database`);
+        
+        // Map users by Google ID
         dbUsers.forEach(user => {
-          userMap.set(user.google_user_id, user.id);
+          if (user.google_user_id) {
+            userMap.set(user.google_user_id, user.id);
+          }
+          // Also map by email as a fallback
+          if (user.email) {
+            userMap.set(user.email.toLowerCase(), user.id);
+          }
         });
+        
+        // Log first few entries for debugging
+        const mapEntries = Array.from(userMap.entries()).slice(0, 5);
+        console.log(`[Tokens ${sync_id}] Sample user map entries:`, mapEntries);
+      } else {
+        console.warn(`[Tokens ${sync_id}] No users found in the database for organization ${organization_id}`);
       }
     } else {
       console.log(`[Tokens ${sync_id}] Using provided user mapping with ${users.length} entries`);
@@ -263,21 +284,39 @@ async function processTokens(
       // Process each token to create user-application relationships
       for (const token of tokens) {
         const userKey = token.userKey;
-        if (!userKey) {
-          console.warn('Skipping token with missing user key');
-          continue;
+        const userEmail = token.userEmail;
+        
+        // Try to get user ID from map using different keys
+        let userId = null;
+        
+        // Try by Google user ID first
+        if (userKey && userMap.has(userKey)) {
+          userId = userMap.get(userKey);
         }
         
-        const userId = userMap.get(userKey);
+        // Fall back to email if available
+        if (!userId && userEmail) {
+          // Try normalized email
+          const normalizedEmail = userEmail.toLowerCase();
+          if (userMap.has(normalizedEmail)) {
+            userId = userMap.get(normalizedEmail);
+          }
+        }
+        
         if (!userId) {
-          console.warn('No matching user found for token:', userKey);
+          // Log the missing user details for debugging
+          console.warn('No matching user found for token:', {
+            userKey: userKey || 'missing',
+            userEmail: userEmail || 'missing',
+            appName: appName
+          });
           continue;
         }
         
         userAppRelationsToProcess.push({
           appName,
           userId,
-          userEmail: token.userEmail || '',
+          userEmail: userEmail || '',
           token
         });
       }
@@ -355,6 +394,19 @@ async function processTokens(
     const nextUrl = `${protocol}${selfUrl}/api/background/sync/relations`;
     
     console.log(`Triggering relations processing at: ${nextUrl}`);
+    console.log(`Prepared ${userAppRelationsToProcess.length} user-app relations and ${appMap.length} app mappings`);
+    
+    // If no relations were found, log the issue and complete
+    if (userAppRelationsToProcess.length === 0) {
+      console.warn(`[Tokens ${sync_id}] No user-application relations to process - check user mapping and token data`);
+      await updateSyncStatus(
+        sync_id, 
+        90, 
+        `Completed with partial data. No user-application relations could be created - user IDs may not match.`,
+        'COMPLETED'
+      );
+      return;
+    }
     
     try {
       const nextResponse = await fetch(nextUrl, {

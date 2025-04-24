@@ -151,8 +151,13 @@ async function processUsers(
           (user.name.fullName || `${user.name.givenName || ''} ${user.name.familyName || ''}`.trim() || user.primaryEmail) : 
           user.primaryEmail;
         
+        // Make sure we have a valid Google user ID
+        if (!user.id) {
+          console.warn(`Missing Google ID for user ${user.primaryEmail} - using email as key`);
+        }
+        
         return {
-          google_user_id: user.id,
+          google_user_id: user.id || user.primaryEmail,
           email: user.primaryEmail,
           name: fullName,
           role: role,
@@ -163,7 +168,7 @@ async function processUsers(
         console.error(`Error processing user ${user.primaryEmail || 'unknown'}:`, userError);
         // Return a minimal valid record
         return {
-          google_user_id: user.id || `unknown-${Date.now()}-${Math.random()}`,
+          google_user_id: user.id || user.primaryEmail || `unknown-${Date.now()}-${Math.random()}`,
           email: user.primaryEmail || 'unknown@example.com',
           name: 'Unknown User',
           role: 'User',
@@ -172,6 +177,11 @@ async function processUsers(
         };
       }
     });
+    
+    // Log a sample of users for debugging
+    if (usersToUpsert.length > 0) {
+      console.log('Sample user data:', usersToUpsert.slice(0, 2));
+    }
     
     // Use a single batch upsert operation for all users (more efficient)
     const { error: usersError } = await supabaseAdmin

@@ -123,9 +123,9 @@ function LoadingContent() {
             // Wait a moment to show progress before redirecting
             setTimeout(() => {
               if (data.organization_id) {
-                router.push(`/?orgId=${data.organization_id}`);
+                router.push(`/tools/shadow-it-scan/?orgId=${data.organization_id}`);
               } else {
-                router.push('/');
+                router.push('/tools/shadow-it-scan/');
               }
             }, 1500);
             return;
@@ -177,9 +177,9 @@ function LoadingContent() {
   // Function to manually go to dashboard
   const goToDashboard = () => {
     if (orgId) {
-      router.push(`/?orgId=${orgId}`);
+      router.push(`/tools/shadow-it-scan/?orgId=${orgId}`);
     } else {
-      router.push('/');
+      router.push('/tools/shadow-it-scan/');
     }
   };
 
