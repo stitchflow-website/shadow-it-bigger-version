@@ -136,7 +136,7 @@ async function processUsers(
     await updateSyncStatus(sync_id, 20, `Processing ${users.length} users`);
     
     // Create a batch of all users to upsert
-    const usersToUpsert = users.map((user: any) => {
+    const usersToUpsert = users.map((user: any, index: number) => {
       try {
         // Determine department from orgUnitPath if available
         const department = user.orgUnitPath ? 
@@ -162,18 +162,23 @@ async function processUsers(
           name: fullName,
           role: role,
           department: department,
-          organization_id: organization_id
+          organization_id: organization_id,
+          // Additional identifier fields to help with matching
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         };
       } catch (userError) {
         console.error(`Error processing user ${user.primaryEmail || 'unknown'}:`, userError);
         // Return a minimal valid record
         return {
           google_user_id: user.id || user.primaryEmail || `unknown-${Date.now()}-${Math.random()}`,
-          email: user.primaryEmail || 'unknown@example.com',
+          email: user.primaryEmail || `unknown-${index}@example.com`,
           name: 'Unknown User',
           role: 'User',
           department: null,
-          organization_id: organization_id
+          organization_id: organization_id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         };
       }
     });

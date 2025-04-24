@@ -106,6 +106,12 @@ export async function POST(request: NextRequest) {
         }
 
         console.log(`Successfully completed ${endpoint}`);
+        
+        // Add a small delay between endpoints to ensure database operations complete
+        if (endpoint.includes('users')) {
+          console.log('Waiting for database to process user data...');
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+        }
       } catch (error) {
         console.error(`Error processing ${endpoint}:`, error);
         throw error;

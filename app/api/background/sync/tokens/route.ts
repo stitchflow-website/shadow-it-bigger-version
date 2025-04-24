@@ -140,19 +140,39 @@ async function processTokens(
     if (!users || users.length === 0) {
       console.log(`[Tokens ${sync_id}] No user mapping provided, fetching from database`);
       
-      // First try to fetch users with their Google user IDs
-      const { data: dbUsers, error: userError } = await supabaseAdmin
-        .from('users')
-        .select('id, google_user_id, email')
-        .eq('organization_id', organization_id);
+      // Try multiple times to fetch users in case they're still being processed
+      let retryCount = 0;
+      const maxRetries = 3;
+      let dbUsers = null;
       
-      if (userError) {
-        console.error(`[Tokens ${sync_id}] Error fetching users:`, userError);
+      while (retryCount < maxRetries) {
+        // First try to fetch users with their Google user IDs
+        const { data: fetchedUsers, error: userError } = await supabaseAdmin
+          .from('users')
+          .select('id, google_user_id, email')
+          .eq('organization_id', organization_id);
+        
+        if (userError) {
+          console.error(`[Tokens ${sync_id}] Error fetching users:`, userError);
+          break;
+        }
+          
+        if (fetchedUsers && fetchedUsers.length > 0) {
+          console.log(`[Tokens ${sync_id}] Found ${fetchedUsers.length} users in the database`);
+          dbUsers = fetchedUsers;
+          break;
+        } else {
+          retryCount++;
+          if (retryCount < maxRetries) {
+            console.log(`[Tokens ${sync_id}] No users found yet, waiting for users to be processed (attempt ${retryCount}/${maxRetries})...`);
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds before retrying
+          } else {
+            console.warn(`[Tokens ${sync_id}] No users found after ${maxRetries} attempts`);
+          }
+        }
       }
-        
+      
       if (dbUsers && dbUsers.length > 0) {
-        console.log(`[Tokens ${sync_id}] Found ${dbUsers.length} users in the database`);
-        
         // Map users by Google ID
         dbUsers.forEach(user => {
           if (user.google_user_id) {
