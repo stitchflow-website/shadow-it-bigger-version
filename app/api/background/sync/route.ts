@@ -38,32 +38,60 @@ export async function POST(request: NextRequest) {
     // Determine which sync endpoints to call based on provider
     const endpoints = provider === 'google' 
       ? [
-          '/tools/shadow-it-scan/api/background/sync/users',
-          '/tools/shadow-it-scan/api/background/sync/tokens',
-          '/tools/shadow-it-scan/api/background/sync/relations',
-          '/tools/shadow-it-scan/api/background/sync/categorize'
+          'api/background/sync/users',
+          'api/background/sync/tokens',
+          'api/background/sync/relations',
+          'api/background/sync/categorize'
         ]
       : [
-          '/tools/shadow-it-scan/api/background/sync/microsoft'
+          'api/background/sync/microsoft'
         ];
+
+    // Extract the base URL with the correct protocol
+    const baseUrl = new URL('/', request.url).origin;
+    console.log(`Using base URL: ${baseUrl}`);
 
     // Call each endpoint in sequence
     for (const endpoint of endpoints) {
       try {
-        console.log(`Calling ${endpoint}...`);
-        const response = await fetch(`${request.nextUrl.origin}${endpoint}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            organization_id,
-            sync_id,
-            access_token,
-            refresh_token,
-            provider
-          }),
-        });
+        // Try first without the /tools/shadow-it-scan prefix
+        const fullUrl = `${baseUrl}/${endpoint}`;
+        console.log(`Calling ${fullUrl}...`);
+        let response;
+        
+        try {
+          response = await fetch(fullUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              organization_id,
+              sync_id,
+              access_token,
+              refresh_token,
+              provider
+            }),
+          });
+        } catch (fetchError) {
+          console.log(`Error with ${fullUrl}, trying with /tools/shadow-it-scan/ prefix...`);
+          // If the first attempt fails, try with the prefix
+          const prefixedUrl = `${baseUrl}/tools/shadow-it-scan/${endpoint}`;
+          console.log(`Calling ${prefixedUrl}...`);
+          response = await fetch(prefixedUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              organization_id,
+              sync_id,
+              access_token,
+              refresh_token,
+              provider
+            }),
+          });
+        }
 
         if (!response.ok) {
           const error = await response.text();

@@ -17,6 +17,13 @@ export async function middleware(request: NextRequest) {
     '/tools/shadow-it-scan/api/background/sync/users',
     '/tools/shadow-it-scan/api/background/sync/relations',
     '/tools/shadow-it-scan/api/background/sync/categorize',
+    '/api/background/sync',
+    '/api/background/sync/users',
+    '/api/background/sync/tokens',
+    '/api/background/sync/relations',
+    '/api/background/sync/categorize',
+    '/api/background/sync/microsoft',
+    '/api/background/sync/google',
     '/tools/shadow-it-scan/api/categorize',  // Add the categorization API
     '/tools/shadow-it-scan/loading',
     '/tools/shadow-it-scan/api/sync/status',

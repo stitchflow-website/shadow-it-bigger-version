@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     
     // Call the appropriate provider-specific sync endpoint
     if (provider === 'microsoft') {
-      syncHandler = fetch(`${request.nextUrl.origin}/api/background/sync/microsoft`, {
+      syncHandler = fetch(`${request.nextUrl.origin}/tools/shadow-it-scan/api/background/sync/microsoft`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Default to Google sync
-      syncHandler = fetch(`${request.nextUrl.origin}/api/background/sync/google`, {
+      syncHandler = fetch(`${request.nextUrl.origin}/tools/shadow-it-scan/api/background/sync/google`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
