@@ -139,7 +139,7 @@ export async function POST(request: Request) {
       // Make a request to self to start the user fetching process
       const selfUrl = request.headers.get('host') || 'localhost:3000';
       const protocol = selfUrl.includes('localhost') ? 'http://' : 'https://';
-      const fetchUsersUrl = `${protocol}${selfUrl}/api/background/sync/users`;
+      const fetchUsersUrl = `${protocol}${selfUrl}/tools/shadow-it-scan/api/background/sync/users`;
       
       console.log(`Triggering user fetch at: ${fetchUsersUrl}`);
       

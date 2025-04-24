@@ -19,8 +19,8 @@ const nextConfig = {
   experimental: {
     webpackBuildWorker: true,
     parallelServerBuildTraces: true,
-    parallelServerCompiles: true,
-  }
+    parallelServerCompiles: true,}
+  // ,
   // assetPrefix:'/tools/shadow-it-scan',
 }
 

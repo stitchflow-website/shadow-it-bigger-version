@@ -55,7 +55,7 @@ function LoginContent() {
       // If we're on localhost, modify the redirect URI to match the main site's domain
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         const baseUrl = `${window.location.protocol}//${window.location.host}`;
-        redirectUri = window.location.origin + '/api/auth/google';
+        redirectUri = window.location.origin + '/tools/shadow-it-scan/api/auth/google';
       }
       
       const scopes = [
@@ -120,7 +120,7 @@ function LoginContent() {
 
       // If we're on localhost, update the redirect URI
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        redirectUri = window.location.origin + '/api/auth/microsoft';
+        redirectUri = window.location.origin + '/tools/shadow-it-scan/api/auth/microsoft';
         console.log('Updated redirect URI for localhost:', redirectUri);
       }
       

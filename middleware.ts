@@ -1,49 +1,28 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Define paths that don't require authentication
-const PUBLIC_PATHS = [
-  '/login', 
-  '/loading',
-  '/privacy',
-  '/public',
-  '/terms',
-  '/auth/google',
-  '/api/auth/google',  // Add the API route for OAuth callback
-  '/api/background/sync', // Allow background sync API
-];
-const PUBLIC_FILE_PATTERNS = [
-  /\.(?:jpg|jpeg|gif|png|svg|ico)$/,  // images
-  /^\/public\//,                       // public folder
-  /^\/images\//,                       // images folder
-  /^\/assets\//,                       // assets folder
-  /^\/favicon\.ico$/,                  // favicon
-  /^\/robots\.txt$/,                   // robots.txt
-  /^\/manifest\.json$/,                // manifest file
-];
-
 // This function runs on every request
 export async function middleware(request: NextRequest) {
   console.log('Middleware path:', request.nextUrl.pathname);
   
   // Skip auth check for public routes and internal API calls
   const publicRoutes = [
-    '/login',
-    '/api/auth/google',
-    '/api/auth/microsoft',
-    '/api/background/sync',
-    '/api/background/sync/google',
-    '/api/background/sync/microsoft',
-    '/api/background/sync/tokens',
-    '/api/background/sync/users',
-    '/api/background/sync/relations',
-    '/api/background/sync/categorize',
-    '/api/categorize',  // Add the categorization API
-    '/loading',
-    '/api/sync/status',
-    '/favicon.ico',
-    '/images',  // Add images directory
-    '/.*\\.(?:jpg|jpeg|gif|png|svg|ico|css|js)$'
+    '/tools/shadow-it-scan/login',
+    '/tools/shadow-it-scan/api/auth/google',
+    '/tools/shadow-it-scan/api/auth/microsoft',
+    '/tools/shadow-it-scan/api/background/sync',
+    '/tools/shadow-it-scan/api/background/sync/google',
+    '/tools/shadow-it-scan/api/background/sync/microsoft',
+    '/tools/shadow-it-scan/api/background/sync/tokens',
+    '/tools/shadow-it-scan/api/background/sync/users',
+    '/tools/shadow-it-scan/api/background/sync/relations',
+    '/tools/shadow-it-scan/api/background/sync/categorize',
+    '/tools/shadow-it-scan/api/categorize',  // Add the categorization API
+    '/tools/shadow-it-scan/loading',
+    '/tools/shadow-it-scan/api/sync/status',
+    '/tools/shadow-it-scan/favicon.ico',
+    '/tools/shadow-it-scan/images',  // Add images directory
+    '/tools/shadow-it-scan/.*\\.(?:jpg|jpeg|gif|png|svg|ico|css|js)$'
   ];
   
   // Check if current URL is a public route

@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
     
     // Trigger the Microsoft sync process in the background
     // This will run after we've already redirected the user
-    fetch(`${request.nextUrl.origin}/api/background/sync/microsoft`, {
+    fetch(`${request.nextUrl.origin}/tools/shadow-it-scan/api/background/sync/microsoft`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

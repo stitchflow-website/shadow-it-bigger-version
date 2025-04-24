@@ -187,7 +187,7 @@ export default function ShadowITDashboard() {
         }
 
         // Check if there's an active sync for this organization
-        const syncResponse = await fetch(`/api/sync/status?orgId=${orgId}`);
+        const syncResponse = await fetch(`/tools/shadow-it-scan/api/sync/status?orgId=${orgId}`);
         if (syncResponse.ok) {
           const syncData = await syncResponse.json();
           if (syncData && syncData.status === 'IN_PROGRESS') {
@@ -199,7 +199,7 @@ export default function ShadowITDashboard() {
 
         console.log("Fetching applications with orgId:", orgId);
         // Fetch applications from our API
-        const response = await fetch(`/api/applications?orgId=${orgId}`);
+        const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${orgId}`);
         if (!response.ok) {
           throw new Error('Failed to fetch applications');
         }
@@ -1329,7 +1329,7 @@ export default function ShadowITDashboard() {
                         ))}
                       </select>
                     </div>
-                    {authProvider === 'google' && (
+                    
                       <div className="min-w-[150px]">
                         <div className="flex justify-between items-center mb-1">
                           <Label className="text-sm font-medium text-gray-700">Risk Level</Label>
@@ -1353,7 +1353,7 @@ export default function ShadowITDashboard() {
                           <option value="High">High</option>
                         </select>
                       </div>
-                    )}
+                    
                     <div className="min-w-[150px]">
                       <div className="flex justify-between items-center mb-1">
                         <Label className="text-sm font-medium text-gray-700">App Status</Label>
@@ -1385,25 +1385,25 @@ export default function ShadowITDashboard() {
                   <Table>
                       <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
                         <TableRow className="border-b border-gray-100">
-                          <TableHead className={`${authProvider === 'google' ? 'w-[250px]' : 'w-[260px]'} cursor-pointer rounded-tl-lg bg-transparent`} onClick={() => handleSort("name")}>
+                          <TableHead className={`${authProvider !== 'google' ? 'w-[250px]' : 'w-[260px]'} cursor-pointer rounded-tl-lg bg-transparent`} onClick={() => handleSort("name")}>
                             <div className="flex items-center">
                               Application
                               {getSortIcon("name")}
                             </div>
                           </TableHead>
-                          <TableHead className={`${authProvider === 'google' ? 'w-[180px]' : 'w-[200px]'} cursor-pointer`} onClick={() => handleSort("category")}>
+                          <TableHead className={`${authProvider !== 'google' ? 'w-[180px]' : 'w-[200px]'} cursor-pointer`} onClick={() => handleSort("category")}>
                             <div className="flex items-center">
                               Category
                               {getSortIcon("category")}
                             </div>
                           </TableHead>
-                          <TableHead className={`${authProvider === 'google' ? '' : 'w-[200px]'} text-center cursor-pointer`} onClick={() => handleSort("userCount")}>
+                          <TableHead className={`${authProvider !== 'google' ? 'w-[200px]' : 'w-[200px]'} text-center cursor-pointer`} onClick={() => handleSort("userCount")}>
                             <div className="flex items-center justify-center">
                               Users
                               {getSortIcon("userCount")}
                             </div>
                           </TableHead>
-                          {authProvider === 'google' && (
+                          {authProvider !== 'google' && (
                             <>
                               <TableHead className="text-center cursor-pointer" onClick={() => handleSort("riskLevel")}>
                                 <div className="flex items-center justify-center">
@@ -1422,13 +1422,13 @@ export default function ShadowITDashboard() {
                               </TableHead>
                             </>
                           )}
-                          <TableHead className={`${authProvider === 'google' ? '' : 'w-[200px]'} cursor-pointer`} onClick={() => handleSort("managementStatus")}>
+                          <TableHead className={`${authProvider !== 'google' ? 'w-[200px]' : 'w-[200px]'} cursor-pointer`} onClick={() => handleSort("managementStatus")}>
                             <div className="flex items-center">
                               Status
                               {getSortIcon("managementStatus")}
                             </div>
                           </TableHead>
-                          <TableHead className={`${authProvider === 'google' ? '' : 'w-[200px]'} text-center rounded-tr-lg`}>User Access</TableHead>
+                          <TableHead className={`${authProvider !== 'google' ? 'w-[200px]' : 'w-[200px]'} text-center rounded-tr-lg`}>User Access</TableHead>
                         </TableRow>
                       </TableHeader>
                     <TableBody>
@@ -1498,9 +1498,9 @@ export default function ShadowITDashboard() {
                                   </Tooltip>
                                 </TooltipProvider>
                             </TableCell>
-                            {authProvider === 'google' && (
-                              <>
-                                <TableCell>
+                            
+                      
+                            <TableCell>
                                   <TooltipProvider>
                                       <Tooltip delayDuration={300}>
                                       <TooltipTrigger asChild>
@@ -1529,9 +1529,9 @@ export default function ShadowITDashboard() {
                                         </TooltipContent>
                                       </Tooltip>
                                     </TooltipProvider>
-                                </TableCell>
-                              </>
-                            )}
+                                </TableCell>    
+                              
+
                             <TableCell>
                               <select
                                 className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
@@ -1761,8 +1761,8 @@ export default function ShadowITDashboard() {
                 </div>
               </div>
 
-              {authProvider === 'google' && (
-                <>
+            
+                
                   {/* Risk Level Distribution */}
                   <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
                     <h3 className="text-lg font-medium text-gray-900">Risk Level Distribution</h3>
@@ -1917,11 +1917,11 @@ export default function ShadowITDashboard() {
                       </ResponsiveContainer>
                     </div>
                   </div>
-                </>
-              )}
+                
+              
 
               {/* Application Similarity Groups */}
-              {authProvider === 'google' && (
+              
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 col-span-2">
                   <h3 className="text-lg font-medium text-gray-900">Application Similarity Groups</h3>
                   <p className="text-sm text-gray-500 mb-4">
@@ -2026,7 +2026,7 @@ export default function ShadowITDashboard() {
                     </ResponsiveContainer>
                   </div>
                 </div>
-              )}
+              
             </div>
           )}
         </div>
@@ -2117,12 +2117,12 @@ export default function ShadowITDashboard() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    {authProvider === 'google' && (
+                    
                       <div className="flex items-center gap-1">
                         <span className="text-sm text-muted-foreground font-medium">Risk:</span>
                         <RiskBadge level={selectedApp.riskLevel} />
                       </div>
-                    )}
+                
                     <div className="flex items-center gap-1">
                       <span className="text-sm text-muted-foreground font-medium">Status:</span>
                       <select
@@ -2146,12 +2146,12 @@ export default function ShadowITDashboard() {
                       <dt className="text-muted-foreground font-medium">Category</dt>
                       <dd className="font-medium">{selectedApp.category}</dd>
                     </div>
-                    {authProvider === 'google' && (
+                    
                       <div>
                         <dt className="text-muted-foreground font-medium">Total Scope Permissions</dt>
                         <dd className="font-medium">{selectedApp.totalPermissions}</dd>
                       </div>
-                    )}
+                  
                     <div>
                       <dt className="text-muted-foreground font-medium">Created</dt>
                       <dd className="font-medium">{selectedApp.created_at && formatDate(selectedApp.created_at)}</dd>

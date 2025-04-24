@@ -156,7 +156,7 @@ export async function GET(request: Request) {
     }
 
     // Trigger the background data processing job immediately
-    const apiUrl = createRedirectUrl('/api/background/sync');
+    const apiUrl = createRedirectUrl('/tools/shadow-it-scan/api/background/sync');
     console.log('Triggering background sync with URL:', apiUrl);
     
     try {

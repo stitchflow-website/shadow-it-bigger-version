@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 // For client components to get session info
 export async function getSessionInfo() {
   try {
-    const response = await fetch('/api/auth/session');
+    const response = await fetch('/tools/shadow-it-scan/api/auth/session');
     if (!response.ok) return null;
     return response.json();
   } catch (error) {

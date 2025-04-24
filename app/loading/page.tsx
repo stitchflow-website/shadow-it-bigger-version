@@ -41,7 +41,7 @@ function LoadingContent() {
     if (!syncId) return;
     
     try {
-      const response = await fetch('/api/background/sync/complete', {
+      const response = await fetch('/tools/shadow-it-scan/api/background/sync/complete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -78,7 +78,7 @@ function LoadingContent() {
     const checkSyncStatus = async () => {
       try {
         console.log('Checking sync status for ID:', syncId);
-        const response = await fetch(`/api/sync/status?syncId=${syncId}`);
+        const response = await fetch(`/tools/shadow-it-scan/api/sync/status?syncId=${syncId}`);
         
         if (!response.ok) {
           console.error('Error fetching sync status:', response.statusText);

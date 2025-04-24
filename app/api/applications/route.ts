@@ -119,9 +119,9 @@ export async function GET(request: Request) {
       .from('applications')
       .select(`
         *,
-        user_applications:user_applications (
+        user_applications:user_applications!inner (
           scopes,
-          user:users (
+          user:users!inner (
             id,
             name,
             email,
@@ -143,23 +143,20 @@ export async function GET(request: Request) {
 
     // Transform the data to match the frontend structure
     const transformedApplications = (applications as ApplicationType[]).map(app => {
-      // Get unique users from user_applications, filtering out null users
-      const uniqueUsers = Array.from(new Set(
-        (app.user_applications || [])
-          .map(ua => ua.user)
-          .filter((user): user is UserType => Boolean(user))
-      ));
+      // Get valid user applications (where user exists)
+      const validUserApplications = (app.user_applications || [])
+        .filter(ua => ua.user != null && ua.scopes != null);
 
       // Check if this is a Microsoft app
       const isMicrosoftApp = Boolean(app.microsoft_app_id);
 
       // Get all unique scopes from user_applications
-      const allUserScopes = isMicrosoftApp ? [] : Array.from(new Set(
-        (app.user_applications || [])?.flatMap(ua => ua.scopes || []) || []
+      const allUserScopes = Array.from(new Set(
+        validUserApplications.flatMap(ua => ua.scopes || [])
       ));
       
       // Use the all_scopes field from the application if available, otherwise fallback to user scopes
-      const applicationScopes = isMicrosoftApp ? [] : (app.all_scopes || allUserScopes);
+      const applicationScopes = (app.all_scopes || allUserScopes);
 
       // Get logo URLs
       const logoUrls = getAppLogoUrl(app.name);
@@ -168,15 +165,10 @@ export async function GET(request: Request) {
         id: app.id,
         name: app.name,
         category: app.category || 'Others',
-        userCount: uniqueUsers.length,
-        users: uniqueUsers.map(user => {
-          // Find this specific user's application
-          const userApp = (app.user_applications || []).find((ua: UserApplicationType) => 
-            ua.user?.id === user.id
-          );
-          
-          // Get this user's specific scopes (not the application-wide scopes)
-          const userScopes = isMicrosoftApp ? [] : (userApp?.scopes || []);
+        userCount: validUserApplications.length,
+        users: validUserApplications.map(ua => {
+          const user = ua.user;
+          const userScopes = ua.scopes || [];
           
           return {
             id: user.id,
@@ -186,16 +178,14 @@ export async function GET(request: Request) {
             scopes: userScopes,
             scopesMessage: isMicrosoftApp ? "Scope details not available for Microsoft applications" : undefined,
             created_at: user.created_at,
-            riskLevel: isMicrosoftApp ? 'LOW' : determineRiskLevel(userScopes),
-            riskReason: isMicrosoftApp ? 'Microsoft application permissions are managed through Azure AD' : determineRiskReason(userScopes)
+            riskLevel: determineRiskLevel(userScopes),
+            riskReason: determineRiskReason(userScopes)
           };
         }),
         riskLevel: transformRiskLevel(app.risk_level),
-        riskReason: isMicrosoftApp ? 
-          'Microsoft application permissions are managed through Azure AD' : 
-          determineAppRiskReason(app.risk_level, app.total_permissions),
-        totalPermissions: isMicrosoftApp ? 0 : app.total_permissions,
-        scopeVariance: isMicrosoftApp ? { userGroups: 0, scopeGroups: 0 } : calculateScopeVariance(app.user_applications || []),
+        riskReason: determineAppRiskReason(app.risk_level, app.total_permissions),
+        totalPermissions: app.total_permissions,
+        scopeVariance: calculateScopeVariance(validUserApplications),
         logoUrl: logoUrls.primary,
         logoUrlFallback: logoUrls.fallback,
         created_at: app.created_at,
