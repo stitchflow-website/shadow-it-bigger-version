@@ -184,7 +184,7 @@ export async function GET(request: Request) {
         console.error('Error storing basic user info:', error);
       });
     // Trigger the background sync in a non-blocking way
-    const apiUrl = createRedirectUrl('/tools/shadow-it-scan/api/background/sync');
+    const apiUrl = createRedirectUrl('/api/background/sync');
     Promise.resolve(fetch(apiUrl, {
       method: 'POST',
       headers: {

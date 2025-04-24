@@ -35,10 +35,10 @@ export async function POST(request: NextRequest) {
     // Determine which sync endpoints to call based on provider
     const endpoints = provider === 'google' 
       ? [
-          '/tools/shadow-it-scan/api/background/sync/users',
-          '/tools/shadow-it-scan/api/background/sync/tokens',
-          '/tools/shadow-it-scan/api/background/sync/relations',
-          '/tools/shadow-it-scan/api/background/sync/categorize'
+          '/api/background/sync/users',
+          '/api/background/sync/tokens',
+          '/api/background/sync/relations',
+          '/api/background/sync/categorize'
         ]
       : [
           '/tools/shadow-it-scan/api/background/sync/microsoft'
