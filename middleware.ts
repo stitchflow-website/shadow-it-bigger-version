@@ -42,12 +42,12 @@ export async function middleware(request: NextRequest) {
   // Redirect logic
   if (!isAuthenticated && !isPublicRoute) {
     // Redirect to login page if not authenticated and trying to access protected route
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(new URL('/tools/shadow-it-scan/login', request.url));
   }
   
-  if (isAuthenticated && request.nextUrl.pathname === '/login' && !isInternalApiCall) {
+  if (isAuthenticated && request.nextUrl.pathname === '/tools/shadow-it-scan/login' && !isInternalApiCall) {
     // Redirect to home page if already authenticated and trying to access login page
-    return NextResponse.redirect(new URL(`/?orgId=${request.cookies.get('orgId')?.value}`, request.url));
+    return NextResponse.redirect(new URL(`/tools/shadow-it-scan/?orgId=${request.cookies.get('orgId')?.value}`, request.url));
   }
   
   // Continue with the request
