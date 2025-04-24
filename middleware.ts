@@ -47,10 +47,10 @@ export async function middleware(request: NextRequest) {
   console.log('isAuthenticated:', isAuthenticated, 'isPublicRoute:', isPublicRoute, 'isInternalApiCall:', isInternalApiCall);
   
   // // Redirect logic
-  // if (!isAuthenticated && !isPublicRoute) {
-  //   // Redirect to login page if not authenticated and trying to access protected route
-  //   return NextResponse.redirect(new URL('/tools/shadow-it-scan/login', request.url));
-  // }
+  if (!isAuthenticated && !isPublicRoute) {
+    // Redirect to login page if not authenticated and trying to access protected route
+    return NextResponse.redirect(new URL('/tools/shadow-it-scan/login', request.url));
+  }
   
   if (isAuthenticated && request.nextUrl.pathname === '/tools/shadow-it-scan/login' && !isInternalApiCall) {
     // Redirect to home page if already authenticated and trying to access login page
