@@ -40,8 +40,8 @@ export async function POST(request: NextRequest) {
       ? [
           'api/background/sync/users',
           'api/background/sync/tokens',
-          'api/background/sync/relations',
-          'api/background/sync/categorize'
+          // 'api/background/sync/relations',
+          // 'api/background/sync/categorize'
         ]
       : [
           'api/background/sync/microsoft'

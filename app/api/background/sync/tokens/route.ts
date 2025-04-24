@@ -323,7 +323,7 @@ async function processTokens(
     const protocol = selfUrl.includes('localhost') ? 'http://' : 'https://';
     
     // Trigger app categorization process in parallel
-    const categorizeUrl = `${protocol}${selfUrl}/tools/shadow-it-scan/api/background/sync/categorize`;
+    const categorizeUrl = `${protocol}${selfUrl}/api/background/sync/categorize`;
     
     console.log(`[Tokens ${sync_id}] Triggering app categorization at: ${categorizeUrl}`);
     
@@ -352,7 +352,7 @@ async function processTokens(
     await updateSyncStatus(sync_id, 80, 'Saving application token relationships');
     
     // Use the same URL variables defined earlier
-    const nextUrl = `${protocol}${selfUrl}/tools/shadow-it-scan/api/background/sync/relations`;
+    const nextUrl = `${protocol}${selfUrl}/api/background/sync/relations`;
     
     console.log(`Triggering relations processing at: ${nextUrl}`);
     

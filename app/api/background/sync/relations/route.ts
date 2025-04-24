@@ -80,10 +80,11 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
 
 export async function POST(request: Request) {
+  let requestData;
   try {
     console.log('Starting relations processing');
     
-    const requestData = await request.json();
+    requestData = await request.json();
     const { 
       organization_id, 
       sync_id, 
@@ -92,27 +93,49 @@ export async function POST(request: Request) {
     } = requestData;
 
     // Validate required fields
-    if (!organization_id || !sync_id || !userAppRelations || !appMap) {
+    if (!organization_id || !sync_id) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing organization_id or sync_id' },
         { status: 400 }
       );
     }
 
+    // Check for optional fields - if missing, we'll use empty arrays
+    const relations = userAppRelations || [];
+    const apps = appMap || [];
+
+    console.log(`Received ${relations.length} relations and ${apps.length} apps for processing`);
+
     // Send immediate response
     const response = NextResponse.json({ message: 'Relations processing started' });
     
-    // Process in the background
-    processRelations(organization_id, sync_id, userAppRelations, appMap)
-      .catch(async (error) => {
-        console.error('Relations processing failed:', error);
-        await updateSyncStatus(
-          sync_id,
-          -1,
-          `Relations processing failed: ${error.message}`,
-          'FAILED'
-        );
+    // Only process if we have data
+    if (relations.length > 0 && apps.length > 0) {
+      // Process in the background
+      processRelations(organization_id, sync_id, relations, apps)
+        .catch(async (error) => {
+          console.error('Relations processing failed:', error);
+          await updateSyncStatus(
+            sync_id,
+            -1,
+            `Relations processing failed: ${error.message}`,
+            'FAILED'
+          );
+        });
+    } else {
+      // If no data to process, just update the status
+      console.log(`No relations or apps to process for sync ${sync_id}`);
+      
+      // Still mark as completed since this is expected in the flow
+      updateSyncStatus(
+        sync_id, 
+        100, 
+        `Relations processing completed - no data to process`,
+        'COMPLETED'
+      ).catch(err => {
+        console.error('Error updating sync status:', err);
       });
+    }
     
     return response;
   } catch (error: any) {
