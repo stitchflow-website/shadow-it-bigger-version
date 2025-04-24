@@ -141,7 +141,7 @@ export async function GET(request: Request) {
     }
 
     // Create URL for loading page with syncId parameter
-    const redirectUrl = new URL('/loading', request.url);
+    const redirectUrl = new URL('/tools/shadow-it-scan/loading', request.url);
     if (syncStatus?.id) {
       redirectUrl.searchParams.set('syncId', syncStatus.id);
     }
@@ -184,7 +184,7 @@ export async function GET(request: Request) {
         console.error('Error storing basic user info:', error);
       });
     // Trigger the background sync in a non-blocking way
-    const apiUrl = createRedirectUrl('/api/background/sync');
+    const apiUrl = createRedirectUrl('/tools/shadow-it-scan/api/background/sync');
     Promise.resolve(fetch(apiUrl, {
       method: 'POST',
       headers: {
