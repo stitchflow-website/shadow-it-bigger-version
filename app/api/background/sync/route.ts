@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     for (const endpoint of endpoints) {
       try {
         console.log(`Calling ${endpoint}...`);
-        const response = await fetch(`${request.nextUrl.origin}${endpoint}`, {
+        const response = await fetch(`http://localhost:3001${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
