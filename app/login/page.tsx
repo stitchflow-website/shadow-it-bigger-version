@@ -180,7 +180,7 @@ function LoginContent() {
                 size="lg"
                 disabled={isLoading}
               >
-                <img src="/images/google-logo.svg" alt="Google logo" className="h-5 w-5" />
+                <img src="/tools/shadow-it-scan/images/google-logo.svg" alt="Google logo" className="h-5 w-5" />
                 {isLoading && loginProvider === 'google' ? 'Connecting...' : 'Sign in with Google Workspace'}
               </Button>
               
@@ -190,7 +190,7 @@ function LoginContent() {
                 size="lg"
                 disabled={isLoading}
               >
-                <img src="/images/microsoft-logo.svg" alt="Microsoft logo" className="h-5 w-5" />
+                <img src="/tools/shadow-it-scan/images/microsoft-logo.svg" alt="Microsoft logo" className="h-5 w-5" />
                 {isLoading && loginProvider === 'microsoft' ? 'Connecting...' : 'Sign in with Microsoft Entra ID'}
               </Button>
             </div>
