@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     for (const endpoint of endpoints) {
       try {
         // Try first with the /tools/shadow-it-scan prefix as per next.config.js assetPrefix
-        const prefixedUrl = `${baseUrl}/tools/shadow-it-scan/${endpoint}`;
+        const prefixedUrl = `${baseUrl}/${endpoint}`;
         console.log(`Calling ${prefixedUrl}...`);
         let response;
         
