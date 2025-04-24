@@ -6,14 +6,17 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
 
 export async function POST(request: NextRequest) {
+  let requestData;
   try {
+    // Parse the request data once and store it for reuse
+    requestData = await request.json();
     const { 
       organization_id, 
       sync_id, 
       access_token, 
       refresh_token,
       provider 
-    } = await request.json();
+    } = requestData;
 
     if (!organization_id || !sync_id || !access_token || !provider) {
       return NextResponse.json(
@@ -35,10 +38,10 @@ export async function POST(request: NextRequest) {
     // Determine which sync endpoints to call based on provider
     const endpoints = provider === 'google' 
       ? [
-          '/api/background/sync/users',
-          '/api/background/sync/tokens',
-          '/api/background/sync/relations',
-          '/api/background/sync/categorize'
+          '/tools/shadow-it-scan/api/background/sync/users',
+          '/tools/shadow-it-scan/api/background/sync/tokens',
+          '/tools/shadow-it-scan/api/background/sync/relations',
+          '/tools/shadow-it-scan/api/background/sync/categorize'
         ]
       : [
           '/tools/shadow-it-scan/api/background/sync/microsoft'
@@ -48,7 +51,7 @@ export async function POST(request: NextRequest) {
     for (const endpoint of endpoints) {
       try {
         console.log(`Calling ${endpoint}...`);
-        const response = await fetch(`http://localhost:3001${endpoint}`, {
+        const response = await fetch(`${request.nextUrl.origin}${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -91,8 +94,7 @@ export async function POST(request: NextRequest) {
     console.error('Background sync error:', error);
     
     // Update sync status to failed
-    const { sync_id } = await request.json();
-    if (sync_id) {
+    if (requestData && requestData.sync_id) {
       await supabaseAdmin
         .from('sync_status')
         .update({
@@ -100,7 +102,7 @@ export async function POST(request: NextRequest) {
           message: `Sync failed: ${(error as Error).message}`,
           updated_at: new Date().toISOString()
         })
-        .eq('id', sync_id);
+        .eq('id', requestData.sync_id);
     }
     
     return NextResponse.json(
