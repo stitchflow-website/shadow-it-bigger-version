@@ -347,12 +347,41 @@ async function processTokens(
           console.log('First token example (simplified):', JSON.stringify(simplifiedToken));
         }
         
-        userAppRelationsToProcess.push({
-          appName,
-          userId,
-          userEmail: userEmail || '',
-          token: simplifiedToken
-        });
+        // Check if this user-app relationship already exists in our processing list
+        const existingRelationIndex = userAppRelationsToProcess.findIndex(rel => 
+          rel.appName === appName && rel.userId === userId
+        );
+        
+        if (existingRelationIndex !== -1) {
+          // Merge token scopes with existing record instead of duplicating
+          const existingToken = userAppRelationsToProcess[existingRelationIndex].token;
+          existingToken.scopes = [...new Set([...(existingToken.scopes || []), ...(simplifiedToken.scopes || [])])];
+          
+          // Merge other scope data if needed
+          if (simplifiedToken.scopeData && simplifiedToken.scopeData.length > 0) {
+            existingToken.scopeData = [...(existingToken.scopeData || []), ...simplifiedToken.scopeData];
+          }
+          
+          // Update the scope string if needed
+          if (simplifiedToken.scope) {
+            existingToken.scope = existingToken.scope 
+              ? `${existingToken.scope} ${simplifiedToken.scope}`
+              : simplifiedToken.scope;
+          }
+          
+          // Update permissions if needed
+          if (simplifiedToken.permissions && simplifiedToken.permissions.length > 0) {
+            existingToken.permissions = [...(existingToken.permissions || []), ...simplifiedToken.permissions];
+          }
+        } else {
+          // Add a new relationship if none exists
+          userAppRelationsToProcess.push({
+            appName,
+            userId,
+            userEmail: userEmail || '',
+            token: simplifiedToken
+          });
+        }
       }
     }
     

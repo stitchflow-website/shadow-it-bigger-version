@@ -359,10 +359,8 @@ export default function ShadowITDashboard() {
   // Sorting function
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
-      // Toggle direction if same column
       setSortDirection(sortDirection === "asc" ? "desc" : "asc")
     } else {
-      // Set new column and default to ascending
       setSortColumn(column)
       setSortDirection("asc")
     }
@@ -414,8 +412,16 @@ export default function ShadowITDashboard() {
 
     // Risk level comparison helper
     const getRiskValue = (risk: string) => {
-      const riskOrder = { High: 3, Medium: 2, Low: 1 }
-      return riskOrder[risk as keyof typeof riskOrder]
+      switch (risk.toLowerCase()) {
+        case "high":
+          return 3
+        case "medium":
+          return 2
+        case "low":
+          return 1
+        default:
+          return 0
+      }
     }
 
     switch (sortColumn) {
@@ -1385,26 +1391,26 @@ export default function ShadowITDashboard() {
                   <Table>
                       <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
                         <TableRow className="border-b border-gray-100">
-                          <TableHead className={`${authProvider !== 'google' ? 'w-[250px]' : 'w-[260px]'} cursor-pointer rounded-tl-lg bg-transparent`} onClick={() => handleSort("name")}>
+                          <TableHead className={`cursor-pointer rounded-tl-lg bg-transparent`} onClick={() => handleSort("name")}>
                             <div className="flex items-center">
                               Application
                               {getSortIcon("name")}
                             </div>
                           </TableHead>
-                          <TableHead className={`${authProvider !== 'google' ? 'w-[180px]' : 'w-[200px]'} cursor-pointer`} onClick={() => handleSort("category")}>
+                          <TableHead className={`cursor-pointer`} onClick={() => handleSort("category")}>
                             <div className="flex items-center">
                               Category
                               {getSortIcon("category")}
                             </div>
                           </TableHead>
-                          <TableHead className={`${authProvider !== 'google' ? 'w-[200px]' : 'w-[200px]'} text-center cursor-pointer`} onClick={() => handleSort("userCount")}>
+                          <TableHead className={`text-center cursor-pointer`} onClick={() => handleSort("userCount")}>
                             <div className="flex items-center justify-center">
                               Users
                               {getSortIcon("userCount")}
                             </div>
                           </TableHead>
-                          {authProvider !== 'google' && (
-                            <>
+                          
+                            
                               <TableHead className="text-center cursor-pointer" onClick={() => handleSort("riskLevel")}>
                                 <div className="flex items-center justify-center">
                                   Risk
@@ -1420,15 +1426,15 @@ export default function ShadowITDashboard() {
                                   {getSortIcon("totalPermissions")}
                                 </div>
                               </TableHead>
-                            </>
-                          )}
-                          <TableHead className={`${authProvider !== 'google' ? 'w-[200px]' : 'w-[200px]'} cursor-pointer`} onClick={() => handleSort("managementStatus")}>
+                            
+                          
+                          <TableHead className={`cursor-pointer`} onClick={() => handleSort("managementStatus")}>
                             <div className="flex items-center">
                               Status
                               {getSortIcon("managementStatus")}
                             </div>
                           </TableHead>
-                          <TableHead className={`${authProvider !== 'google' ? 'w-[200px]' : 'w-[200px]'} text-center rounded-tr-lg`}>User Access</TableHead>
+                          <TableHead className={`text-center rounded-tr-lg`}>User Access</TableHead>
                         </TableRow>
                       </TableHeader>
                     <TableBody>
