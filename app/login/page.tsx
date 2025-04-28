@@ -205,7 +205,7 @@ function LoginContent() {
           <Link href="/privacy" className="hover:text-blue-500 transition-colors">
             Privacy Policy
           </Link>
-          <Link href="/terms" className="hover:text-blue-500 transition-colors">
+          <Link href="/terms-of-service" className="hover:text-blue-500 transition-colors">
             Terms of Service
           </Link>
         </div>
