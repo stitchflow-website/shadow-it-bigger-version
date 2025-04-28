@@ -162,7 +162,27 @@ export default function ShadowITDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  // Add this after the authProvider state
+  // Add polling effect
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const orgId = urlParams.get('orgId');
+
+    if (orgId && uncategorizedApps.size > 0) {
+      // Start polling
+      pollingInterval.current = setInterval(() => {
+        checkCategorizationStatus(orgId);
+      }, 5000) as NodeJS.Timeout;
+
+      return () => {
+        if (pollingInterval.current) {
+          clearInterval(pollingInterval.current);
+          pollingInterval.current = null;
+        }
+      };
+    }
+  }, [uncategorizedApps.size]); // Only re-run when number of uncategorized apps changes
+
+  // Update the checkCategorizationStatus function
   const checkCategorizationStatus = async (orgId: string) => {
     try {
       const response = await fetch(`/tools/shadow-it-scan/api/categorization/status?orgId=${orgId}`);
@@ -171,7 +191,6 @@ export default function ShadowITDashboard() {
       }
       const statuses = await response.json();
       
-      // Update applications with categorization status
       setApplications(prevApps => {
         const updatedApps = [...prevApps];
         const newUncategorizedApps = new Set<string>();
@@ -214,14 +233,13 @@ export default function ShadowITDashboard() {
       const urlParams = new URLSearchParams(window.location.search);
       let orgId = urlParams.get('orgId');
       
-      // If no orgId in params, check if we can get it from cookies
+      // If no orgId in params, check cookies
       if (!orgId) {
         try {
           const cookies = document.cookie.split(';');
           const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
           if (orgIdCookie) {
             orgId = orgIdCookie.split('=')[1].trim();
-            console.log("Found orgId in cookie:", orgId);
           }
         } catch (cookieError) {
           console.error("Error parsing cookies:", cookieError);
@@ -229,14 +247,11 @@ export default function ShadowITDashboard() {
       }
       
       if (!orgId) {
-        console.log("No orgId found in URL or cookies, redirecting to login...");
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 500);
+        router.push('/tools/shadow-it-scan/login');
         return;
       }
 
-      // Fetch applications and start polling for categorization
+      // Fetch applications
       const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${orgId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch applications');
@@ -245,34 +260,34 @@ export default function ShadowITDashboard() {
       const data = await response.json();
       setApplications(data);
       
-      // Initial categorization status check
-      await checkCategorizationStatus(orgId);
-      
-      // Start polling if there are uncategorized apps
-      if (uncategorizedApps.size > 0) {
-        pollingInterval.current = setInterval(() => {
-          checkCategorizationStatus(orgId!);
-        }, 5000); // Poll every 5 seconds
+      // Check categorization status
+      if (orgId) {
+        await checkCategorizationStatus(orgId);
       }
       
       setIsLoading(false);
     } catch (error) {
       console.error("Error fetching application data:", error);
       setIsLoading(false);
-      setTimeout(() => {
-        window.location.href = '/login';
-      }, 500);
+      setApplications([]); // Reset applications on error
     }
   };
 
-  // Add cleanup for polling interval
+  // Add useEffect to trigger fetchData
   useEffect(() => {
+    fetchData();
+    
+    // Cleanup function
     return () => {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
       }
     };
-  }, []);
+  }, []); // Empty dependency array means this runs once on mount
+
+  // Add error state if needed
+  const [error, setError] = useState<string | null>(null);
 
   // Stop polling when all apps are categorized
   useEffect(() => {
