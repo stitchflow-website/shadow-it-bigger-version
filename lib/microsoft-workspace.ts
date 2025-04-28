@@ -612,11 +612,14 @@ export class MicrosoftWorkspaceService {
         // If no relationship exists, create a new one
         const { error: insertError } = await supabaseAdmin
           .from('user_applications')
-          .insert({
+          .upsert({
             user_id: userData.id,
             application_id: appId,
             scopes: token.scopes || [],
             updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'user_id,application_id',
+            ignoreDuplicates: true
           });
 
         if (insertError) {

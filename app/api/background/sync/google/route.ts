@@ -251,6 +251,9 @@ async function createUserAppRelationship(appId: string, token: any, organization
       application_id: appId,
       scopes: token.scopes || [],
       updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'user_id,application_id',
+      ignoreDuplicates: true
     });
 
   if (relationshipError) {

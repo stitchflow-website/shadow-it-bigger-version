@@ -507,11 +507,14 @@ async function createUserAppRelationship(appId: string, token: any, organization
       // Create new relationship
       const { error: insertError } = await supabaseAdmin
         .from('user_applications')
-        .insert({
+        .upsert({
           user_id: userData.id,
           application_id: appId,
           scopes: token.scopes || [],
           updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,application_id',
+          ignoreDuplicates: true
         });
 
       if (insertError) {

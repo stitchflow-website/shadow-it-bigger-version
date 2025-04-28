@@ -226,7 +226,7 @@ function LoadingContent() {
                     </>
                   )}
                 </p>
-                {progress >= 50 && (
+                {/* {progress >= 50 && (
                   <div className="mt-4">
                     <Button
                       variant="outline"
@@ -236,7 +236,7 @@ function LoadingContent() {
                       View Progress in Dashboard
                     </Button>
                   </div>
-                )}
+                )} */}
               </div>
               {stuckSync && progress >= 75 && progress < 100 && status === 'IN_PROGRESS' && (
                 <div className="mt-4">

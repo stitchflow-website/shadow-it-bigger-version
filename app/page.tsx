@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useRef } from "react"
 import {
   User,
   ArrowUpDown,
@@ -15,6 +15,7 @@ import {
   Settings,
   X,
   Eye,
+  LogOut,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -41,12 +42,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { JSX } from "react"
 import { useDebounce } from "@/app/hooks/useDebounce"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 
 // Type definitions
 type Application = {
   id: string
   name: string
-  category: string
+  category: string | null // Modified to allow null
   userCount: number
   users: AppUser[]
   riskLevel: "Low" | "Medium" | "High"
@@ -62,6 +64,7 @@ type Application = {
   scopes: string[]
   isInstalled: boolean
   isAuthAnonymously: boolean
+  isCategorizing?: boolean // Added to track categorization status
 }
 
 type AppUser = {
@@ -110,6 +113,7 @@ type RiskData = {
 }
 
 export default function ShadowITDashboard() {
+  const router = useRouter();
   const [applications, setApplications] = useState<Application[]>([])
   const [searchInput, setSearchInput] = useState("")
   const [filterCategory, setFilterCategory] = useState<string | null>(null)
@@ -120,7 +124,7 @@ export default function ShadowITDashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [userSearchTerm, setUserSearchTerm] = useState("")
   const [editedStatuses, setEditedStatuses] = useState<Record<string, string>>({})
-  const [mainView, setMainView] = useState<"list" | "trends">("list")
+  const [mainView, setMainView] = useState<"list" | "Insights">("list")
   const [currentPage, setCurrentPage] = useState(1)
   const [userCurrentPage, setUserCurrentPage] = useState(1)
   const [scopeCurrentPage, setScopeCurrentPage] = useState(1)
@@ -150,80 +154,169 @@ export default function ShadowITDashboard() {
 
   const [authProvider, setAuthProvider] = useState<'google' | 'microsoft' | null>(null);
 
-  // Fetch and process data
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
+  const [isPolling, setIsPolling] = useState(false)
+  const [uncategorizedApps, setUncategorizedApps] = useState<Set<string>>(new Set())
+  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
+
+  const [userInfo, setUserInfo] = useState<{ name: string; email: string } | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  // Add this after the authProvider state
+  const checkCategorizationStatus = async (orgId: string) => {
+    try {
+      const response = await fetch(`/tools/shadow-it-scan/api/categorization/status?orgId=${orgId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch categorization status');
+      }
+      const statuses = await response.json();
+      
+      // Update applications with categorization status
+      setApplications(prevApps => {
+        const updatedApps = [...prevApps];
+        const newUncategorizedApps = new Set<string>();
         
-        // Get orgId from URL params
-        const urlParams = new URLSearchParams(window.location.search);
-        let orgId = urlParams.get('orgId');
-        
-        // If no orgId in params, check if we can get it from cookies
-        if (!orgId) {
-          try {
-            // Get cookies as a string
-            const cookies = document.cookie.split(';');
-            // Find the orgId cookie
-            const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
-            if (orgIdCookie) {
-              // Extract the value
-              orgId = orgIdCookie.split('=')[1].trim();
-              console.log("Found orgId in cookie:", orgId);
+        for (const status of statuses) {
+          const appIndex = updatedApps.findIndex(app => app.id === status.application_id);
+          if (appIndex !== -1) {
+            if (status.status === 'COMPLETED') {
+              updatedApps[appIndex] = {
+                ...updatedApps[appIndex],
+                category: status.message.split(': ')[1]?.trim() || 'Others',
+                isCategorizing: false
+              };
+            } else if (status.status === 'IN_PROGRESS') {
+              updatedApps[appIndex] = {
+                ...updatedApps[appIndex],
+                isCategorizing: true
+              };
+              newUncategorizedApps.add(status.application_id);
             }
-          } catch (cookieError) {
-            console.error("Error parsing cookies:", cookieError);
           }
         }
         
-        if (!orgId) {
-          console.log("No orgId found in URL or cookies, redirecting to login...");
-          // Add a small delay before redirecting to prevent rapid redirects
-          setTimeout(() => {
-            window.location.href = '/login';
-          }, 500);
-          return;
-        }
+        setUncategorizedApps(newUncategorizedApps);
+        setIsPolling(newUncategorizedApps.size > 0);
+        
+        return updatedApps;
+      });
+    } catch (error) {
+      console.error("Error checking categorization status:", error);
+    }
+  };
 
-        // Check if there's an active sync for this organization
-        const syncResponse = await fetch(`/tools/shadow-it-scan/api/sync/status?orgId=${orgId}`);
-        if (syncResponse.ok) {
-          const syncData = await syncResponse.json();
-          if (syncData && syncData.status === 'IN_PROGRESS') {
-            console.log("Found active sync, redirecting to loading page...");
-            window.location.href = `/loading?syncId=${syncData.id}`;
-            return;
+  // Modify the fetchData function
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Get orgId from URL params
+      const urlParams = new URLSearchParams(window.location.search);
+      let orgId = urlParams.get('orgId');
+      
+      // If no orgId in params, check if we can get it from cookies
+      if (!orgId) {
+        try {
+          const cookies = document.cookie.split(';');
+          const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
+          if (orgIdCookie) {
+            orgId = orgIdCookie.split('=')[1].trim();
+            console.log("Found orgId in cookie:", orgId);
           }
+        } catch (cookieError) {
+          console.error("Error parsing cookies:", cookieError);
         }
-
-        console.log("Fetching applications with orgId:", orgId);
-        // Fetch applications from our API
-        const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${orgId}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch applications');
-        }
-
-        const data = await response.json();
-        setApplications(data);
-        setIsLoading(false);
-      } catch (error) {
-        console.error("Error fetching application data:", error);
-        setIsLoading(false);
-        // Redirect to login on error
+      }
+      
+      if (!orgId) {
+        console.log("No orgId found in URL or cookies, redirecting to login...");
         setTimeout(() => {
           window.location.href = '/login';
         }, 500);
+        return;
+      }
+
+      // Fetch applications and start polling for categorization
+      const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${orgId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch applications');
+      }
+
+      const data = await response.json();
+      setApplications(data);
+      
+      // Initial categorization status check
+      await checkCategorizationStatus(orgId);
+      
+      // Start polling if there are uncategorized apps
+      if (uncategorizedApps.size > 0) {
+        pollingInterval.current = setInterval(() => {
+          checkCategorizationStatus(orgId!);
+        }, 5000); // Poll every 5 seconds
+      }
+      
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Error fetching application data:", error);
+      setIsLoading(false);
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 500);
+    }
+  };
+
+  // Add cleanup for polling interval
+  useEffect(() => {
+    return () => {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
       }
     };
-
-    fetchData();
   }, []);
+
+  // Stop polling when all apps are categorized
+  useEffect(() => {
+    if (!isPolling && pollingInterval.current) {
+      clearInterval(pollingInterval.current);
+      pollingInterval.current = null;
+    }
+  }, [isPolling]);
 
   useEffect(() => {
     const provider = localStorage.getItem('auth_provider') as 'google' | 'microsoft' | null;
     setAuthProvider(provider);
   }, []);
+
+  useEffect(() => {
+    // Fetch user info from cookies
+    const userInfoCookie = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('user_info='));
+    
+    if (userInfoCookie) {
+      try {
+        const userInfoData = JSON.parse(decodeURIComponent(userInfoCookie.split('=')[1]));
+        setUserInfo(userInfoData);
+      } catch (error) {
+        console.error('Error parsing user info:', error);
+      }
+    }
+  }, []);
+
+  const handleSignOut = () => {
+    // Clear all cookies
+    document.cookie.split(';').forEach(cookie => {
+      document.cookie = cookie
+        .replace(/^ +/, '')
+        .replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`);
+    });
+    
+    // Clear local storage
+    localStorage.clear();
+    
+    // Redirect to login page
+    router.push('/tools/shadow-it-scan/login');
+  };
 
   // Helper function to parse CSV row handling quoted values
   function parseCSVRow(row: string): string[] {
@@ -379,7 +472,7 @@ export default function ShadowITDashboard() {
     return applications.filter((app) => {
       const matchesSearch = searchTerm === "" || 
       app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.category.toLowerCase().includes(searchTerm.toLowerCase())
+      (app.category && app.category.toLowerCase().includes(searchTerm.toLowerCase()))
     const matchesRisk = filterRisk ? app.riskLevel === filterRisk : true
     const matchesManaged = filterManaged ? app.managementStatus === filterManaged : true
     const matchesCategory = filterCategory ? app.category === filterCategory : true
@@ -389,7 +482,7 @@ export default function ShadowITDashboard() {
   }, [applications, searchTerm, filterRisk, filterManaged, filterCategory])
 
   // Get unique categories for the filter dropdown
-  const uniqueCategories = [...new Set(applications.map((app) => app.category))].sort()
+  const uniqueCategories = [...new Set(applications.map((app) => app.category).filter((category): category is string => category !== null))].sort()
 
   // Sort applications
   const sortedApps = [...filteredApps].sort((a, b) => {
@@ -399,8 +492,11 @@ export default function ShadowITDashboard() {
     }
 
     // Helper for string comparison with direction
-    const compareString = (valA: string, valB: string) => {
-      return sortDirection === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA)
+    const compareString = (a: string | null, b: string | null): number => {
+      if (!a && !b) return 0
+      if (!a) return -1
+      if (!b) return 1
+      return sortDirection === "asc" ? a.localeCompare(b) : b.localeCompare(a)
     }
 
     // Helper for date comparison with direction
@@ -677,22 +773,14 @@ export default function ShadowITDashboard() {
     const categoryMap = new Map<string, number>()
 
     applications.forEach((app) => {
-      categoryMap.set(app.category, (categoryMap.get(app.category) || 0) + 1)
+      const category = app.category || "Uncategorized"
+      categoryMap.set(category, (categoryMap.get(category) || 0) + 1)
     })
-
-    const categoryColors: Record<string, string> = {
-      "IT and Development": "#4285F4", // blue
-      "Product management": "#34A853", // green
-      Productivity: "#A4CAFE", // light blue
-      "Finance and HR": "#673AB7", // purple
-      "Marketing and Design": "#FBBC05", // yellow
-      Sales: "#EA4335", // red
-    }
 
     return Array.from(categoryMap.entries()).map(([name, value]) => ({
       name,
       value,
-      color: categoryColors[name] || "#9AA0A6", // default to gray
+      color: getCategoryColor(name)
     }))
   }
 
@@ -700,11 +788,12 @@ export default function ShadowITDashboard() {
     const categoryMap = new Map<string, { apps: number; users: number }>()
 
     applications.forEach((app) => {
-      if (!categoryMap.has(app.category)) {
-        categoryMap.set(app.category, { apps: 0, users: 0 })
+      const category = app.category || "Uncategorized"
+      if (!categoryMap.has(category)) {
+        categoryMap.set(category, { apps: 0, users: 0 })
       }
 
-      const data = categoryMap.get(app.category)!
+      const data = categoryMap.get(category)!
       data.apps += 1
       data.users += app.userCount
     })
@@ -774,7 +863,8 @@ export default function ShadowITDashboard() {
     const categoryCount = new Map<string, number>()
 
     applications.forEach((app) => {
-      categoryCount.set(app.category, (categoryCount.get(app.category) || 0) + 1)
+      const category = app.category || "Uncategorized"
+      categoryCount.set(category, (categoryCount.get(category) || 0) + 1)
     })
 
     const totalApps = applications.length
@@ -783,47 +873,31 @@ export default function ShadowITDashboard() {
       name: category,
       value: count,
       percentage: totalApps > 0 ? Math.round((count / totalApps) * 100) : 0,
-      color: getCategoryColor(category),
+      color: getCategoryColor(category)
     }))
   }
 
-  // Get applications by category for the bar chart
-  const getAppsByCategory = () => {
-    const categoryCount = new Map<string, number>()
-
-    applications.forEach((app) => {
-      categoryCount.set(app.category, (categoryCount.get(app.category) || 0) + 1)
-    })
-
-    return Array.from(categoryCount.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([category, count]) => ({
-        name: category,
-        value: count,
-        color: getCategoryColor(category),
-      }))
-  }
-
   // Update the getCategoryColor function for charts
-  const getCategoryColor = (category: string): string => {
+  const getCategoryColor = (category: string | null): string => {
+    if (!category) return "bg-gray-100 text-gray-600"
+
     const categoryColors: Record<string, string> = {
-      "Analytics & Business Intelligence": "#93C5FD", // blue-300
-      "Cloud Platforms & Infrastructure": "#C4B5FD", // purple-300
-      "Customer Success & Support": "#86EFAC", // green-300
-      "Design & Creative Tools": "#F9A8D4", // pink-300
-      "Developer & Engineering Tools": "#A5B4FC", // violet-300
-      "Finance & Accounting": "#67E8F9", // cyan-300
-      "Human Resources & People Management": "#7DD3FC", // sky-300
-      "IT Operations & Security": "#FCA5A5", // red-300
-      "Identity & Access Management": "#FCD34D", // amber-300
-      "Productivity & Collaboration": "#C4B5FD", // purple-300
-      "Project Management": "#FDE047", // yellow-300
-      "Sales & Marketing": "#FDBA74", // orange-300
-      Others: "#D1D5DB", // gray-300
+      "Analytics & Business Intelligence": "bg-blue-100 text-blue-600",
+      "Cloud Platforms & Infrastructure": "bg-purple-100 text-purple-600",
+      "Customer Success & Support": "bg-emerald-100 text-emerald-600",
+      "Design & Creative Tools": "bg-pink-100 text-pink-600",
+      "Developer & Engineering Tools": "bg-indigo-100 text-indigo-600",
+      "Finance & Accounting": "bg-cyan-100 text-cyan-600",
+      "Human Resources & People Management": "bg-sky-100 text-sky-600",
+      "IT Operations & Security": "bg-red-100 text-red-600",
+      "Identity & Access Management": "bg-amber-100 text-amber-600",
+      "Productivity & Collaboration": "bg-indigo-100 text-indigo-600",
+      "Project Management": "bg-yellow-100 text-yellow-600",
+      "Sales & Marketing": "bg-orange-100 text-orange-600",
+      Others: "bg-gray-100 text-gray-600",
     }
 
-    return categoryColors[category] || "#D1D5DB" // default to gray-300
+    return categoryColors[category] || "bg-gray-100 text-gray-600"
   }
 
   // Generate monthly active users data
@@ -916,7 +990,24 @@ export default function ShadowITDashboard() {
   };
 
   // Update the getCategoryColor function in the CategoryBadge component
-  const CategoryBadge = ({ category }: { category: string }) => {
+  const CategoryBadge = ({ category, isCategorizing }: { category: string | null; isCategorizing?: boolean }) => {
+    if (isCategorizing) {
+      return (
+        <div className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+          <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent mr-2"></div>
+          Categorizing...
+        </div>
+      );
+    }
+
+    if (!category) {
+      return (
+        <div className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+          Uncategorized
+        </div>
+      );
+    }
+
     const getCategoryColor = (category: string) => {
       const categoryColors: Record<string, string> = {
         "Analytics & Business Intelligence": "bg-blue-100 text-blue-600",
@@ -1191,6 +1282,20 @@ export default function ShadowITDashboard() {
     return { nodes, edges };
   }
 
+  // Add click outside handler for profile dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   return (
     <div className="max-w-[1400px] mx-auto py-8 space-y-8 font-sans text-gray-900">
       <div className="flex flex-col space-y-3">
@@ -1261,15 +1366,15 @@ export default function ShadowITDashboard() {
                 Applications
               </Button>
               <Button 
-                variant={mainView === "trends" ? "default" : "outline"} 
+                variant={mainView === "Insights" ? "default" : "outline"} 
                 onClick={() => {
-                  setMainView("trends");
+                  setMainView("Insights");
                   handleCloseUserModal();
                 }}
-                className={mainView === "trends" ? "bg-gray-900 hover:bg-gray-800" : ""}
+                className={mainView === "Insights" ? "bg-gray-900 hover:bg-gray-800" : ""}
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
-                Trends
+                Insights
               </Button>
               <Button
                 variant="outline"
@@ -1279,6 +1384,67 @@ export default function ShadowITDashboard() {
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
               </Button>
+
+              {/* Profile Menu */}
+              <div className="relative" ref={profileRef}>
+                <button
+                  onClick={() => setIsProfileOpen(!isProfileOpen)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsProfileOpen(!isProfileOpen);
+                    } else if (e.key === 'Escape') {
+                      setIsProfileOpen(false);
+                    }
+                  }}
+                  aria-expanded={isProfileOpen}
+                  aria-haspopup="true"
+                  aria-label="User menu"
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  {userInfo?.name ? (
+                    <span className="text-sm font-medium">
+                      {userInfo.name.split(' ').map(n => n[0]).join('')}
+                    </span>
+                  ) : (
+                    <User className="h-5 w-5 text-gray-600" />
+                  )}
+                </button>
+
+                {isProfileOpen && (
+                  <div 
+                    className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50"
+                    role="menu"
+                    aria-orientation="vertical"
+                    aria-labelledby="user-menu"
+                  >
+                    {userInfo && (
+                      <>
+                        <div className="px-4 py-3 border-b border-gray-100">
+                          <p className="font-medium text-gray-900">{userInfo.name}</p>
+                          <p className="text-sm text-gray-500">{userInfo.email}</p>
+                        </div>
+                        <div className="px-2 py-2">
+                          <button
+                            onClick={handleSignOut}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleSignOut();
+                              }
+                            }}
+                            role="menuitem"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                          >
+                            <LogOut className="h-4 w-4" />
+                            Sign out
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1464,7 +1630,7 @@ export default function ShadowITDashboard() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <CategoryBadge category={app.category} />
+                              <CategoryBadge category={app.category} isCategorizing={app.isCategorizing} />
                             </TableCell>
                             <TableCell className="text-center">
                                 <TooltipProvider>
@@ -2081,15 +2247,15 @@ export default function ShadowITDashboard() {
                 Applications
               </Button>
               <Button 
-                variant={mainView === "trends" ? "default" : "outline"} 
+                variant={mainView === "Insights" ? "default" : "outline"} 
                 onClick={() => {
-                  setMainView("trends");
+                  setMainView("Insights");
                   handleCloseUserModal();
                 }}
-                className={mainView === "trends" ? "bg-gray-900 hover:bg-gray-800" : ""}
+                className={mainView === "Insights" ? "bg-gray-900 hover:bg-gray-800" : ""}
               >
                 <BarChart3 className="h-4 w-4 mr-2" />
-                Trends
+                Insights
               </Button>
               <Button
                 variant="outline"
@@ -2099,6 +2265,67 @@ export default function ShadowITDashboard() {
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
               </Button>
+
+              {/* Profile Menu */}
+              <div className="relative" ref={profileRef}>
+                <button
+                  onClick={() => setIsProfileOpen(!isProfileOpen)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsProfileOpen(!isProfileOpen);
+                    } else if (e.key === 'Escape') {
+                      setIsProfileOpen(false);
+                    }
+                  }}
+                  aria-expanded={isProfileOpen}
+                  aria-haspopup="true"
+                  aria-label="User menu"
+                  className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  {userInfo?.name ? (
+                    <span className="text-sm font-medium">
+                      {userInfo.name.split(' ').map(n => n[0]).join('')}
+                    </span>
+                  ) : (
+                    <User className="h-5 w-5 text-gray-600" />
+                  )}
+                </button>
+
+                {isProfileOpen && (
+                  <div 
+                    className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50"
+                    role="menu"
+                    aria-orientation="vertical"
+                    aria-labelledby="user-menu"
+                  >
+                    {userInfo && (
+                      <>
+                        <div className="px-4 py-3 border-b border-gray-100">
+                          <p className="font-medium text-gray-900">{userInfo.name}</p>
+                          <p className="text-sm text-gray-500">{userInfo.email}</p>
+                        </div>
+                        <div className="px-2 py-2">
+                          <button
+                            onClick={handleSignOut}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleSignOut();
+                              }
+                            }}
+                            role="menuitem"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                          >
+                            <LogOut className="h-4 w-4" />
+                            Sign out
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

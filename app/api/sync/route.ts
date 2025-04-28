@@ -177,8 +177,10 @@ async function processApplications(tokens: any[], orgId: string) {
         user_id: userData.id,
         application_id: appData.id,
         scopes: token.scopes || [],
-        last_login: token.lastTimeUsed,
         updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id,application_id',
+        ignoreDuplicates: true
       });
       
       if (upsertResult.error) {

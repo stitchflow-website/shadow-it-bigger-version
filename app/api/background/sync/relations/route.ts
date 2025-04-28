@@ -265,7 +265,10 @@ async function processRelations(
           const batch = relationsToUpdate.slice(i, i + batchSize);
           const { error: updateError } = await supabaseAdmin
             .from('user_applications')
-            .upsert(batch);
+            .upsert(batch, {
+              onConflict: 'user_id,application_id',
+              ignoreDuplicates: true
+            });
                 
           if (updateError) {
             console.error(`Error updating batch ${i / batchSize + 1}:`, updateError);
@@ -287,7 +290,7 @@ async function processRelations(
             .from('user_applications')
             .upsert(batch, { 
               onConflict: 'user_id,application_id',
-              ignoreDuplicates: false 
+              ignoreDuplicates: true 
             });
                 
           if (insertError) {
