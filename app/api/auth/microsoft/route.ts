@@ -28,12 +28,23 @@ export async function GET(request: NextRequest) {
     // Exchange code for tokens
     const clientId = process.env.MICROSOFT_CLIENT_ID;
     const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
-    const redirectUri = process.env.MICROSOFT_REDIRECT_URI;
+    let redirectUri = process.env.MICROSOFT_REDIRECT_URI;
     
     if (!clientId || !clientSecret || !redirectUri) {
       console.error('Missing Microsoft OAuth configuration');
       return NextResponse.redirect(new URL('/login?error=config_missing', request.url));
     }
+
+    // Ensure redirect URI matches what was used in the authorization request
+    if (process.env.NODE_ENV === 'development') {
+      // For development, use the same format as in login page
+      redirectUri = `${request.nextUrl.origin}/api/auth/microsoft`;
+    } else {
+      // For production, use the full production URL
+      redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
+    }
+    
+    console.log('Using redirect URI for token exchange:', redirectUri);
 
     console.log('Exchanging code for tokens...');
     // Exchange authorization code for tokens
