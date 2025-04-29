@@ -314,45 +314,24 @@ export default function ShadowITDashboard() {
   }, []);
 
   useEffect(() => {
-    // Fetch user info from cookies first
-    const userEmailCookie = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('userEmail='));
-    
-    let email = '';
-    
-    if (userEmailCookie) {
+    // Fetch user info directly from our new API endpoint
+    const fetchUserData = async () => {
       try {
-        // Just get the email value directly, not trying to parse JSON
-        email = userEmailCookie.split('=')[1];
-        console.log('Found email in cookie:', email);
-      } catch (error) {
-        console.error('Error extracting email from cookie:', error);
-      }
-    }
-    
-    // Then fetch complete user data from database
-    if (email) {
-      const fetchUserFromDB = async () => {
-        try {
-          const response = await fetch(`/tools/shadow-it-scan/api/user?email=${encodeURIComponent(email)}`);
-          if (response.ok) {
-            const userData = await response.json();
-            if (userData) {
-              setUserInfo(userData);
-            }
-          } else {
-            console.error('Failed to fetch user data, status:', response.status);
-          }
-        } catch (error) {
-          console.error('Error fetching user data:', error);
+        const response = await fetch('/tools/shadow-it-scan/api/session-info');
+        
+        if (response.ok) {
+          const userData = await response.json();
+          setUserInfo(userData);
+          console.log('User data fetched successfully:', userData);
+        } else {
+          console.error('Failed to fetch user data, status:', response.status);
         }
-      };
-      
-      fetchUserFromDB();
-    } else {
-      console.warn('No user email found in cookies');
-    }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    };
+    
+    fetchUserData();
   }, []);
 
   const handleSignOut = () => {
@@ -728,26 +707,22 @@ export default function ShadowITDashboard() {
 
   // Update the getTop10AppsByUsers function to not truncate names
   const getTop10AppsByUsers = () => {
-    return [...applications]
-      .sort((a, b) => b.userCount - a.userCount)
-      .slice(0, 10)
-      .map((app) => ({
-        name: app.name,
-        value: app.userCount,
-        color: getCategoryColor(app.category),
-      }))
+    const sorted = [...applications].sort((a, b) => b.userCount - a.userCount)
+    return sorted.slice(0, 10).map((app) => ({
+      name: app.name,
+      value: app.userCount, // Keep value for chart compatibility
+      color: getCategoryColor(app.category), // Use category color
+    }))
   }
 
-  // Add a new function to get top 10 apps by scope permissions
+  // Get top 10 apps by permissions
   const getTop10AppsByPermissions = () => {
-    return [...applications]
-      .sort((a, b) => b.totalPermissions - a.totalPermissions)
-      .slice(0, 10)
-      .map((app) => ({
-        name: app.name,
-        value: app.totalPermissions,
-        color: getCategoryColor(app.category),
-      }))
+    const sorted = [...applications].sort((a, b) => b.totalPermissions - a.totalPermissions)
+    return sorted.slice(0, 10).map((app) => ({
+      name: app.name,
+      value: app.totalPermissions, // Keep value for chart compatibility
+      color: getCategoryColor(app.category), // Use category color
+    }))
   }
 
   const getTop5Apps = () => {

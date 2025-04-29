@@ -27,6 +27,7 @@ export function middleware(request: NextRequest) {
     '/tools/shadow-it-scan/api/categorize',  // Add the categorization API
     '/tools/shadow-it-scan/loading',
     '/tools/shadow-it-scan/api/user',
+    '/tools/shadow-it-scan/api/session-info', // Add the new session-info API
     '/tools/shadow-it-scan/api/sync/status',
     '/tools/shadow-it-scan/favicon.ico',
     '/tools/shadow-it-scan/images',  // Add images directory
@@ -69,6 +70,16 @@ export function middleware(request: NextRequest) {
     // Keep the query parameters
     
     return NextResponse.rewrite(url);
+  }
+  
+  // Add rewrite for session-info endpoint
+  if (pathname.startsWith('/tools/shadow-it-scan/api/session-info')) {
+    const url = new URL(request.url);
+    url.pathname = `/api/session-info`;
+    
+    // Forward cookies in the request
+    const response = NextResponse.rewrite(url);
+    return response;
   }
   
   // Check if user is authenticated for protected routes
