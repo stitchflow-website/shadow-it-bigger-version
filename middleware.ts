@@ -26,6 +26,7 @@ export function middleware(request: NextRequest) {
     '/api/background/sync/google',
     '/tools/shadow-it-scan/api/categorize',  // Add the categorization API
     '/tools/shadow-it-scan/loading',
+    '/tools/shadow-it-scan/api/user',
     '/tools/shadow-it-scan/api/sync/status',
     '/tools/shadow-it-scan/favicon.ico',
     '/tools/shadow-it-scan/images',  // Add images directory
