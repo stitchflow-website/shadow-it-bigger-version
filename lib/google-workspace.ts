@@ -270,6 +270,35 @@ export class GoogleWorkspaceService {
     return response.data;
   }
 
+  // Check if a user is an admin
+  async isUserAdmin(email: string): Promise<boolean> {
+    try {
+      // First, try to get roles for the user
+      const response = await this.admin.roles.list({
+        customer: 'my_customer',
+        userKey: email
+      });
+      
+      // If the user has any admin roles, they're an admin
+      return response.data.items && response.data.items.length > 0;
+    } catch (error) {
+      // If we get an access error, try a different approach
+      try {
+        // Try to list users as this user - only admins can do this
+        await this.admin.users.list({
+          customer: 'my_customer',
+          maxResults: 1
+        });
+        
+        // If we get here without error, the user has admin rights
+        return true;
+      } catch (innerError) {
+        // If both methods fail, the user likely isn't an admin
+        return false;
+      }
+    }
+  }
+
   // Add this optimized method to get user list with pagination support
   async getUsersListPaginated(): Promise<any[]> {
     let users: any[] = [];

@@ -315,22 +315,22 @@ export default function ShadowITDashboard() {
 
   useEffect(() => {
     // Fetch user info from cookies first
-    const userInfoCookie = document.cookie
+    const userEmailCookie = document.cookie
       .split('; ')
-      .find(row => row.startsWith('userEmail'));
+      .find(row => row.startsWith('userEmail='));
     
     let email = '';
     
-    if (userInfoCookie) {
+    if (userEmailCookie) {
       try {
-        const userInfoData = JSON.parse(decodeURIComponent(userInfoCookie.split('=')[1]));
-        setUserInfo(userInfoData); // Set cookie data initially
-        email = userInfoData.email;
+        // Just get the email value directly, not trying to parse JSON
+        email = userEmailCookie.split('=')[1];
+        console.log('Found email in cookie:', email);
       } catch (error) {
-        console.error('Error parsing user info:', error);
+        console.error('Error extracting email from cookie:', error);
       }
     }
-    console.log('email', email);
+    
     // Then fetch complete user data from database
     if (email) {
       const fetchUserFromDB = async () => {
@@ -341,6 +341,8 @@ export default function ShadowITDashboard() {
             if (userData) {
               setUserInfo(userData);
             }
+          } else {
+            console.error('Failed to fetch user data, status:', response.status);
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -348,6 +350,8 @@ export default function ShadowITDashboard() {
       };
       
       fetchUserFromDB();
+    } else {
+      console.warn('No user email found in cookies');
     }
   }, []);
 
@@ -799,25 +803,25 @@ export default function ShadowITDashboard() {
   const getCategoryColor = (category: string | null): string => {
     if (!category) return "#CBD5E1"; // Default gray for null/undefined
     
-    // Fixed color mapping for consistent colors
+    // Fixed color mapping for consistent colors with proper hex values instead of tailwind classes
     const colorMap: Record<string, string> = {
-      "Analytics & Business Intelligence": "bg-blue-100 text-blue-600",
-      "Cloud Platforms & Infrastructure": "bg-purple-100 text-purple-600",
-      "Customer Success & Support": "bg-emerald-100 text-emerald-600",
-      "Design & Creative Tools": "bg-pink-100 text-pink-600",
-      "Developer & Engineering Tools": "bg-indigo-100 text-indigo-600",
-      "Finance & Accounting": "bg-cyan-100 text-cyan-600",
-      "Human Resources & People Management": "bg-sky-100 text-sky-600",
-      "IT Operations & Security": "bg-red-100 text-red-600",
-      "Identity & Access Management": "bg-amber-100 text-amber-600",
-      "Productivity & Collaboration": "bg-green-100 text-green-600",
-      "Project Management": "bg-yellow-100 text-yellow-600",
-      "Sales & Marketing": "bg-orange-100 text-orange-600",
-      Others: "bg-gray-100 text-gray-600",
+      "Analytics & Business Intelligence": "#DBEAFE", // blue-100
+      "Cloud Platforms & Infrastructure": "#F3E8FF", // purple-100
+      "Customer Success & Support": "#D1FAE5", // emerald-100
+      "Design & Creative Tools": "#FCE7F3", // pink-100
+      "Developer & Engineering Tools": "#E0E7FF", // indigo-100
+      "Finance & Accounting": "#CFFAFE", // cyan-100
+      "Human Resources & People Management": "#E0F2FE", // sky-100
+      "IT Operations & Security": "#FEE2E2", // red-100
+      "Identity & Access Management": "#FEF3C7", // amber-100
+      "Productivity & Collaboration": "#DCFCE7", // green-100
+      "Project Management": "#FEF9C3", // yellow-100
+      "Sales & Marketing": "#FFEDD5", // orange-100
+      Others: "#F3F4F6", // gray-100
     };
     
     // Return the mapped color or a default
-    return colorMap[category] || "#94A3B8"; // Default slate for unknown categories
+    return colorMap[category] || "#F1F5F9"; // Default slate-100 for unknown categories
   };
 
   // Generate monthly active users data

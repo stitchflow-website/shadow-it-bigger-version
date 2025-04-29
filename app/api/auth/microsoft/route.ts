@@ -71,7 +71,92 @@ export async function GET(request: NextRequest) {
     
     if (!isWorkAccount) {
       console.error('Not a work account');
+      
+      // Record failed signup
+      try {
+        await supabaseAdmin
+          .from('users_failed_signups')
+          .insert({
+            email: userData.userPrincipalName,
+            name: userData.displayName,
+            reason: 'not_work_account',
+            provider: 'microsoft',
+            metadata: JSON.stringify(userData),
+            created_at: new Date().toISOString(),
+          });
+        console.log('Recorded failed signup: not_work_account');
+      } catch (err: unknown) {
+        console.error('Error recording failed signup:', err);
+      }
+      
       return NextResponse.redirect(new URL('/login?error=not_work_account', request.url));
+    }
+    
+    // Check if user is an admin by checking directory roles
+    let isAdmin = false;
+    
+    try {
+      // Check for admin roles
+      const rolesResponse = await fetch('https://graph.microsoft.com/v1.0/me/memberOf', {
+        headers: {
+          'Authorization': `Bearer ${access_token}`,
+        },
+      });
+      
+      if (rolesResponse.ok) {
+        const rolesData = await rolesResponse.json();
+        
+        // Check if user is in any admin roles (Global Admin, Directory Admin, etc.)
+        isAdmin = rolesData.value.some((role: any) => 
+          (role.displayName && role.displayName.toLowerCase().includes('admin')) ||
+          (role.roleTemplateId && 
+            ['62e90394-69f5-4237-9190-012177145e10', // Global Administrator
+             'f28a1f50-f6e7-4571-818b-6a12f2af6b6c', // Company Administrator
+             '9f06204d-73c1-4d4c-880a-6edb90606fd8', // Azure AD Admin
+             '29232cdf-9323-42fd-ade2-1d097af3e4de'  // Directory Reader
+            ].includes(role.roleTemplateId)
+          )
+        );
+      }
+      
+      // If no admin roles found, try a secondary check - attempt to list users
+      // Only admins can list other users
+      if (!isAdmin) {
+        const listUsersResponse = await fetch('https://graph.microsoft.com/v1.0/users?$top=1', {
+          headers: {
+            'Authorization': `Bearer ${access_token}`,
+          },
+        });
+        
+        // If we can successfully list users, the user is an admin
+        isAdmin = listUsersResponse.ok;
+      }
+    } catch (err: unknown) {
+      console.error('Error checking admin status:', err);
+    }
+    
+    if (!isAdmin) {
+      console.error('User is not an admin');
+      
+      // Record failed signup
+      try {
+        await supabaseAdmin
+          .from('users_failed_signups')
+          .insert({
+            email: userData.userPrincipalName,
+            name: userData.displayName,
+            reason: 'not_admin',
+            provider: 'microsoft',
+            domain: userData.userPrincipalName.split('@')[1],
+            metadata: JSON.stringify(userData),
+            created_at: new Date().toISOString(),
+          });
+        console.log('Recorded failed signup: not_admin');
+      } catch (err: unknown) {
+        console.error('Error recording failed signup:', err);
+      }
+      
+      return NextResponse.redirect(new URL('/login?error=admin_required', request.url));
     }
 
     // First check if user exists

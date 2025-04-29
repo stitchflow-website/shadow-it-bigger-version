@@ -28,6 +28,9 @@ function LoginContent() {
         case 'not_work_account':
           setError('Please sign in with a Microsoft work or school account. Personal Microsoft accounts are not supported.');
           break;
+        case 'admin_required':
+          setError('Admin access is required to use this application. Please sign in with an admin account.');
+          break;
         case 'config_missing':
           setError('Authentication configuration is missing. Please contact support.');
           break;

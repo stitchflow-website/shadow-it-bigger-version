@@ -92,7 +92,57 @@ export async function GET(request: Request) {
 
     if (!userInfo.hd) {
       console.error('Not a Google Workspace account - missing domain (hd field)');
+      
+      // Record failed signup
+      try {
+        await supabaseAdmin
+          .from('users_failed_signups')
+          .insert({
+            email: userInfo.email,
+            name: userInfo.name,
+            reason: 'not_workspace_account',
+            provider: 'google',
+            metadata: JSON.stringify(userInfo),
+            created_at: new Date().toISOString(),
+          });
+        console.log('Recorded failed signup: not_workspace_account');
+      } catch (err: unknown) {
+        console.error('Error recording failed signup:', err);
+      }
+        
       return NextResponse.redirect(new URL('/login?error=not_workspace_account', request.url));
+    }
+    
+    // Check if user is an admin
+    let isAdmin = false;
+    try {
+      isAdmin = await googleService.isUserAdmin(userInfo.email);
+    } catch (err: unknown) {
+      console.error('Error checking admin status:', err);
+    }
+    
+    if (!isAdmin) {
+      console.error('User is not an admin');
+      
+      // Record failed signup
+      try {
+        await supabaseAdmin
+          .from('users_failed_signups')
+          .insert({
+            email: userInfo.email,
+            name: userInfo.name,
+            reason: 'not_admin',
+            provider: 'google',
+            domain: userInfo.hd,
+            metadata: JSON.stringify(userInfo),
+            created_at: new Date().toISOString(),
+          });
+        console.log('Recorded failed signup: not_admin');
+      } catch (err: unknown) {
+        console.error('Error recording failed signup:', err);
+      }
+        
+      return NextResponse.redirect(new URL('/login?error=admin_required', request.url));
     }
 
     // Create organization ID from domain
