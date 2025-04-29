@@ -330,7 +330,7 @@ export default function ShadowITDashboard() {
         console.error('Error parsing user info:', error);
       }
     }
-    
+    console.log('email', email);
     // Then fetch complete user data from database
     if (email) {
       const fetchUserFromDB = async () => {
