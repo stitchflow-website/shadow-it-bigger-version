@@ -43,6 +43,7 @@ import type { JSX } from "react"
 import { useDebounce } from "@/app/hooks/useDebounce"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
 
 // Type definitions
 type Application = {
@@ -158,7 +159,7 @@ export default function ShadowITDashboard() {
   const [uncategorizedApps, setUncategorizedApps] = useState<Set<string>>(new Set())
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
 
-  const [userInfo, setUserInfo] = useState<{ name: string; email: string } | null>(null);
+  const [userInfo, setUserInfo] = useState<{ name: string; email: string; avatar_url: string | null } | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -303,20 +304,35 @@ export default function ShadowITDashboard() {
   }, []);
 
   useEffect(() => {
-    // Fetch user info from cookies
-    const userInfoCookie = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('user_info='));
-    
-    if (userInfoCookie) {
-      try {
-        const userInfoData = JSON.parse(decodeURIComponent(userInfoCookie.split('=')[1]));
-        setUserInfo(userInfoData);
-      } catch (error) {
-        console.error('Error parsing user info:', error);
+    // Fetch user info from cookies and then from DB
+    const fetchUserInfo = async () => {
+      const userEmailCookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('userEmail='));
+      
+      if (userEmailCookie) {
+        const email = decodeURIComponent(userEmailCookie.split('=')[1]);
+        
+        // Fetch from Supabase users_signedup table
+        const { data, error } = await supabase
+          .from('users_signedup')
+          .select('name, email, avatar_url')
+          .eq('email', email)
+          .single();
+
+        if (data && !error) {
+          setUserInfo(data);
+        } else {
+          console.error('Error fetching user info:', error);
+        }
+      } else {
+        // No email cookie found, redirect to login
+        router.push('/tools/shadow-it-scan/login');
       }
-    }
-  }, []);
+    };
+
+    fetchUserInfo();
+  }, [router]);
 
   const handleSignOut = () => {
     // Clear all cookies
@@ -894,25 +910,25 @@ export default function ShadowITDashboard() {
 
   // Update the getCategoryColor function for charts
   const getCategoryColor = (category: string | null): string => {
-    if (!category) return "bg-gray-100 text-gray-600"
+    if (!category) return "#E5E7EB" // gray-200
 
     const categoryColors: Record<string, string> = {
-      "Analytics & Business Intelligence": "bg-blue-100 text-blue-600",
-      "Cloud Platforms & Infrastructure": "bg-purple-100 text-purple-600",
-      "Customer Success & Support": "bg-emerald-100 text-emerald-600",
-      "Design & Creative Tools": "bg-pink-100 text-pink-600",
-      "Developer & Engineering Tools": "bg-indigo-100 text-indigo-600",
-      "Finance & Accounting": "bg-cyan-100 text-cyan-600",
-      "Human Resources & People Management": "bg-sky-100 text-sky-600",
-      "IT Operations & Security": "bg-red-100 text-red-600",
-      "Identity & Access Management": "bg-amber-100 text-amber-600",
-      "Productivity & Collaboration": "bg-indigo-100 text-indigo-600",
-      "Project Management": "bg-yellow-100 text-yellow-600",
-      "Sales & Marketing": "bg-orange-100 text-orange-600",
-      Others: "bg-gray-100 text-gray-600",
+      "Analytics & Business Intelligence": "#3B82F6", // blue-500
+      "Cloud Platforms & Infrastructure": "#8B5CF6", // purple-500
+      "Customer Success & Support": "#10B981", // emerald-500
+      "Design & Creative Tools": "#EC4899", // pink-500
+      "Developer & Engineering Tools": "#6366F1", // indigo-500
+      "Finance & Accounting": "#06B6D4", // cyan-500
+      "Human Resources & People Management": "#0EA5E9", // sky-500
+      "IT Operations & Security": "#EF4444", // red-500
+      "Identity & Access Management": "#F59E0B", // amber-500
+      "Productivity & Collaboration": "#6366F1", // indigo-500
+      "Project Management": "#EAB308", // yellow-500
+      "Sales & Marketing": "#F97316", // orange-500
+      "Others": "#6B7280", // gray-500
     }
 
-    return categoryColors[category] || "bg-gray-100 text-gray-600"
+    return categoryColors[category] || "#6B7280" // Default to gray-500
   }
 
   // Generate monthly active users data
@@ -1415,10 +1431,18 @@ export default function ShadowITDashboard() {
                   aria-expanded={isProfileOpen}
                   aria-haspopup="true"
                   aria-label="User menu"
-                  className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                  className="flex items-center justify-center w-10 h-10 rounded-full overflow-hidden bg-gray-100 hover:bg-gray-200 transition-colors"
                 >
-                  {userInfo?.name ? (
-                    <span className="text-sm font-medium">
+                  {userInfo?.avatar_url ? (
+                    <Image
+                      src={userInfo.avatar_url}
+                      alt={userInfo.name || 'User avatar'}
+                      width={40}
+                      height={40}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : userInfo?.name ? (
+                    <span className="text-sm font-medium text-gray-900">
                       {userInfo.name.split(' ').map(n => n[0]).join('')}
                     </span>
                   ) : (
@@ -1436,8 +1460,27 @@ export default function ShadowITDashboard() {
                     {userInfo && (
                       <>
                         <div className="px-4 py-3 border-b border-gray-100">
-                          <p className="font-medium text-gray-900">{userInfo.name}</p>
-                          <p className="text-sm text-gray-500">{userInfo.email}</p>
+                          <div className="flex items-center gap-3 mb-2">
+                            {userInfo.avatar_url ? (
+                              <Image
+                                src={userInfo.avatar_url}
+                                alt={userInfo.name || 'User avatar'}
+                                width={40}
+                                height={40}
+                                className="rounded-full"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {userInfo.name?.split(' ').map(n => n[0]).join('')}
+                                </span>
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-medium text-gray-900">{userInfo.name}</p>
+                              <p className="text-sm text-gray-500">{userInfo.email}</p>
+                            </div>
+                          </div>
                         </div>
                         <div className="px-2 py-2">
                           <button
@@ -2296,10 +2339,18 @@ export default function ShadowITDashboard() {
                   aria-expanded={isProfileOpen}
                   aria-haspopup="true"
                   aria-label="User menu"
-                  className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                  className="flex items-center justify-center w-10 h-10 rounded-full overflow-hidden bg-gray-100 hover:bg-gray-200 transition-colors"
                 >
-                  {userInfo?.name ? (
-                    <span className="text-sm font-medium">
+                  {userInfo?.avatar_url ? (
+                    <Image
+                      src={userInfo.avatar_url}
+                      alt={userInfo.name || 'User avatar'}
+                      width={40}
+                      height={40}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : userInfo?.name ? (
+                    <span className="text-sm font-medium text-gray-900">
                       {userInfo.name.split(' ').map(n => n[0]).join('')}
                     </span>
                   ) : (
@@ -2317,8 +2368,27 @@ export default function ShadowITDashboard() {
                     {userInfo && (
                       <>
                         <div className="px-4 py-3 border-b border-gray-100">
-                          <p className="font-medium text-gray-900">{userInfo.name}</p>
-                          <p className="text-sm text-gray-500">{userInfo.email}</p>
+                          <div className="flex items-center gap-3 mb-2">
+                            {userInfo.avatar_url ? (
+                              <Image
+                                src={userInfo.avatar_url}
+                                alt={userInfo.name || 'User avatar'}
+                                width={40}
+                                height={40}
+                                className="rounded-full"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {userInfo.name?.split(' ').map(n => n[0]).join('')}
+                                </span>
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-medium text-gray-900">{userInfo.name}</p>
+                              <p className="text-sm text-gray-500">{userInfo.email}</p>
+                            </div>
+                          </div>
                         </div>
                         <div className="px-2 py-2">
                           <button
@@ -2871,9 +2941,9 @@ export default function ShadowITDashboard() {
 
       {/* Settings Dialog */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-[10vh]">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-md">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100">
               <h2 className="text-xl font-semibold">Settings</h2>
               <Button
                 variant="ghost"
