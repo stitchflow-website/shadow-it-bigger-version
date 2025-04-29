@@ -123,8 +123,13 @@ function LoginContent() {
 
       // If we're on localhost, update the redirect URI
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        redirectUri = window.location.origin + '/tools/shadow-it-scan/api/auth/microsoft';
+        // For development, use the localhost URL but with the path matching production
+        redirectUri = window.location.origin + '/api/auth/microsoft';
         console.log('Updated redirect URI for localhost:', redirectUri);
+      } else {
+        // For production, always ensure we use the production domain with correct path
+        redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
+        console.log('Using production redirect URI:', redirectUri);
       }
       
       const scopes = [

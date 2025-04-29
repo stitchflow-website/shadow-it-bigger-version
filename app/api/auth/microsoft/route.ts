@@ -1,3 +1,16 @@
+/**
+ * Microsoft Auth Configuration
+ * 
+ * IMPORTANT: In Azure portal, ensure ALL your redirect URIs use your production domain:
+ * - https://stitchflow.com/tools/shadow-it-scan/api/auth/microsoft (CORRECT)
+ * - https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft (CORRECT)
+ * 
+ * Remove any localhost redirect URIs from production:
+ * - http://localhost:3000/api/auth/microsoft (REMOVE FROM PRODUCTION APP)
+ * 
+ * For local development, create a separate app registration.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
@@ -253,7 +266,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Create URL for loading page with syncId parameter
-    const redirectUrl = new URL('/loading', request.url);
+    const redirectUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/loading');
     if (syncStatus?.id) {
       redirectUrl.searchParams.set('syncId', syncStatus.id);
     }
