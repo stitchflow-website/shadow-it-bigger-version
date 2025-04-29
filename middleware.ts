@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // This function runs on every request
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   console.log('Middleware path:', request.nextUrl.pathname);
   
   // Skip auth check for public routes and internal API calls
@@ -57,6 +57,35 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(`/tools/shadow-it-scan/?orgId=${request.cookies.get('orgId')?.value}`, request.url));
   }
   
+  // Check if the request is for the shadow-it-scan API
+  const pathname = request.nextUrl.pathname;
+  
+  if (pathname.startsWith('/tools/shadow-it-scan/api/categorization/status')) {
+    // Create a new URL for the rewritten endpoint
+    const url = new URL(request.url);
+    // Change the pathname to the actual API endpoint
+    url.pathname = `/api/categorization/status`;
+    // Keep the query parameters
+    
+    return NextResponse.rewrite(url);
+  }
+  
+  // Check if user is authenticated for protected routes
+  if (pathname.startsWith('/tools/shadow-it-scan') &&
+      !pathname.startsWith('/tools/shadow-it-scan/login') &&
+      !pathname.startsWith('/tools/shadow-it-scan/api/')) {
+    
+    // No cookies or missing orgId means user is not authenticated
+    if (!request.cookies.has('user_info') || !request.cookies.has('orgId')) {
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/login', request.url));
+    }
+    
+    // If there's no orgId parameter in the URL, redirect to the main page with the orgId
+    if (!request.nextUrl.searchParams.has('orgId') && pathname === '/tools/shadow-it-scan') {
+      return NextResponse.redirect(new URL(`/tools/shadow-it-scan/?orgId=${request.cookies.get('orgId')?.value}`, request.url));
+    }
+  }
+  
   // Continue with the request
   return NextResponse.next();
 }
@@ -72,5 +101,6 @@ export const config = {
      * - public folder
      */
     '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    '/tools/shadow-it-scan/api/categorization/status/:path*',
   ],
 }; 

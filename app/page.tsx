@@ -147,7 +147,7 @@ export default function ShadowITDashboard() {
     userLimitExceeded: true,
     userLimitThreshold: "100",
     newUserInReviewApp: true,
-    newUserInAnyApp: false,
+    newUserInAnyApp: true,
     periodicReview: "3",
     periodicReviewEnabled: true,
   })
@@ -185,6 +185,7 @@ export default function ShadowITDashboard() {
   // Update the checkCategorizationStatus function
   const checkCategorizationStatus = async (orgId: string) => {
     try {
+      // Use the path that will be rewritten by our middleware
       const response = await fetch(`/tools/shadow-it-scan/api/categorization/status?orgId=${orgId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch categorization status');
@@ -196,15 +197,25 @@ export default function ShadowITDashboard() {
         const newUncategorizedApps = new Set<string>();
         
         for (const status of statuses) {
+          // If the status is for organization-wide categorization (no application_id)
+          // Skip for now as we're handling app-specific categorization
+          if (!status.application_id) continue;
+          
           const appIndex = updatedApps.findIndex(app => app.id === status.application_id);
           if (appIndex !== -1) {
             if (status.status === 'COMPLETED') {
+              // Extract category from message if available
+              let category = 'Others';
+              if (status.message && status.message.includes(':')) {
+                category = status.message.split(':')[1]?.trim() || 'Others';
+              }
+              
               updatedApps[appIndex] = {
                 ...updatedApps[appIndex],
-                category: status.message.split(': ')[1]?.trim() || 'Others',
+                category,
                 isCategorizing: false
               };
-            } else if (status.status === 'IN_PROGRESS') {
+            } else if (status.status === 'IN_PROGRESS' || status.status === 'PENDING') {
               updatedApps[appIndex] = {
                 ...updatedApps[appIndex],
                 isCategorizing: true
@@ -251,7 +262,7 @@ export default function ShadowITDashboard() {
         return;
       }
 
-      // Fetch applications
+      // Fetch applications - keep the original path for this API
       const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${orgId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch applications');
@@ -260,7 +271,7 @@ export default function ShadowITDashboard() {
       const data = await response.json();
       setApplications(data);
       
-      // Check categorization status
+      // Check categorization status with our new API
       if (orgId) {
         await checkCategorizationStatus(orgId);
       }
@@ -306,7 +317,7 @@ export default function ShadowITDashboard() {
     // Fetch user info from cookies first
     const userInfoCookie = document.cookie
       .split('; ')
-      .find(row => row.startsWith('user_info='));
+      .find(row => row.startsWith('userEmail'));
     
     let email = '';
     
