@@ -462,41 +462,6 @@ export default function ShadowITDashboard() {
     return "Others"
   }
 
-  // Helper function to determine risk level from scopes
-  function getRiskLevelFromScopes(scopes: string[]): "Low" | "Medium" | "High" {
-    const sensitiveScopes = [
-      "https://www.googleapis.com/auth/gmail",
-      "https://www.googleapis.com/auth/drive",
-      "https://www.googleapis.com/auth/admin",
-      "https://www.googleapis.com/auth/cloud-platform",
-    ]
-
-    const moderateScopes = ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/contacts"]
-
-    if (scopes.some((scope) => sensitiveScopes.some((s) => scope.includes(s)))) {
-      return "High"
-    } else if (scopes.some((scope) => moderateScopes.some((s) => scope.includes(s)))) {
-      return "Medium"
-    }
-    return "Low"
-  }
-
-  // Helper function to generate risk reason from scopes
-  function getRiskReasonFromScopes(scopes: string[]): string {
-    if (scopes.some((s) => s.includes("gmail"))) {
-      return "Has access to email data which may contain sensitive information."
-    } else if (scopes.some((s) => s.includes("drive"))) {
-      return "Has access to files and documents which may contain confidential data."
-    } else if (scopes.some((s) => s.includes("admin"))) {
-      return "Has administrative access which grants extensive control."
-    } else if (scopes.some((s) => s.includes("calendar"))) {
-      return "Has access to calendar data which may reveal organizational activities."
-    } else if (scopes.some((s) => s.includes("contacts"))) {
-      return "Has access to contact information."
-    }
-    return "Limited access to basic profile information."
-  }
-
   // Sorting function
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -931,17 +896,19 @@ export default function ShadowITDashboard() {
     
     // Fixed color mapping for consistent colors
     const colorMap: Record<string, string> = {
-      "Identity & Access Management": "#3B82F6", // blue
-      "Productivity & Collaboration": "#6366F1", // indigo
-      "Sales & Marketing": "#EC4899", // pink
-      "Analytics & Business Intelligence": "#10B981", // emerald
-      "Cloud Platforms & Infrastructure": "#F59E0B", // amber
-      "Developer Tools": "#8B5CF6", // violet
-      "Security & Compliance": "#EF4444", // red
-      "HR & People Management": "#2DD4BF", // teal
-      "Finance & Accounting": "#22C55E", // green
-      "Customer Support": "#F97316", // orange
-      "Project Management": "#A855F7", // purple
+      "Analytics & Business Intelligence": "bg-blue-100 text-blue-600",
+      "Cloud Platforms & Infrastructure": "bg-purple-100 text-purple-600",
+      "Customer Success & Support": "bg-emerald-100 text-emerald-600",
+      "Design & Creative Tools": "bg-pink-100 text-pink-600",
+      "Developer & Engineering Tools": "bg-indigo-100 text-indigo-600",
+      "Finance & Accounting": "bg-cyan-100 text-cyan-600",
+      "Human Resources & People Management": "bg-sky-100 text-sky-600",
+      "IT Operations & Security": "bg-red-100 text-red-600",
+      "Identity & Access Management": "bg-amber-100 text-amber-600",
+      "Productivity & Collaboration": "bg-green-100 text-green-600",
+      "Project Management": "bg-yellow-100 text-yellow-600",
+      "Sales & Marketing": "bg-orange-100 text-orange-600",
+      Others: "bg-gray-100 text-gray-600",
     };
     
     // Return the mapped color or a default
@@ -1058,20 +1025,22 @@ export default function ShadowITDashboard() {
 
     const getCategoryBadgeColor = (category: string) => {
       // Use the same color mapping but for tailwind classes
-      const colorMap: Record<string, string> = {
-        "Identity & Access Management": "bg-blue-100 text-blue-800",
-        "Productivity & Collaboration": "bg-indigo-100 text-indigo-800",
-        "Sales & Marketing": "bg-pink-100 text-pink-800",
-        "Analytics & Business Intelligence": "bg-emerald-100 text-emerald-800",
-        "Cloud Platforms & Infrastructure": "bg-amber-100 text-amber-800",
-        "Developer Tools": "bg-violet-100 text-violet-800",
-        "Security & Compliance": "bg-red-100 text-red-800",
-        "HR & People Management": "bg-teal-100 text-teal-800",
-        "Finance & Accounting": "bg-green-100 text-green-800",
-        "Customer Support": "bg-orange-100 text-orange-800",
-        "Project Management": "bg-purple-100 text-purple-800",
-      };
-      
+      const colorMap: Record<string, string> = 
+        {
+          "Analytics & Business Intelligence": "bg-blue-100 text-blue-600",
+          "Cloud Platforms & Infrastructure": "bg-purple-100 text-purple-600",
+          "Customer Success & Support": "bg-emerald-100 text-emerald-600",
+          "Design & Creative Tools": "bg-pink-100 text-pink-600",
+          "Developer & Engineering Tools": "bg-indigo-100 text-indigo-600",
+          "Finance & Accounting": "bg-cyan-100 text-cyan-600",
+          "Human Resources & People Management": "bg-sky-100 text-sky-600",
+          "IT Operations & Security": "bg-red-100 text-red-600",
+          "Identity & Access Management": "bg-amber-100 text-amber-600",
+          "Productivity & Collaboration": "bg-green-100 text-green-600",
+          "Project Management": "bg-yellow-100 text-yellow-600",
+          "Sales & Marketing": "bg-orange-100 text-orange-600",
+          Others: "bg-gray-100 text-gray-600",
+        };
       return colorMap[category] || "bg-slate-100 text-slate-800";
     };
 
