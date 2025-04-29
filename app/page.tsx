@@ -1317,19 +1317,6 @@ export default function ShadowITDashboard() {
                       <>
                         <div className="px-4 py-3 border-b border-gray-100">
                           <div className="flex items-center gap-3 mb-2">
-                            <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                              {userInfo.avatar_url ? (
-                                <img 
-                                  src={userInfo.avatar_url} 
-                                  alt={userInfo.name || "User"} 
-                                  className="h-10 w-10 object-cover"
-                                />
-                              ) : (
-                                <span className="text-sm font-medium">
-                                  {userInfo.name.split(' ').map(n => n[0]).join('')}
-                                </span>
-                              )}
-                            </div>
                             <div>
                               <p className="font-medium text-gray-900">{userInfo.name}</p>
                               <p className="text-sm text-gray-500">{userInfo.email}</p>

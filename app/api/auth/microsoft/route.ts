@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
         console.error('Error recording failed signup:', err);
       }
       
-      return NextResponse.redirect(new URL('/login?error=admin_required', request.url));
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/login?error=admin_required', request.url));
     }
 
     // First check if user exists
