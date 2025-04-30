@@ -780,22 +780,22 @@ export default function ShadowITDashboard() {
     
     // Fixed color mapping for consistent colors with proper hex values instead of tailwind classes
     const colorMap: Record<string, string> = {
-      "Analytics & Business Intelligence": "#E6F3FF", // very light blue
-      "Cloud Platforms & Infrastructure": "#FFE6E6", // very light red
-      "Customer Success & Support": "#E6FFE6", // very light green
-      "Design & Creative Tools": "#FFE6F9", // very light pink
-      "Developer & Engineering Tools": "#FFF3E6", // very light orange
-      "Finance & Accounting": "#E6FFFF", // very light cyan
-      "Human Resources & People Management": "#F2FFE6", // very light lime
-      "IT Operations & Security": "#FFE6EF", // very light rose
-      "Identity & Access Management": "#E6E6FF", // very light indigo
-      "Productivity & Collaboration": "#FFFFE6", // very light yellow
-      "Project Management": "#F9E6FF", // very light purple
-      "Sales & Marketing": "#FFE6F3", // very light magenta
-      Others: "#F5F5F5", // very light gray
+      "Analytics & Business Intelligence": "#90CAF9", // medium-light blue
+      "Cloud Platforms & Infrastructure": "#EF9A9A", // medium-light red
+      "Customer Success & Support": "#81C784", // medium-light green
+      "Design & Creative Tools": "#F48FB1", // medium-light pink
+      "Developer & Engineering Tools": "#FFAB91", // medium-light orange
+      "Finance & Accounting": "#80DEEA", // medium-light cyan
+      "Human Resources & People Management": "#DCE775", // medium-light lime
+      "IT Operations & Security": "#FF8A80", // medium-light rose
+      "Identity & Access Management": "#9FA8DA", // medium-light indigo
+      "Productivity & Collaboration": "#FFF176", // medium-light yellow
+      "Project Management": "#CE93D8", // medium-light purple
+      "Sales & Marketing": "#F06292", // medium-light magenta
+      Others: "#BDBDBD", // medium-light gray
     };
     // Return the mapped color or a default
-    return colorMap[category] || "#FFFFFF"; // Default white for unknown categories
+    return colorMap[category] || "#E0E0E0"; // Default medium-light gray for unknown categories
   };
 
   // Generate monthly active users data
