@@ -789,22 +789,22 @@ export default function ShadowITDashboard() {
     
     // Fixed color mapping for consistent colors with proper hex values instead of tailwind classes
     const colorMap: Record<string, string> = {
-      "Analytics & Business Intelligence": "#DBEAFE", // blue-100
-      "Cloud Platforms & Infrastructure": "#EDE9FE", // purple-100
-      "Customer Success & Support": "#DCFCE7", // emerald-100
-      "Design & Creative Tools": "#FCE7F3", // pink-100
-      "Developer & Engineering Tools": "#E0E7FF", // indigo-100
-      "Finance & Accounting": "#CFFAFE", // cyan-100
-      "Human Resources & People Management": "#FEF9C3", // yellow-100
-      "IT Operations & Security": "#FEE2E2", // red-100
-      "Identity & Access Management": "#FEF3C7", // amber-100
-      "Productivity & Collaboration": "#DCFCE7", // green-100
-      "Project Management": "#F3E8FF", // purple-100
-      "Sales & Marketing": "#FFEDD5", // orange-100
-      Others: "#F3F4F6", // gray-100
+      "Analytics & Business Intelligence": "#BFDBFE", // blue-200
+      "Cloud Platforms & Infrastructure": "#DDD6FE", // purple-200
+      "Customer Success & Support": "#BBF7D0", // emerald-200
+      "Design & Creative Tools": "#FBCFE8", // pink-200
+      "Developer & Engineering Tools": "#C7D2FE", // indigo-200
+      "Finance & Accounting": "#A5F3FC", // cyan-200
+      "Human Resources & People Management": "#FEF08A", // yellow-200
+      "IT Operations & Security": "#FECACA", // red-200
+      "Identity & Access Management": "#FDE68A", // amber-200
+      "Productivity & Collaboration": "#BBF7D0", // green-200
+      "Project Management": "#E9D5FF", // purple-200
+      "Sales & Marketing": "#FED7AA", // orange-200
+      Others: "#E5E7EB", // gray-200
     };
     // Return the mapped color or a default
-    return colorMap[category] || "#F8FAFC"; // Default slate-100 for unknown categories
+    return colorMap[category] || "#E2E8F0"; // Default slate-200 for unknown categories
   };
 
   // Generate monthly active users data
