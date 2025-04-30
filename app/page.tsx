@@ -780,19 +780,19 @@ export default function ShadowITDashboard() {
     
     // Fixed color mapping for consistent colors with proper hex values instead of tailwind classes
     const colorMap: Record<string, string> = {
-      "Analytics & Business Intelligence": "bg-blue-100 text-blue-600",
-      "Cloud Platforms & Infrastructure": "bg-purple-100 text-purple-600",
-      "Customer Success & Support": "bg-emerald-100 text-emerald-600",
-      "Design & Creative Tools": "bg-pink-100 text-pink-600",
-      "Developer & Engineering Tools": "bg-indigo-100 text-indigo-600",
-      "Finance & Accounting": "bg-cyan-100 text-cyan-600",
-      "Human Resources & People Management": "bg-sky-100 text-sky-600",
-      "IT Operations & Security": "bg-red-100 text-red-600",
-      "Identity & Access Management": "bg-amber-100 text-amber-600",
-      "Productivity & Collaboration": "bg-green-100 text-green-600",
-      "Project Management": "bg-yellow-100 text-yellow-600",
-      "Sales & Marketing": "bg-orange-100 text-orange-600",
-      Others: "bg-gray-100 text-gray-600",
+      "Analytics & Business Intelligence": "#93C5FD", // bg-blue-200 equivalent
+      "Cloud Platforms & Infrastructure": "#DDD6FE", // bg-purple-200 equivalent
+      "Customer Success & Support": "#A7F3D0", // bg-emerald-200 equivalent
+      "Design & Creative Tools": "#FBCFE8", // bg-pink-200 equivalent
+      "Developer & Engineering Tools": "#C7D2FE", // bg-indigo-200 equivalent
+      "Finance & Accounting": "#A5F3FC", // bg-cyan-200 equivalent
+      "Human Resources & People Management": "#BAE6FD", // bg-sky-200 equivalent
+      "IT Operations & Security": "#FECACA", // bg-red-200 equivalent
+      "Identity & Access Management": "#FDE68A", // bg-amber-200 equivalent
+      "Productivity & Collaboration": "#BBF7D0", // bg-green-200 equivalent
+      "Project Management": "#FEF08A", // bg-yellow-200 equivalent
+      "Sales & Marketing": "#FDBA74", // bg-orange-200 equivalent
+      Others: "#E5E7EB", // bg-gray-200 equivalent
     };
     // Return the mapped color or a default
     return colorMap[category] || "#F1F5F9"; // Default slate-100 for unknown categories
