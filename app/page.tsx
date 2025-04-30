@@ -610,19 +610,28 @@ export default function ShadowITDashboard() {
         throw new Error('Failed to update status');
       }
 
-      // Update local state
+      // Update local state immediately after successful API call
       setApplications((prevApps) =>
         prevApps.map((app) =>
           app.id === appId ? { ...app, managementStatus: newStatus as "Managed" | "Unmanaged" | "Needs Review" } : app,
         ),
       );
+
+      // Update edited statuses state
       setEditedStatuses((prev) => ({
         ...prev,
         [appId]: newStatus,
       }));
+
+      // Fetch updated data from the server
+      const updatedResponse = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${new URLSearchParams(window.location.search).get('orgId')}`);
+      if (updatedResponse.ok) {
+        const updatedData = await updatedResponse.json();
+        setApplications(updatedData);
+      }
     } catch (error) {
       console.error('Error updating status:', error);
-      // You might want to show an error toast here
+      // Optionally, you could add error handling UI feedback here
     }
   };
 
@@ -780,22 +789,22 @@ export default function ShadowITDashboard() {
     
     // Fixed color mapping for consistent colors with proper hex values instead of tailwind classes
     const colorMap: Record<string, string> = {
-      "Analytics & Business Intelligence": "#BBDEFB", // soft blue
-      "Cloud Platforms & Infrastructure": "#FFCDD2", // soft red
-      "Customer Success & Support": "#A5D6A7", // soft green
-      "Design & Creative Tools": "#F8BBD0", // soft pink
-      "Developer & Engineering Tools": "#FFCCBC", // soft orange
-      "Finance & Accounting": "#B2EBF2", // soft cyan
-      "Human Resources & People Management": "#E6EE9C", // soft lime
-      "IT Operations & Security": "#FFCDD2", // soft rose
-      "Identity & Access Management": "#C5CAE9", // soft indigo
-      "Productivity & Collaboration": "#FFF59D", // soft yellow
-      "Project Management": "#E1BEE7", // soft purple
-      "Sales & Marketing": "#F48FB1", // soft magenta
-      Others: "#E0E0E0", // soft gray
+      "Analytics & Business Intelligence": "#90CAF9", // blue - for data/analytics
+      "Cloud Platforms & Infrastructure": "#9FA8DA", // indigo - for infrastructure
+      "Customer Success & Support": "#A5D6A7", // green - for customer-facing
+      "Design & Creative Tools": "#F8BBD0", // pink - for creative
+      "Developer & Engineering Tools": "#B39DDB", // purple - for development
+      "Finance & Accounting": "#81D4FA", // light blue - for finance
+      "Human Resources & People Management": "#FFE082", // amber - for people
+      "IT Operations & Security": "#EF9A9A", // red - for security/operations
+      "Identity & Access Management": "#9FA8DA", // indigo - for security
+      "Productivity & Collaboration": "#80CBC4", // teal - for productivity
+      "Project Management": "#CE93D8", // purple - for management
+      "Sales & Marketing": "#FFAB91", // deep orange - for sales
+      Others: "#E0E0E0", // gray - for misc
     };
     // Return the mapped color or a default
-    return colorMap[category] || "#EEEEEE"; // Default soft gray for unknown categories
+    return colorMap[category] || "#EEEEEE"; // Default light gray for unknown categories
   };
 
   // Generate monthly active users data
@@ -1318,7 +1327,7 @@ export default function ShadowITDashboard() {
                           <div className="flex items-center gap-3 mb-2">
                             <div>
                               <p className="font-medium text-gray-900">{userInfo.name}</p>
-                              <p className="text-sm text-gray-500">{userInfo.email}</p>
+                              <p className="text-sm text-gray-500 truncate max-w-[200px]">{userInfo.email}</p>
                             </div>
                           </div>
                         </div>
@@ -1332,7 +1341,7 @@ export default function ShadowITDashboard() {
                               }
                             }}
                             role="menuitem"
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
                           >
                             <LogOut className="h-4 w-4" />
                             Sign out
@@ -2207,22 +2216,9 @@ export default function ShadowITDashboard() {
                       <>
                         <div className="px-4 py-3 border-b border-gray-100">
                           <div className="flex items-center gap-3 mb-2">
-                            <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                              {userInfo.avatar_url ? (
-                                <img 
-                                  src={userInfo.avatar_url} 
-                                  alt={userInfo.name || "User"} 
-                                  className="h-10 w-10 object-cover"
-                                />
-                              ) : (
-                                <span className="text-sm font-medium">
-                                  {userInfo.name.split(' ').map(n => n[0]).join('')}
-                                </span>
-                              )}
-                            </div>
                             <div>
                               <p className="font-medium text-gray-900">{userInfo.name}</p>
-                              <p className="text-sm text-gray-500">{userInfo.email}</p>
+                              <p className="text-sm text-gray-500 truncate max-w-[200px]">{userInfo.email}</p>
                             </div>
                           </div>
                         </div>
@@ -2236,7 +2232,7 @@ export default function ShadowITDashboard() {
                               }
                             }}
                             role="menuitem"
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
                           >
                             <LogOut className="h-4 w-4" />
                             Sign out
