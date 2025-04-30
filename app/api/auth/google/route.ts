@@ -142,7 +142,7 @@ export async function GET(request: Request) {
         console.error('Error recording failed signup:', err);
       }
         
-      return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/login?error=admin_required', request.url));
+      return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/login?error=not_workspace_account', request.url));
     }
 
     // Create organization ID from domain

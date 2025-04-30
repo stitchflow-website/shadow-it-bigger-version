@@ -17,25 +17,25 @@ function LoginContent() {
     if (errorParam) {
       switch (errorParam) {
         case 'no_code':
-          setError('No authorization code received');
+          setError('No authorization code received. Please try again.');
           break;
         case 'auth_failed':
           setError('Authentication failed. Please try again.');
           break;
         case 'not_workspace_account':
-          setError('Please sign in with a Google Workspace account. Personal Gmail accounts are not supported.');
+          setError('Please sign in with a Google Workspace account. Personal Gmail accounts are not supported');
           break;
         case 'not_work_account':
-          setError('Please sign in with a Microsoft work or school account. Personal Microsoft accounts are not supported.');
+          setError('Please sign in with a Microsoft 365 workspace account. Personal accounts are not supported');
           break;
         case 'admin_required':
-          setError('Admin access is required to use this application. Please sign in with an admin account.');
+          setError('Please sign in with a Microsoft 365 workspace account. Personal accounts are not supported');
           break;
         case 'config_missing':
           setError('Authentication configuration is missing. Please contact support.');
           break;
         default:
-          setError('An error occurred during authentication');
+          setError('An error occurred during authentication. Please try again or contact support');
       }
     }
   }, [searchParams]);
