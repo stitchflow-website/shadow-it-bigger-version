@@ -780,22 +780,22 @@ export default function ShadowITDashboard() {
     
     // Fixed color mapping for consistent colors with proper hex values instead of tailwind classes
     const colorMap: Record<string, string> = {
-      "Analytics & Business Intelligence": "#90CAF9", // medium-light blue
-      "Cloud Platforms & Infrastructure": "#EF9A9A", // medium-light red
-      "Customer Success & Support": "#81C784", // medium-light green
-      "Design & Creative Tools": "#F48FB1", // medium-light pink
-      "Developer & Engineering Tools": "#FFAB91", // medium-light orange
-      "Finance & Accounting": "#80DEEA", // medium-light cyan
-      "Human Resources & People Management": "#DCE775", // medium-light lime
-      "IT Operations & Security": "#FF8A80", // medium-light rose
-      "Identity & Access Management": "#9FA8DA", // medium-light indigo
-      "Productivity & Collaboration": "#FFF176", // medium-light yellow
-      "Project Management": "#CE93D8", // medium-light purple
-      "Sales & Marketing": "#F06292", // medium-light magenta
-      Others: "#BDBDBD", // medium-light gray
+      "Analytics & Business Intelligence": "#BBDEFB", // soft blue
+      "Cloud Platforms & Infrastructure": "#FFCDD2", // soft red
+      "Customer Success & Support": "#A5D6A7", // soft green
+      "Design & Creative Tools": "#F8BBD0", // soft pink
+      "Developer & Engineering Tools": "#FFCCBC", // soft orange
+      "Finance & Accounting": "#B2EBF2", // soft cyan
+      "Human Resources & People Management": "#E6EE9C", // soft lime
+      "IT Operations & Security": "#FFCDD2", // soft rose
+      "Identity & Access Management": "#C5CAE9", // soft indigo
+      "Productivity & Collaboration": "#FFF59D", // soft yellow
+      "Project Management": "#E1BEE7", // soft purple
+      "Sales & Marketing": "#F48FB1", // soft magenta
+      Others: "#E0E0E0", // soft gray
     };
     // Return the mapped color or a default
-    return colorMap[category] || "#E0E0E0"; // Default medium-light gray for unknown categories
+    return colorMap[category] || "#EEEEEE"; // Default soft gray for unknown categories
   };
 
   // Generate monthly active users data
