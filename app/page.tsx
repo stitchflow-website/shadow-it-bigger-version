@@ -780,21 +780,20 @@ export default function ShadowITDashboard() {
     
     // Fixed color mapping for consistent colors with proper hex values instead of tailwind classes
     const colorMap: Record<string, string> = {
-      "Analytics & Business Intelligence": "#DBEAFE", // blue-100
-      "Cloud Platforms & Infrastructure": "#F3E8FF", // purple-100
-      "Customer Success & Support": "#D1FAE5", // emerald-100
-      "Design & Creative Tools": "#FCE7F3", // pink-100
-      "Developer & Engineering Tools": "#E0E7FF", // indigo-100
-      "Finance & Accounting": "#CFFAFE", // cyan-100
-      "Human Resources & People Management": "#E0F2FE", // sky-100
-      "IT Operations & Security": "#FEE2E2", // red-100
-      "Identity & Access Management": "#FEF3C7", // amber-100
-      "Productivity & Collaboration": "#DCFCE7", // green-100
-      "Project Management": "#FEF9C3", // yellow-100
-      "Sales & Marketing": "#FFEDD5", // orange-100
-      Others: "#F3F4F6", // gray-100
+      "Analytics & Business Intelligence": "bg-blue-100 text-blue-600",
+      "Cloud Platforms & Infrastructure": "bg-purple-100 text-purple-600",
+      "Customer Success & Support": "bg-emerald-100 text-emerald-600",
+      "Design & Creative Tools": "bg-pink-100 text-pink-600",
+      "Developer & Engineering Tools": "bg-indigo-100 text-indigo-600",
+      "Finance & Accounting": "bg-cyan-100 text-cyan-600",
+      "Human Resources & People Management": "bg-sky-100 text-sky-600",
+      "IT Operations & Security": "bg-red-100 text-red-600",
+      "Identity & Access Management": "bg-amber-100 text-amber-600",
+      "Productivity & Collaboration": "bg-green-100 text-green-600",
+      "Project Management": "bg-yellow-100 text-yellow-600",
+      "Sales & Marketing": "bg-orange-100 text-orange-600",
+      Others: "bg-gray-100 text-gray-600",
     };
-    
     // Return the mapped color or a default
     return colorMap[category] || "#F1F5F9"; // Default slate-100 for unknown categories
   };
