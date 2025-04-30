@@ -780,22 +780,22 @@ export default function ShadowITDashboard() {
     
     // Fixed color mapping for consistent colors with proper hex values instead of tailwind classes
     const colorMap: Record<string, string> = {
-      "Analytics & Business Intelligence": "#93C5FD", // bg-blue-200 equivalent
-      "Cloud Platforms & Infrastructure": "#DDD6FE", // bg-purple-200 equivalent
-      "Customer Success & Support": "#A7F3D0", // bg-emerald-200 equivalent
-      "Design & Creative Tools": "#FBCFE8", // bg-pink-200 equivalent
-      "Developer & Engineering Tools": "#C7D2FE", // bg-indigo-200 equivalent
-      "Finance & Accounting": "#A5F3FC", // bg-cyan-200 equivalent
-      "Human Resources & People Management": "#BAE6FD", // bg-sky-200 equivalent
-      "IT Operations & Security": "#FECACA", // bg-red-200 equivalent
-      "Identity & Access Management": "#FDE68A", // bg-amber-200 equivalent
-      "Productivity & Collaboration": "#BBF7D0", // bg-green-200 equivalent
-      "Project Management": "#FEF08A", // bg-yellow-200 equivalent
-      "Sales & Marketing": "#FDBA74", // bg-orange-200 equivalent
-      Others: "#E5E7EB", // bg-gray-200 equivalent
+      "Analytics & Business Intelligence": "#E6F3FF", // very light blue
+      "Cloud Platforms & Infrastructure": "#FFE6E6", // very light red
+      "Customer Success & Support": "#E6FFE6", // very light green
+      "Design & Creative Tools": "#FFE6F9", // very light pink
+      "Developer & Engineering Tools": "#FFF3E6", // very light orange
+      "Finance & Accounting": "#E6FFFF", // very light cyan
+      "Human Resources & People Management": "#F2FFE6", // very light lime
+      "IT Operations & Security": "#FFE6EF", // very light rose
+      "Identity & Access Management": "#E6E6FF", // very light indigo
+      "Productivity & Collaboration": "#FFFFE6", // very light yellow
+      "Project Management": "#F9E6FF", // very light purple
+      "Sales & Marketing": "#FFE6F3", // very light magenta
+      Others: "#F5F5F5", // very light gray
     };
     // Return the mapped color or a default
-    return colorMap[category] || "#F1F5F9"; // Default slate-100 for unknown categories
+    return colorMap[category] || "#FFFFFF"; // Default white for unknown categories
   };
 
   // Generate monthly active users data
