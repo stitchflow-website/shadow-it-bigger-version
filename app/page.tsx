@@ -1569,8 +1569,9 @@ export default function ShadowITDashboard() {
                                     <div className="flex items-center gap-3">
                                       <AppIcon name={app.name} logoUrl={app.logoUrl} logoUrlFallback={app.logoUrlFallback} />
                                       <div 
-                                        className="font-medium cursor-pointer hover:text-primary transition-colors"
+                                        className="font-medium cursor-pointer hover:text-primary transition-colors truncate max-w-[200px]"
                                         onClick={() => handleSeeUsers(app.id)}
+                                        title={app.name}
                                       >
                                         {app.name}
                                       </div>
