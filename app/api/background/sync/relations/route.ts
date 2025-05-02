@@ -244,10 +244,51 @@ async function processRelations(
           updated_at: new Date().toISOString()
         });
       } else {
+        // Find the original token data for this relationship to get creation date
+        const relationData = userAppRelations.find(rel => 
+          rel.userId === userId && appIdMap.get(rel.appName) === appId
+        );
+        
+        // Extract token creation date or first issued date if available
+        const tokenCreationDate = relationData?.token?.creationTime || 
+                                 relationData?.token?.issued_on || 
+                                 relationData?.token?.issuedOn || 
+                                 relationData?.token?.issuedTime ||
+                                 relationData?.token?.issueDate ||
+                                 relationData?.token?.firstIssued ||
+                                 relationData?.token?.createdTime ||
+                                 relationData?.token?.creation_time;
+        
+        // Check for potential dates from various sources
+        let createdAt = null;
+        if (tokenCreationDate) {
+          // Try to parse the date
+          try {
+            createdAt = new Date(tokenCreationDate).toISOString();
+          } catch (e) {
+            console.warn(`Invalid token creation date format: ${tokenCreationDate}`);
+          }
+        }
+        
+        // If no creation date, use the last used date if available (better than nothing)
+        if (!createdAt && relationData?.token?.lastTimeUsed) {
+          try {
+            createdAt = new Date(relationData.token.lastTimeUsed).toISOString();
+          } catch (e) {
+            console.warn(`Invalid lastTimeUsed format: ${relationData.token.lastTimeUsed}`);
+          }
+        }
+        
+        // If still no date, use current time
+        if (!createdAt) {
+          createdAt = new Date().toISOString();
+        }
+        
         relationsToInsert.push({
           user_id: userId,
           application_id: appId,
           scopes: scopesArray,
+          created_at: createdAt,
           updated_at: new Date().toISOString()
         });
       }

@@ -339,11 +339,29 @@ async function processTokens(
           scopeData: token.scopeData || [],
           scope: token.scope || '',
           permissions: token.permissions || [],
-          displayText: token.displayText || ''
+          displayText: token.displayText || '',
+          // Capture all possible creation date fields
+          creationTime: token.creationTime,
+          issueDate: token.issueDate,
+          issuedTime: token.issuedTime,
+          issued_on: token.issued_on,
+          issuedOn: token.issuedOn,
+          firstIssued: token.firstIssued,
+          createdTime: token.createdTime,
+          creation_time: token.creation_time
         };
         
-        // Log the first token for debugging
+        // Log the first token date fields for debugging
         if (userAppRelationsToProcess.length === 0) {
+          console.log('First token date fields:', {
+            creationTime: token.creationTime,
+            issueDate: token.issueDate,
+            issuedTime: token.issuedTime,
+            issued_on: token.issued_on,
+            issuedOn: token.issuedOn,
+            firstIssued: token.firstIssued,
+            lastTimeUsed: token.lastTimeUsed,
+          });
           console.log('First token example (simplified):', JSON.stringify(simplifiedToken));
         }
         

@@ -2343,7 +2343,19 @@ export default function ShadowITDashboard() {
                           </div>
                       
                         <div>
-                          <dt className="text-muted-foreground font-medium">Created</dt>
+                          <dt className="text-muted-foreground font-medium">
+                            First Detected
+                            <TooltipProvider>
+                              <Tooltip delayDuration={300}>
+                                <TooltipTrigger asChild>
+                                  <Info className="ml-1 h-3.5 w-3.5 text-muted-foreground opacity-70 inline-block" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="p-2 max-w-xs">
+                                  <p className="text-xs">Date when this application was first detected in your organization</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </dt>
                           <dd className="font-medium">{selectedApp.created_at && formatDate(selectedApp.created_at)}</dd>
                         </div>
                         <div>
@@ -2414,8 +2426,18 @@ export default function ShadowITDashboard() {
                                       onClick={() => handleUserSort("created")}
                                     >
                                       <div className="flex items-center">
-                                        Created
+                                        Token Created
                                         {getUserSortIcon("created")}
+                                        <TooltipProvider>
+                                          <Tooltip delayDuration={300}>
+                                            <TooltipTrigger asChild>
+                                              <Info className="ml-1 h-3.5 w-3.5 text-muted-foreground opacity-70" />
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="p-2 max-w-xs">
+                                              <p className="text-xs">Date when the user first authorized this application to access their account</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
                                       </div>
                                     </TableHead>
                                     <TableHead className="bg-transparent">Scopes</TableHead>

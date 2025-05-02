@@ -17,6 +17,7 @@ export class GoogleWorkspaceService {
   private oauth2Client: OAuth2Client;
   private admin: any;
   private oauth2: any;
+  private loggedTokenFields: boolean = false;
 
   constructor(credentials: any) {
     this.oauth2Client = new OAuth2Client({
@@ -184,12 +185,26 @@ export class GoogleWorkspaceService {
             // More efficient scope processing
             this.processTokenScopes(detailedToken, scopes);
             
-            return {
+            // Capture key token metadata including creation/authorization date
+            const tokenData = {
               ...detailedToken,
               userKey: user.id,
               userEmail: user.primaryEmail,
               scopes: Array.from(scopes)
             };
+
+            // Log token data to debug creation date fields
+            if (detailedToken.clientId && !this.loggedTokenFields) {
+              console.log('Token fields available:', Object.keys(detailedToken));
+              if (detailedToken.creationTime) console.log('Found creationTime field');
+              if (detailedToken.issueDate) console.log('Found issueDate field');
+              if (detailedToken.issuedOn) console.log('Found issuedOn field');
+              if (detailedToken.issued_on) console.log('Found issued_on field');
+              if (detailedToken.firstIssued) console.log('Found firstIssued field');
+              this.loggedTokenFields = true;
+            }
+            
+            return tokenData;
           } catch (error) {
             // Return basic token info on error
             return {
