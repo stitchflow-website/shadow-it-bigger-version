@@ -172,78 +172,23 @@ export default function ShadowITDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  // Add polling effect
+  // Poll for unknown categories and refresh data
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const orgId = urlParams.get('orgId');
-
-    if (orgId && uncategorizedApps.size > 0) {
-      // Start polling
-      pollingInterval.current = setInterval(() => {
-        checkCategorizationStatus(orgId);
-      }, 5000) as NodeJS.Timeout;
-
-      return () => {
-        if (pollingInterval.current) {
-          clearInterval(pollingInterval.current);
-          pollingInterval.current = null;
-        }
-      };
-    }
-  }, [uncategorizedApps.size]); // Only re-run when number of uncategorized apps changes
-
-  // Update the checkCategorizationStatus function
-  const checkCategorizationStatus = async (orgId: string) => {
-    try {
-      // Use the path that will be rewritten by our middleware
-      const response = await fetch(`/tools/shadow-it-scan/api/categorization/status?orgId=${orgId}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch categorization status');
+    if (uncategorizedApps.size > 0) {
+      pollingInterval.current = setInterval(() => fetchData(), 5000) as NodeJS.Timeout;
+    } else {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
       }
-      const statuses = await response.json();
-      
-      setApplications(prevApps => {
-        const updatedApps = [...prevApps];
-        const newUncategorizedApps = new Set<string>();
-        
-        for (const status of statuses) {
-          // If the status is for organization-wide categorization (no application_id)
-          // Skip for now as we're handling app-specific categorization
-          if (!status.application_id) continue;
-          
-          const appIndex = updatedApps.findIndex(app => app.id === status.application_id);
-          if (appIndex !== -1) {
-            if (status.status === 'COMPLETED') {
-              // Extract category from message if available
-              let category = 'Others';
-              if (status.message && status.message.includes(':')) {
-                category = status.message.split(':')[1]?.trim() || 'Others';
-              }
-              
-              updatedApps[appIndex] = {
-                ...updatedApps[appIndex],
-                category,
-                isCategorizing: false
-              };
-            } else if (status.status === 'IN_PROGRESS' || status.status === 'PENDING') {
-              updatedApps[appIndex] = {
-                ...updatedApps[appIndex],
-                isCategorizing: true
-              };
-              newUncategorizedApps.add(status.application_id);
-            }
-          }
-        }
-        
-        setUncategorizedApps(newUncategorizedApps);
-        setIsPolling(newUncategorizedApps.size > 0);
-        
-        return updatedApps;
-      });
-    } catch (error) {
-      console.error("Error checking categorization status:", error);
     }
-  };
+    return () => {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+      }
+    };
+  }, [uncategorizedApps]);
 
   // Modify the fetchData function
   const fetchData = async () => {
@@ -278,13 +223,15 @@ export default function ShadowITDashboard() {
         throw new Error('Failed to fetch applications');
       }
 
-      const data = await response.json();
+      const data: Application[] = await response.json();
       setApplications(data);
       
-      // Check categorization status with our new API
-      if (orgId) {
-        await checkCategorizationStatus(orgId);
-      }
+      // Track apps still uncategorized (category === 'Unknown')
+      const unknownIds = new Set<string>();
+      data.forEach((app: Application) => {
+        if (app.category === 'Unknown') unknownIds.add(app.id);
+      });
+      setUncategorizedApps(unknownIds);
       
       setIsLoading(false);
     } catch (error) {
@@ -1571,14 +1518,13 @@ export default function ShadowITDashboard() {
                                       <div 
                                         className="font-medium cursor-pointer hover:text-primary transition-colors truncate max-w-[200px]"
                                         onClick={() => handleSeeUsers(app.id)}
-                                        title={app.name}
                                       >
                                         {app.name}
                                       </div>
                                     </div>
                                   </TableCell>
                                   <TableCell>
-                                    <CategoryBadge category={app.category} isCategorizing={app.isCategorizing} />
+                                    <CategoryBadge category={app.category} isCategorizing={uncategorizedApps.has(app.id)} />
                                   </TableCell>
                                   <TableCell className="text-center">
                                       <TooltipProvider>
@@ -2344,22 +2290,6 @@ export default function ShadowITDashboard() {
                           </div>
                       
                         <div>
-                          <dt className="text-muted-foreground font-medium">
-                            First Detected
-                            <TooltipProvider>
-                              <Tooltip delayDuration={300}>
-                                <TooltipTrigger asChild>
-                                  <Info className="ml-1 h-3.5 w-3.5 text-muted-foreground opacity-70 inline-block" />
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="p-2 max-w-xs">
-                                  <p className="text-xs">Date when this application was first detected in your organization</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </dt>
-                          <dd className="font-medium">{selectedApp.created_at && formatDate(selectedApp.created_at)}</dd>
-                        </div>
-                        <div>
                           <dt className="text-muted-foreground font-medium">Owner</dt>
                           <dd className="font-medium">{selectedApp.ownerEmail || "Not assigned"}</dd>
                         </div>
@@ -2422,25 +2352,7 @@ export default function ShadowITDashboard() {
                                         {getUserSortIcon("email")}
                                       </div>
                                     </TableHead>
-                                    <TableHead 
-                                      className="cursor-pointer bg-transparent"
-                                      onClick={() => handleUserSort("created")}
-                                    >
-                                      <div className="flex items-center">
-                                        Token Created
-                                        {getUserSortIcon("created")}
-                                        <TooltipProvider>
-                                          <Tooltip delayDuration={300}>
-                                            <TooltipTrigger asChild>
-                                              <Info className="ml-1 h-3.5 w-3.5 text-muted-foreground opacity-70" />
-                                            </TooltipTrigger>
-                                            <TooltipContent side="top" className="p-2 max-w-xs">
-                                              <p className="text-xs">Date when the user first authorized this application to access their account</p>
-                                            </TooltipContent>
-                                          </Tooltip>
-                                        </TooltipProvider>
-                                      </div>
-                                    </TableHead>
+                                  
                                     <TableHead className="bg-transparent">Scopes</TableHead>
                                     <TableHead 
                                       className="cursor-pointer rounded-tr-lg bg-transparent"
@@ -2478,7 +2390,6 @@ export default function ShadowITDashboard() {
                                       </div>
                                     </TableCell>
                                     <TableCell>{user.email}</TableCell>
-                                    <TableCell>{user.created_at ? formatDate(user.created_at) : 'N/A'}</TableCell>
                                     <TableCell>
                                       <div className="max-h-24 overflow-y-auto text-sm">
                                         {user.scopes.map((scope, i) => (

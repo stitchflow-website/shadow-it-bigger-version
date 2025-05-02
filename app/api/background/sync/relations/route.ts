@@ -150,13 +150,7 @@ export async function POST(request: Request) {
 async function processRelations(
   organization_id: string, 
   sync_id: string, 
-  userAppRelations: Array<{
-    appName: string, 
-    userId: string, 
-    userEmail: string, 
-    token: any,
-    created_at?: string
-  }>,
+  userAppRelations: Array<{appName: string, userId: string, userEmail: string, token: any}>,
   appMap: Array<{appName: string, appId: string}>
 ) {
   try {
@@ -250,60 +244,10 @@ async function processRelations(
           updated_at: new Date().toISOString()
         });
       } else {
-        // Find the original token data for this relationship to get creation date
-        const relationData = userAppRelations.find(rel => 
-          rel.userId === userId && appIdMap.get(rel.appName) === appId
-        );
-        
-        // Use the token's created_at field which is set in our improved date generation algorithm
-        let createdAt = null;
-        
-        // First try to use the token's already computed created_at field
-        if (relationData && relationData.created_at) {
-          createdAt = relationData.created_at;
-        } 
-        // For backward compatibility, try the old approach of extracting dates from token fields
-        else if (relationData?.token) {
-          // Extract token creation date or first issued date if available
-          const tokenCreationDate = relationData.token.creationTime || 
-                                  relationData.token.issued_on || 
-                                  relationData.token.issuedOn || 
-                                  relationData.token.issuedTime ||
-                                  relationData.token.issueDate ||
-                                  relationData.token.firstIssued ||
-                                  relationData.token.createdTime ||
-                                  relationData.token.creation_time;
-          
-          // Check for potential dates from various sources
-          if (tokenCreationDate) {
-            // Try to parse the date
-            try {
-              createdAt = new Date(tokenCreationDate).toISOString();
-            } catch (e) {
-              console.warn(`Invalid token creation date format: ${tokenCreationDate}`);
-            }
-          }
-          
-          // If no creation date, use the last used date if available (better than nothing)
-          if (!createdAt && relationData.token.lastTimeUsed) {
-            try {
-              createdAt = new Date(relationData.token.lastTimeUsed).toISOString();
-            } catch (e) {
-              console.warn(`Invalid lastTimeUsed format: ${relationData.token.lastTimeUsed}`);
-            }
-          }
-        }
-        
-        // If still no date, use current time
-        if (!createdAt) {
-          createdAt = new Date().toISOString();
-        }
-        
         relationsToInsert.push({
           user_id: userId,
           application_id: appId,
           scopes: scopesArray,
-          created_at: createdAt,
           updated_at: new Date().toISOString()
         });
       }
