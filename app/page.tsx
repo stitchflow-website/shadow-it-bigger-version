@@ -166,16 +166,64 @@ export default function ShadowITDashboard() {
 
   const [isPolling, setIsPolling] = useState(false)
   const [uncategorizedApps, setUncategorizedApps] = useState<Set<string>>(new Set())
+  const [appCategories, setAppCategories] = useState<Record<string, string>>({})
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
 
   const [userInfo, setUserInfo] = useState<{ name: string; email: string; avatar_url: string | null } | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  // Poll for unknown categories and refresh data
+  // Add new function to check categories
+  const checkCategories = async () => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      let orgId = urlParams.get('orgId');
+      
+      if (!orgId) {
+        try {
+          const cookies = document.cookie.split(';');
+          const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
+          if (orgIdCookie) {
+            orgId = orgIdCookie.split('=')[1].trim();
+          }
+        } catch (cookieError) {
+          console.error("Error parsing cookies:", cookieError);
+        }
+      }
+      
+      if (!orgId) return;
+
+      // Only fetch categories for uncategorized apps
+      const uncategorizedIds = Array.from(uncategorizedApps);
+      if (uncategorizedIds.length === 0) return;
+
+      const response = await fetch(`/tools/shadow-it-scan/api/applications/categories?ids=${uncategorizedIds.join(',')}&orgId=${orgId}`);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      
+      // Update only the categories state
+      setAppCategories(prev => ({ ...prev, ...data }));
+      
+      // Remove categorized apps from uncategorized set
+      setUncategorizedApps(prev => {
+        const next = new Set(prev);
+        Object.entries(data).forEach(([id, category]) => {
+          if (category && category !== 'Unknown') {
+            next.delete(id);
+          }
+        });
+        return next;
+      });
+    } catch (error) {
+      console.error("Error checking categories:", error);
+    }
+  };
+
+  // Modify the polling effect to use checkCategories
   useEffect(() => {
     if (uncategorizedApps.size > 0) {
-      pollingInterval.current = setInterval(() => fetchData(), 5000) as NodeJS.Timeout;
+      pollingInterval.current = setInterval(checkCategories, 5000) as NodeJS.Timeout;
     } else {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current);
@@ -190,16 +238,14 @@ export default function ShadowITDashboard() {
     };
   }, [uncategorizedApps]);
 
-  // Modify the fetchData function
+  // Modify fetchData to only set initial data
   const fetchData = async () => {
     try {
       setIsLoading(true);
       
-      // Get orgId from URL params
       const urlParams = new URLSearchParams(window.location.search);
       let orgId = urlParams.get('orgId');
       
-      // If no orgId in params, check cookies
       if (!orgId) {
         try {
           const cookies = document.cookie.split(';');
@@ -217,7 +263,6 @@ export default function ShadowITDashboard() {
         return;
       }
 
-      // Fetch applications - keep the original path for this API
       const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${orgId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch applications');
@@ -237,7 +282,7 @@ export default function ShadowITDashboard() {
     } catch (error) {
       console.error("Error fetching application data:", error);
       setIsLoading(false);
-      setApplications([]); // Reset applications on error
+      setApplications([]);
     }
   };
 
@@ -854,22 +899,26 @@ export default function ShadowITDashboard() {
   };
 
   // Update the getCategoryColor function in the CategoryBadge component
-  const CategoryBadge = ({ category, isCategorizing }: { category: string | null; isCategorizing?: boolean }) => {
-    if (isCategorizing) {
+  const CategoryBadge = ({ category, appId, isCategorizing }: { category: string | null; appId: string; isCategorizing?: boolean }) => {
+    // Use the latest category from appCategories if available, otherwise use the prop
+    const currentCategory = appCategories[appId] || category;
+    const isCurrentlyCategorizing = isCategorizing || (uncategorizedApps.has(appId) && (!currentCategory || currentCategory === 'Unknown'));
+
+    if (isCurrentlyCategorizing) {
       return (
         <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
           <div className="mr-1 h-2 w-2 rounded-full bg-blue-400 animate-pulse"></div>
           Categorizing...
         </div>
-      )
+      );
     }
 
-    if (!category) {
+    if (!currentCategory) {
       return (
         <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
           Uncategorized
         </div>
-      )
+      );
     }
 
     const getCategoryBadgeColor = (category: string) => {
@@ -894,8 +943,8 @@ export default function ShadowITDashboard() {
     };
 
     return (
-      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryBadgeColor(category)}`}>
-        {category}
+      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryBadgeColor(currentCategory)}`}>
+        {currentCategory}
       </div>
     )
   }
@@ -1524,7 +1573,11 @@ export default function ShadowITDashboard() {
                                     </div>
                                   </TableCell>
                                   <TableCell>
-                                    <CategoryBadge category={app.category} isCategorizing={uncategorizedApps.has(app.id)} />
+                                    <CategoryBadge 
+                                      category={app.category} 
+                                      appId={app.id} 
+                                      isCategorizing={uncategorizedApps.has(app.id)} 
+                                    />
                                   </TableCell>
                                   <TableCell className="text-center">
                                       <TooltipProvider>
