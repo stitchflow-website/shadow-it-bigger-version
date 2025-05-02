@@ -16,8 +16,16 @@ import {
   X,
   Eye,
   LogOut,
+  ExternalLink,
+  ScanSearch,
+  LayoutDashboard,
+  BellRing,
+  ShieldAlert,
+  ChartNoAxesCombined,
+  Bell,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { WhyStitchflow } from "@/components/ui/demo";
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -43,6 +51,8 @@ import type { JSX } from "react"
 import { useDebounce } from "@/app/hooks/useDebounce"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import { FAQ } from "@/components/ui/faq"
+import { FeedbackChat } from "@/components/ui/feedback";
 
 // Type definitions
 type Application = {
@@ -789,19 +799,19 @@ export default function ShadowITDashboard() {
     
     // Fixed color mapping for consistent colors with proper hex values instead of tailwind classes
     const colorMap: Record<string, string> = {
-      "Analytics & Business Intelligence": "#BFDBFE", // blue-200
-      "Cloud Platforms & Infrastructure": "#DDD6FE", // purple-200
-      "Customer Success & Support": "#BBF7D0", // emerald-200
-      "Design & Creative Tools": "#FBCFE8", // pink-200
-      "Developer & Engineering Tools": "#C7D2FE", // indigo-200
-      "Finance & Accounting": "#A5F3FC", // cyan-200
-      "Human Resources & People Management": "#FEF08A", // yellow-200
-      "IT Operations & Security": "#FECACA", // red-200
-      "Identity & Access Management": "#FDE68A", // amber-200
-      "Productivity & Collaboration": "#BBF7D0", // green-200
-      "Project Management": "#E9D5FF", // purple-200
-      "Sales & Marketing": "#FED7AA", // orange-200
-      Others: "#E5E7EB", // gray-200
+      "Analytics & Business Intelligence":   "#FBCFE8", // pink-200  :contentReference[oaicite:0]{index=0}
+      "Cloud Platforms & Infrastructure":    "#C7D2FE", // indigo-200  :contentReference[oaicite:1]{index=1}
+      "Customer Success & Support":          "#99F6E4", // teal-200  :contentReference[oaicite:2]{index=2}
+      "Design & Creative Tools":             "#F5D0FE", // fuchsia-200  :contentReference[oaicite:3]{index=3}
+      "Developer & Engineering Tools":       "#BFDBFE", // blue-200  :contentReference[oaicite:4]{index=4}
+      "Finance & Accounting":                "#FDE68A", // amber-200  :contentReference[oaicite:5]{index=5}
+      "Human Resources & People Management": "#D9F99D", // lime-200  :contentReference[oaicite:6]{index=6}
+      "IT Operations & Security":            "#FECACA", // red-200   :contentReference[oaicite:7]{index=7}
+      "Identity & Access Management":        "#DDD6FE", // violet-200  :contentReference[oaicite:8]{index=8}
+      "Productivity & Collaboration":        "#A7F3D0", // emerald-200  :contentReference[oaicite:9]{index=9}
+      "Project Management":                  "#FED7AA", // orange-200  :contentReference[oaicite:10]{index=10}
+      "Sales & Marketing":                   "#A5F3FC", // cyan-200   :contentReference[oaicite:11]{index=11}
+      Others:                                "#E5E7EB", // gray-200   :contentReference[oaicite:12]{index=12}
     };
     // Return the mapped color or a default
     return colorMap[category] || "#E2E8F0"; // Default slate-200 for unknown categories
@@ -918,21 +928,21 @@ export default function ShadowITDashboard() {
     const getCategoryBadgeColor = (category: string) => {
       // Use the same color mapping but for tailwind classes
       const colorMap: Record<string, string> = 
-        {
-          "Analytics & Business Intelligence": "bg-blue-100 text-blue-600",
-          "Cloud Platforms & Infrastructure": "bg-purple-100 text-purple-600",
-          "Customer Success & Support": "bg-emerald-100 text-emerald-600",
-          "Design & Creative Tools": "bg-pink-100 text-pink-600",
-          "Developer & Engineering Tools": "bg-indigo-100 text-indigo-600",
-          "Finance & Accounting": "bg-cyan-100 text-cyan-600",
-          "Human Resources & People Management": "bg-sky-100 text-sky-600",
-          "IT Operations & Security": "bg-red-100 text-red-600",
-          "Identity & Access Management": "bg-amber-100 text-amber-600",
-          "Productivity & Collaboration": "bg-green-100 text-green-600",
-          "Project Management": "bg-yellow-100 text-yellow-600",
-          "Sales & Marketing": "bg-orange-100 text-orange-600",
-          Others: "bg-gray-100 text-gray-600",
-        };
+      {
+        "Analytics & Business Intelligence":   "bg-pink-100     text-pink-600",
+        "Cloud Platforms & Infrastructure":    "bg-indigo-100   text-indigo-600",
+        "Customer Success & Support":          "bg-teal-100     text-teal-600",
+        "Design & Creative Tools":             "bg-fuchsia-100  text-fuchsia-600",
+        "Developer & Engineering Tools":       "bg-blue-100     text-blue-600",
+        "Finance & Accounting":                "bg-amber-100    text-amber-600",
+        "Human Resources & People Management": "bg-lime-100     text-lime-600",
+        "IT Operations & Security":            "bg-red-100      text-red-600",
+        "Identity & Access Management":        "bg-violet-100   text-violet-600",
+        "Productivity & Collaboration":        "bg-emerald-100  text-emerald-600",
+        "Project Management":                  "bg-orange-100   text-orange-600",
+        "Sales & Marketing":                   "bg-cyan-100     text-cyan-600",
+        Others:                                "bg-gray-100     text-gray-600",
+      };
       return colorMap[category] || "bg-slate-100 text-slate-800";
     };
 
@@ -1194,672 +1204,868 @@ export default function ShadowITDashboard() {
   }, []);
 
   return (
-    <div className="max-w-[1400px] mx-auto py-8 space-y-8 font-sans text-gray-900">
-      <div className="flex flex-col space-y-3">
-        <div className="flex items-center gap-4">
-          <Image 
-            src="/Stitchflow.png" 
-            alt="Stitchflow Logo" 
-            width={32} 
-            height={32} 
-          />
-          <h1 className="text-2xl font-semibold tracking-tight">Shadow IT Scanner</h1>
-        </div>
-        <p className="text-gray-600 text-sm">
-          Discover and track all the apps your employees use via your org's Google Workspace
-        </p>
-      </div>
+    <div className="mx-auto py-8 space-y-4 font-sans text-gray-900 bg-[#FAF8FA]">
 
-      {isLoading ? (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-          <div className="p-6 flex justify-center items-center min-h-[400px]">
-            <div className="flex flex-col items-center gap-4">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-              <p>Loading application data...</p>
-            </div>
+      <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+        <div className="flex items-center align-middle justify-between max-w-7xl mx-auto px-4 sm:px-8 py-3">
+          <div className="flex items-center gap-2.5">
+            <a href="https://www.stitchflow.com" target="_blank" rel="noopener noreferrer" className="flex items-center">
+              <img
+                src="/Stitchflow.png"
+                alt="Stitchflow"
+                className="h-6 w-auto"
+              />
+            </a>
+            <span className="text-lg font-medium font-['Epilogue', sans-serif] text-gray-900 flex items-center">Shadow IT Scanner</span>
           </div>
         </div>
-      ) : !selectedAppId ? (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-medium text-gray-800">
-                {(() => {
-                  // Count how many filters are active
-                  const activeFilters = [filterCategory, filterRisk, filterManaged].filter(Boolean).length;
-                  
-                  if (activeFilters === 0) {
-                    return `Hey, we found ${sortedApps.length} applications.`;
-                  }
+      </header>
 
-                  // Single filter messages
-                  if (activeFilters === 1) {
-                    if (filterCategory) {
-                      return `Hey, we found ${sortedApps.length} applications in ${filterCategory}.`;
-                    }
-                    if (filterRisk) {
-                      return `Hey, we found ${sortedApps.length} ${filterRisk.toLowerCase()} risk applications.`;
-                    }
-                    if (filterManaged) {
-                      return `Hey, we found ${sortedApps.length} ${filterManaged.toLowerCase()} applications.`;
-                    }
-                  }
-
-                  // Multiple filters - show total count with "filtered"
-                  return `Hey, we found ${sortedApps.length} filtered applications.`;
-                })()}
-              </h2>
+       
+          <div className="text-center space-y-4 sm:space-y-6 py-6 sm:py-16 px-4 max-w-[1900px] mx-auto">
+            <a
+              href="https://www.stitchflow.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary rounded-full text-xs font-medium hover:bg-primary/15 transition-colors"
+            >
+              A free tool from Stitchflow
+              <ExternalLink className="h-3 w-3" />
+            </a>
+            
+            <div className="space-y-4 sm:space-y-6">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mx-auto max-w-[900px] leading-tight">
+              Free Shadow IT Scanner 
+              </h1>
+              
+              <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              Discover the apps your employees are using, detect potential risks by tracking usage patterns, and prevent compliance gaps before they escalate.
+              </p>
             </div>
-            <div className="flex gap-2">
-              <Button 
-                variant={mainView === "list" ? "default" : "outline"} 
-                onClick={() => {
-                  setMainView("list");
-                  handleCloseUserModal();
-                }}
-                className={mainView === "list" ? "bg-gray-900 hover:bg-gray-800" : ""}
-              >
-                <LayoutGrid className="h-4 w-4 mr-2" />
-                Applications
-              </Button>
-              <Button 
-                variant={mainView === "Insights" ? "default" : "outline"} 
-                onClick={() => {
-                  setMainView("Insights");
-                  handleCloseUserModal();
-                }}
-                className={mainView === "Insights" ? "bg-gray-900 hover:bg-gray-800" : ""}
-              >
-                <BarChart3 className="h-4 w-4 mr-2" />
-                Insights
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setIsSettingsOpen(true)}
-                className="border-gray-200"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
-              </Button>
+          </div>
+        
 
-              {/* Profile Menu */}
-              <div className="relative" ref={profileRef}>
-                <button
-                  onClick={() => setIsProfileOpen(!isProfileOpen)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setIsProfileOpen(!isProfileOpen);
-                    } else if (e.key === 'Escape') {
-                      setIsProfileOpen(false);
-                    }
-                  }}
-                  aria-expanded={isProfileOpen}
-                  aria-haspopup="true"
-                  aria-label="User menu"
-                  className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors overflow-hidden"
-                >
-                  {userInfo?.avatar_url ? (
-                    <img 
-                      src={userInfo.avatar_url} 
-                      alt={userInfo.name || "User"} 
-                      className="h-10 w-10 object-cover"
-                    />
-                  ) : userInfo?.name ? (
-                    <span className="text-sm font-medium">
-                      {userInfo.name.split(' ').map(n => n[0]).join('')}
-                    </span>
-                  ) : (
-                    <User className="h-5 w-5 text-gray-600" />
-                  )}
-                </button>
+      <main className="pt-[40px] pl-10 pr-10 bg-white mt-4 pb-10">
+            <div className="flex flex-col mb-0">
+              <h2 className="text-xl font-bold">Shadow IT Overview</h2>
+            </div>
 
-                {isProfileOpen && (
-                  <div 
-                    className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50"
-                    role="menu"
-                    aria-orientation="vertical"
-                    aria-labelledby="user-menu"
-                  >
-                    {userInfo && (
-                      <>
-                        <div className="px-4 py-3 border-b border-gray-100">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div>
-                              <p className="font-medium text-gray-900">{userInfo.name}</p>
-                              <p className="text-sm text-gray-500 truncate max-w-[200px]">{userInfo.email}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="px-2 py-2">
-                          <button
-                            onClick={handleSignOut}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                handleSignOut();
-                              }
-                            }}
-                            role="menuitem"
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                          >
-                            <LogOut className="h-4 w-4" />
-                            Sign out
-                          </button>
-                        </div>
-                      </>
-                    )}
+            {isLoading ? (
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+                <div className="p-6 flex justify-center items-center min-h-[400px]">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                    <p>Loading application data...</p>
                   </div>
-                )}
+                </div>
               </div>
-            </div>
-          </div>
+            ) : !selectedAppId ? (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center mt-[-4px]">
+                  <div>
+                    <p className="text-lg font-medium text-gray-800">
+                      {(() => {
+                        // Count how many filters are active
+                        const activeFilters = [filterCategory, filterRisk, filterManaged].filter(Boolean).length;
+                        
+                        if (activeFilters === 0) {
+                          return `Hey, we found ${sortedApps.length} applications.`;
+                        }
 
-          {mainView === "list" ? (
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-              <div className="p-6">
-                {/* Filter section */}
-                <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center mb-1">
-                      <Label htmlFor="search" className="text-sm font-medium text-gray-700">
-                      Search Applications
-                    </Label>
-                      {searchInput && (
-                        <button
-                          onClick={() => setSearchInput("")}
-                          className="text-xs text-primary hover:text-primary/80 transition-colors"
-                        >
-                          Clear search
-                        </button>
-                      )}
-                    </div>
-                    <Input
-                      id="search"
-                      placeholder="Search by name or category..."
-                      value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
-                      className="mt-1 border-gray-200"
-                    />
+                        // Single filter messages
+                        if (activeFilters === 1) {
+                          if (filterCategory) {
+                            return `Hey, we found ${sortedApps.length} applications in ${filterCategory}.`;
+                          }
+                          if (filterRisk) {
+                            return `Hey, we found ${sortedApps.length} ${filterRisk.toLowerCase()} risk applications.`;
+                          }
+                          if (filterManaged) {
+                            return `Hey, we found ${sortedApps.length} ${filterManaged.toLowerCase()} applications.`;
+                          }
+                        }
+
+                        // Multiple filters - show total count with "filtered"
+                        return `Hey, we found ${sortedApps.length} filtered applications.`;
+                      })()}
+                    </p>
                   </div>
-                  <div className="flex flex-col md:flex-row gap-4">
-                    <div className="min-w-[150px]">
-                      <div className="flex justify-between items-center mb-1">
-                        <Label className="text-sm font-medium text-gray-700">Category</Label>
-                        {filterCategory && (
-                          <button
-                            onClick={() => setFilterCategory(null)}
-                            className="text-xs text-primary hover:text-primary/80 transition-colors"
-                          >
-                            Clear filter
-                          </button>
-                        )}
-                      </div>
-                      <select
-                        className="w-full min-w-[300px] h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 truncate"
-                        value={filterCategory || ""}
-                        onChange={(e) => setFilterCategory(e.target.value || null)}
+                  <div className="flex gap-2">
+                    <Button 
+                      variant={mainView === "list" ? "default" : "outline"} 
+                      onClick={() => {
+                        setMainView("list");
+                        handleCloseUserModal();
+                      }}
+                      className={mainView === "list" ? "bg-gray-900 hover:bg-gray-800" : ""}
+                    >
+                      <LayoutGrid className="h-4 w-4 mr-2" />
+                      Applications
+                    </Button>
+                    <Button 
+                      variant={mainView === "Insights" ? "default" : "outline"} 
+                      onClick={() => {
+                        setMainView("Insights");
+                        handleCloseUserModal();
+                      }}
+                      className={mainView === "Insights" ? "bg-gray-900 hover:bg-gray-800" : ""}
+                    >
+                      <BarChart3 className="h-4 w-4 mr-2" />
+                      Insights
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsSettingsOpen(true)}
+                      className="border-gray-200"
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Settings
+                    </Button>
+
+                    {/* Profile Menu */}
+                    <div className="relative" ref={profileRef}>
+                      <button
+                        onClick={() => setIsProfileOpen(!isProfileOpen)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setIsProfileOpen(!isProfileOpen);
+                          } else if (e.key === 'Escape') {
+                            setIsProfileOpen(false);
+                          }
+                        }}
+                        aria-expanded={isProfileOpen}
+                        aria-haspopup="true"
+                        aria-label="User menu"
+                        className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors overflow-hidden"
                       >
-                        <option value="">All Categories</option>
-                        {uniqueCategories.map((category) => (
-                          <option key={category} value={category} className="truncate">
-                            {category}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    
-                      <div className="min-w-[150px]">
-                        <div className="flex justify-between items-center mb-1">
-                          <Label className="text-sm font-medium text-gray-700">Risk Level</Label>
-                          {filterRisk && (
-                            <button
-                              onClick={() => setFilterRisk(null)}
-                              className="text-xs text-primary hover:text-primary/80 transition-colors"
-                            >
-                              Clear filter
-                            </button>
+                        {userInfo?.avatar_url ? (
+                          <img 
+                            src={userInfo.avatar_url} 
+                            alt={userInfo.name || "User"} 
+                            className="h-10 w-10 object-cover"
+                          />
+                        ) : userInfo?.name ? (
+                          <span className="text-sm font-medium">
+                            {userInfo.name.split(' ').map(n => n[0]).join('')}
+                          </span>
+                        ) : (
+                          <User className="h-5 w-5 text-gray-600" />
+                        )}
+                      </button>
+
+                      {isProfileOpen && (
+                        <div 
+                          className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50"
+                          role="menu"
+                          aria-orientation="vertical"
+                          aria-labelledby="user-menu"
+                        >
+                          {userInfo && (
+                            <>
+                              <div className="px-4 py-3 border-b border-gray-100">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <div>
+                                    <p className="font-medium text-gray-900">{userInfo.name}</p>
+                                    <p className="text-sm text-gray-500 truncate max-w-[200px]">{userInfo.email}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="px-2 py-2">
+                                <button
+                                  onClick={handleSignOut}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      handleSignOut();
+                                    }
+                                  }}
+                                  role="menuitem"
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                >
+                                  <LogOut className="h-4 w-4" />
+                                  Sign out
+                                </button>
+                              </div>
+                            </>
                           )}
                         </div>
-                        <select
-                          className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
-                          value={filterRisk || ""}
-                          onChange={(e) => setFilterRisk(e.target.value || null)}
-                        >
-                          <option value="">All Risk Levels</option>
-                          <option value="Low">Low</option>
-                          <option value="Medium">Medium</option>
-                          <option value="High">High</option>
-                        </select>
-                      </div>
-                    
-                    <div className="min-w-[150px]">
-                      <div className="flex justify-between items-center mb-1">
-                        <Label className="text-sm font-medium text-gray-700">App Status</Label>
-                        {filterManaged && (
-                          <button
-                            onClick={() => setFilterManaged(null)}
-                            className="text-xs text-primary hover:text-primary/80 transition-colors"
-                          >
-                            Clear filter
-                          </button>
-                        )}
-                      </div>
-                      <select
-                        className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
-                        value={filterManaged || ""}
-                        onChange={(e) => setFilterManaged(e.target.value || null)}
-                      >
-                        <option value="">All Statuses</option>
-                        <option value="Managed">Managed</option>
-                        <option value="Unmanaged">Unmanaged</option>
-                        <option value="Needs Review">Needs Review</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-                  <div className="max-h-[800px] overflow-y-auto">
-                  <Table>
-                      <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
-                        <TableRow className="border-b border-gray-100">
-                          <TableHead className={`cursor-pointer rounded-tl-lg bg-transparent`} onClick={() => handleSort("name")}>
-                            <div className="flex items-center">
-                              Application
-                              {getSortIcon("name")}
-                            </div>
-                          </TableHead>
-                          <TableHead className={`cursor-pointer`} onClick={() => handleSort("category")}>
-                            <div className="flex items-center">
-                              Category
-                              {getSortIcon("category")}
-                            </div>
-                          </TableHead>
-                          <TableHead className={`text-center cursor-pointer`} onClick={() => handleSort("userCount")}>
-                            <div className="flex items-center justify-center">
-                              Users
-                              {getSortIcon("userCount")}
-                            </div>
-                          </TableHead>
-                          
-                            
-                              <TableHead className="text-center cursor-pointer" onClick={() => handleSort("riskLevel")}>
-                                <div className="flex items-center justify-center">
-                                  Risk
-                                  {getSortIcon("riskLevel")}
-                                </div>
-                              </TableHead>
-                              <TableHead
-                                className="text-center cursor-pointer"
-                                onClick={() => handleSort("totalPermissions")}
-                              >
-                                <div className="flex items-center justify-center">
-                                  Total Scope Permissions
-                                  {getSortIcon("totalPermissions")}
-                                </div>
-                              </TableHead>
-                            
-                          
-                          <TableHead className={`cursor-pointer`} onClick={() => handleSort("managementStatus")}>
-                            <div className="flex items-center">
-                              Status
-                              {getSortIcon("managementStatus")}
-                            </div>
-                          </TableHead>
-                          <TableHead className={`text-center rounded-tr-lg`}>User Access</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                    <TableBody>
-                        {currentApps.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
-                            No applications found matching your filters
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                          currentApps.map((app, index) => (
-                            <TableRow 
-                              key={app.id} 
-                              className={`${index % 2 === 0 ? "bg-muted/10" : ""} ${
-                                index === currentApps.length - 1 ? "last-row" : ""
-                              }`}
-                            >
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                <AppIcon name={app.name} logoUrl={app.logoUrl} logoUrlFallback={app.logoUrlFallback} />
-                                <div 
-                                  className="font-medium cursor-pointer hover:text-primary transition-colors"
-                                  onClick={() => handleSeeUsers(app.id)}
-                                >
-                                  {app.name}
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <CategoryBadge category={app.category} isCategorizing={app.isCategorizing} />
-                            </TableCell>
-                            <TableCell className="text-center">
-                                <TooltipProvider>
-                                  <Tooltip delayDuration={300}>
-                                    <TooltipTrigger asChild>
-                              <div 
-                                className="flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
-                                onClick={() => handleSeeUsers(app.id)}
-                              >
-                                <div className="flex -space-x-2">
-                                  {app.users.slice(0, 3).map((user, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 border-2 border-background text-xs font-medium"
-                                    >
-                                      {user.name
-                                        .split(" ")
-                                        .map((n) => n[0])
-                                        .join("")}
-                                    </div>
-                                  ))}
-                                  {app.userCount > 3 && (
-                                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 border-2 border-background text-xs font-medium">
-                                      +{app.userCount - 3}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right" className="p-2">
-                                      <div className="max-h-48 overflow-y-auto space-y-1">
-                                        {app.users.map((user, idx) => (
-                                          <p key={idx} className="text-sm">{user.name}</p>
-                                        ))}
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                            </TableCell>
-                            
-                      
-                            <TableCell>
-                                  <TooltipProvider>
-                                      <Tooltip delayDuration={300}>
-                                      <TooltipTrigger asChild>
-                                        <div className="flex items-center justify-center">
-                                          <RiskBadge level={app.riskLevel} />
-                                        </div>
-                                      </TooltipTrigger>
-                                        <TooltipContent side="right" className="p-2">
-                                          <p className="text-sm">{app.riskReason}</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <TooltipProvider>
-                                      <Tooltip delayDuration={300}>
-                                      <TooltipTrigger asChild>
-                                        <div className="text-center">{app.totalPermissions}</div>
-                                      </TooltipTrigger>
-                                        <TooltipContent side="right" className="p-2">
-                                          <div className="max-h-48 overflow-y-auto space-y-1">
-                                            {app.scopes.map((scope, idx) => (
-                                              <p key={idx} className="text-sm">{scope}</p>
-                                            ))}
-                                          </div>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                </TableCell>    
-                              
-
-                            <TableCell>
-                              <select
-                                className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
-                                value={editedStatuses[app.id] || app.managementStatus}
-                                onChange={(e) => handleStatusChange(app.id, e.target.value)}
-                              >
-                                <option value="Managed">Managed</option>
-                                <option value="Unmanaged">Unmanaged</option>
-                                <option value="Needs Review">Needs Review</option>
-                              </select>
-                            </TableCell>
-                            <TableCell>
-                                <Button
-                                onClick={() => handleSeeUsers(app.id)}
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-full text-primary hover:text-primary border-primary/30 hover:border-primary hover:bg-primary/5 transition-all"
-                                >
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  Deep Dive
-                                </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
                       )}
-                    </TableBody>
-                  </Table>
-                </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Add pagination controls after the Table component */}
-                <div className="mt-4 flex items-center justify-between px-2">
-                  <div className="text-sm text-muted-foreground">
-                    Showing {startIndex + 1}-{Math.min(endIndex, sortedApps.length)} of {sortedApps.length} applications
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(1)}
-                      disabled={currentPage === 1}
-                    >
-                      First
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      Previous
-                    </Button>
-                    <div className="flex items-center space-x-1">
-                      {getPageNumbers().map((page, index) => (
-                        page === '...' ? (
-                          <span key={`ellipsis-${index}`} className="px-2">...</span>
-                        ) : (
-                          <Button
-                            key={page}
-                            variant={currentPage === page ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setCurrentPage(Number(page))}
-                            className="w-8"
-                          >
-                            {page}
-                          </Button>
-                        )
-                      ))}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      Next
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(totalPages)}
-                      disabled={currentPage === totalPages}
-                    >
-                      Last
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            // Replace the dashboard view section with the following:
-            // Dashboard view with charts - updated to match the requested charts
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              {/* Application Distribution by Category */}
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-                <h3 className="text-lg font-medium text-gray-900">App Distribution by Category</h3>
-                <p className="text-sm text-gray-500 mb-4">
-                  View application distribution across different categories within your organization.
-                </p>
-                <div className="h-80 flex items-center">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPieChart>
-                      <Pie
-                        data={getCategoryDistributionData()}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                        nameKey="name"
-                        paddingAngle={2}
-                        strokeWidth={2}
-                        stroke="#fff"
-                        onClick={(data) => {
-                          // Clear all filters first
-                          setFilterRisk(null);
-                          setFilterManaged(null);
-                          // Set the new category filter
-                          setFilterCategory(data.name);
-                          setMainView("list");
-                        }}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {getCategoryDistributionData().map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill={entry.color}
-                            fillOpacity={1}
+                {mainView === "list" ? (
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+                    <div className="p-6">
+                      {/* Filter section */}
+                      <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
+                        <div className="flex-1">
+                          <div className="flex justify-between items-center mb-1">
+                            <Label htmlFor="search" className="text-sm font-medium text-gray-700">
+                            Search Applications
+                          </Label>
+                            {searchInput && (
+                              <button
+                                onClick={() => setSearchInput("")}
+                                className="text-xs text-primary hover:text-primary/80 transition-colors"
+                              >
+                                Clear search
+                              </button>
+                            )}
+                          </div>
+                          <Input
+                            id="search"
+                            placeholder="Search by name or category..."
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            className="mt-1 border-gray-200"
                           />
-                        ))}
-                      </Pie>
-                      <Legend
-                        layout="vertical"
-                        align="right"
-                        verticalAlign="middle"
-                        formatter={(value, entry, index) => {
-                          const item = getCategoryDistributionData()[index]
-                          return (
-                            <span 
-                              className="text-gray-900 cursor-pointer hover:text-primary"
-                              onClick={() => {
+                        </div>
+                        <div className="flex flex-col md:flex-row gap-4">
+                          <div className="min-w-[150px]">
+                            <div className="flex justify-between items-center mb-1">
+                              <Label className="text-sm font-medium text-gray-700">Category</Label>
+                              {filterCategory && (
+                                <button
+                                  onClick={() => setFilterCategory(null)}
+                                  className="text-xs text-primary hover:text-primary/80 transition-colors"
+                                >
+                                  Clear filter
+                                </button>
+                              )}
+                            </div>
+                            <select
+                              className="w-full min-w-[300px] h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 truncate"
+                              value={filterCategory || ""}
+                              onChange={(e) => setFilterCategory(e.target.value || null)}
+                            >
+                              <option value="">All Categories</option>
+                              {uniqueCategories.map((category) => (
+                                <option key={category} value={category} className="truncate">
+                                  {category}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                            <div className="min-w-[150px]">
+                              <div className="flex justify-between items-center mb-1">
+                                <Label className="text-sm font-medium text-gray-700">Risk Level</Label>
+                                {filterRisk && (
+                                  <button
+                                    onClick={() => setFilterRisk(null)}
+                                    className="text-xs text-primary hover:text-primary/80 transition-colors"
+                                  >
+                                    Clear filter
+                                  </button>
+                                )}
+                              </div>
+                              <select
+                                className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                                value={filterRisk || ""}
+                                onChange={(e) => setFilterRisk(e.target.value || null)}
+                              >
+                                <option value="">All Risk Levels</option>
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                              </select>
+                            </div>
+                          
+                          <div className="min-w-[150px]">
+                            <div className="flex justify-between items-center mb-1">
+                              <Label className="text-sm font-medium text-gray-700">App Status</Label>
+                              {filterManaged && (
+                                <button
+                                  onClick={() => setFilterManaged(null)}
+                                  className="text-xs text-primary hover:text-primary/80 transition-colors"
+                                >
+                                  Clear filter
+                                </button>
+                              )}
+                            </div>
+                            <select
+                              className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                              value={filterManaged || ""}
+                              onChange={(e) => setFilterManaged(e.target.value || null)}
+                            >
+                              <option value="">All Statuses</option>
+                              <option value="Managed">Managed</option>
+                              <option value="Unmanaged">Unmanaged</option>
+                              <option value="Needs Review">Needs Review</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+                        <div className="max-h-[800px] overflow-y-auto">
+                        <Table>
+                            <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
+                              <TableRow className="border-b border-gray-100">
+                                <TableHead className={`cursor-pointer rounded-tl-lg bg-transparent`} onClick={() => handleSort("name")}>
+                                  <div className="flex items-center">
+                                    Application
+                                    {getSortIcon("name")}
+                                  </div>
+                                </TableHead>
+                                <TableHead className={`cursor-pointer`} onClick={() => handleSort("category")}>
+                                  <div className="flex items-center">
+                                    Category
+                                    {getSortIcon("category")}
+                                  </div>
+                                </TableHead>
+                                <TableHead className={`text-center cursor-pointer`} onClick={() => handleSort("userCount")}>
+                                  <div className="flex items-center justify-center">
+                                    Users
+                                    {getSortIcon("userCount")}
+                                  </div>
+                                </TableHead>
+                                
+                                  
+                                    <TableHead className="text-center cursor-pointer" onClick={() => handleSort("riskLevel")}>
+                                      <div className="flex items-center justify-center">
+                                        Risk
+                                        {getSortIcon("riskLevel")}
+                                      </div>
+                                    </TableHead>
+                                    <TableHead
+                                      className="text-center cursor-pointer"
+                                      onClick={() => handleSort("totalPermissions")}
+                                    >
+                                      <div className="flex items-center justify-center">
+                                        Total Scope Permissions
+                                        {getSortIcon("totalPermissions")}
+                                      </div>
+                                    </TableHead>
+                                  
+                                
+                                <TableHead className={`cursor-pointer`} onClick={() => handleSort("managementStatus")}>
+                                  <div className="flex items-center">
+                                    Status
+                                    {getSortIcon("managementStatus")}
+                                  </div>
+                                </TableHead>
+                                <TableHead className={`text-center rounded-tr-lg`}>User Access</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                          <TableBody>
+                              {currentApps.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                                  No applications found matching your filters
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                                currentApps.map((app, index) => (
+                                  <TableRow 
+                                    key={app.id} 
+                                    className={`${index % 2 === 0 ? "bg-muted/10" : ""} ${
+                                      index === currentApps.length - 1 ? "last-row" : ""
+                                    }`}
+                                  >
+                                  <TableCell>
+                                    <div className="flex items-center gap-3">
+                                      <AppIcon name={app.name} logoUrl={app.logoUrl} logoUrlFallback={app.logoUrlFallback} />
+                                      <div 
+                                        className="font-medium cursor-pointer hover:text-primary transition-colors"
+                                        onClick={() => handleSeeUsers(app.id)}
+                                      >
+                                        {app.name}
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <CategoryBadge category={app.category} isCategorizing={app.isCategorizing} />
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                      <TooltipProvider>
+                                        <Tooltip delayDuration={300}>
+                                          <TooltipTrigger asChild>
+                                    <div 
+                                      className="flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                                      onClick={() => handleSeeUsers(app.id)}
+                                    >
+                                      <div className="flex -space-x-2">
+                                        {app.users.slice(0, 3).map((user, idx) => (
+                                          <div
+                                            key={idx}
+                                            className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 border-2 border-background text-xs font-medium"
+                                          >
+                                            {user.name
+                                              .split(" ")
+                                              .map((n) => n[0])
+                                              .join("")}
+                                          </div>
+                                        ))}
+                                        {app.userCount > 3 && (
+                                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 border-2 border-background text-xs font-medium">
+                                            +{app.userCount - 3}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="right" className="p-2">
+                                            <div className="max-h-48 overflow-y-auto space-y-1">
+                                              {app.users.map((user, idx) => (
+                                                <p key={idx} className="text-sm">{user.name}</p>
+                                              ))}
+                                            </div>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                  </TableCell>
+                                  
+                            
+                                  <TableCell>
+                                        <TooltipProvider>
+                                            <Tooltip delayDuration={300}>
+                                            <TooltipTrigger asChild>
+                                              <div className="flex items-center justify-center">
+                                                <RiskBadge level={app.riskLevel} />
+                                              </div>
+                                            </TooltipTrigger>
+                                              <TooltipContent side="right" className="p-2">
+                                                <p className="text-sm">{app.riskReason}</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        <TooltipProvider>
+                                            <Tooltip delayDuration={300}>
+                                            <TooltipTrigger asChild>
+                                              <div className="text-center">{app.totalPermissions}</div>
+                                            </TooltipTrigger>
+                                              <TooltipContent side="right" className="p-2">
+                                                <div className="max-h-48 overflow-y-auto space-y-1">
+                                                  {app.scopes.map((scope, idx) => (
+                                                    <p key={idx} className="text-sm">{scope}</p>
+                                                  ))}
+                                                </div>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
+                                      </TableCell>    
+                                    
+
+                                  <TableCell>
+                                    <select
+                                      className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                                      value={editedStatuses[app.id] || app.managementStatus}
+                                      onChange={(e) => handleStatusChange(app.id, e.target.value)}
+                                    >
+                                      <option value="Managed">Managed</option>
+                                      <option value="Unmanaged">Unmanaged</option>
+                                      <option value="Needs Review">Needs Review</option>
+                                    </select>
+                                  </TableCell>
+                                  <TableCell>
+                                      <Button
+                                      onClick={() => handleSeeUsers(app.id)}
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full text-primary hover:text-primary border-primary/30 hover:border-primary hover:bg-primary/5 transition-all"
+                                      >
+                                        <Eye className="h-4 w-4 mr-2" />
+                                        Deep Dive
+                                      </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      </div>
+
+                      {/* Add pagination controls after the Table component */}
+                      <div className="mt-4 flex items-center justify-between px-2">
+                        <div className="text-sm text-muted-foreground">
+                          Showing {startIndex + 1}-{Math.min(endIndex, sortedApps.length)} of {sortedApps.length} applications
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(1)}
+                            disabled={currentPage === 1}
+                          >
+                            First
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentPage === 1}
+                          >
+                            Previous
+                          </Button>
+                          <div className="flex items-center space-x-1">
+                            {getPageNumbers().map((page, index) => (
+                              page === '...' ? (
+                                <span key={`ellipsis-${index}`} className="px-2">...</span>
+                              ) : (
+                                <Button
+                                  key={page}
+                                  variant={currentPage === page ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => setCurrentPage(Number(page))}
+                                  className="w-8"
+                                >
+                                  {page}
+                                </Button>
+                              )
+                            ))}
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentPage === totalPages}
+                          >
+                            Next
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(totalPages)}
+                            disabled={currentPage === totalPages}
+                          >
+                            Last
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  // Replace the dashboard view section with the following:
+                  // Dashboard view with charts - updated to match the requested charts
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    {/* Application Distribution by Category */}
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                      <h3 className="text-lg font-medium text-gray-900">App Distribution by Category</h3>
+                      <p className="text-sm text-gray-500 mb-4">
+                        View application distribution across different categories within your organization.
+                      </p>
+                      <div className="h-80 flex items-center">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsPieChart>
+                            <Pie
+                              data={getCategoryDistributionData()}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={80}
+                              fill="#8884d8"
+                              dataKey="value"
+                              nameKey="name"
+                              paddingAngle={2}
+                              strokeWidth={2}
+                              stroke="#fff"
+                              onClick={(data) => {
                                 // Clear all filters first
                                 setFilterRisk(null);
                                 setFilterManaged(null);
                                 // Set the new category filter
-                                setFilterCategory(value);
+                                setFilterCategory(data.name);
                                 setMainView("list");
                               }}
+                              style={{ cursor: 'pointer' }}
                             >
-                              {value}{" "}
-                              <span className="text-gray-500 ml-4">
-                                {item.percentage}% ({item.value})
-                              </span>
-                            </span>
-                          )
-                        }}
-                      />
-                    </RechartsPieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+                              {getCategoryDistributionData().map((entry, index) => (
+                                <Cell 
+                                  key={`cell-${index}`} 
+                                  fill={entry.color}
+                                  fillOpacity={1}
+                                />
+                              ))}
+                            </Pie>
+                            <Legend
+                              layout="vertical"
+                              align="right"
+                              verticalAlign="middle"
+                              formatter={(value, entry, index) => {
+                                const item = getCategoryDistributionData()[index]
+                                return (
+                                  <span 
+                                    className="text-gray-900 cursor-pointer hover:text-primary"
+                                    onClick={() => {
+                                      // Clear all filters first
+                                      setFilterRisk(null);
+                                      setFilterManaged(null);
+                                      // Set the new category filter
+                                      setFilterCategory(value);
+                                      setMainView("list");
+                                    }}
+                                  >
+                                    {value}{" "}
+                                    <span className="text-gray-500 ml-4">
+                                      {item.percentage}% ({item.value})
+                                    </span>
+                                  </span>
+                                )
+                              }}
+                            />
+                          </RechartsPieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
 
-              {/* Apps by User Count */}
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-                <h3 className="text-lg font-medium text-gray-900">Top Apps by User Count</h3>
-                <p className="text-sm text-gray-500 mb-4">Applications ranked by number of users</p>
-                <div className="h-96">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={getTop10AppsByUsers()} layout="vertical" margin={{ left: 150 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                      <YAxis
-                        dataKey="name"
-                        type="category"
-                        axisLine={false}
-                        tickLine={false}
-                        width={140}
-                        tick={{ fill: '#111827', fontSize: 12 }}
-                      />
-                      <Bar 
-                        dataKey="value" 
-                        name="Users" 
-                        radius={[0, 4, 4, 0]} 
-                        barSize={20}
-                        strokeWidth={1}
-                        stroke="#fff"
-                        cursor="pointer"
-                        onClick={(data) => {
-                          const app = applications.find(a => a.name === data.name);
-                          if (app) {
-                            setMainView("list");
-                            setSelectedAppId(app.id);
-                            setIsUserModalOpen(true);
-                          }
-                        }}
-                      >
-                        {getTop10AppsByUsers().map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill={entry.color} 
-                            fillOpacity={1}
-                          />
-                        ))}
-                      </Bar>
-                      <RechartsTooltip
-                        formatter={(value) => [`${value} users`, ""]}
-                        contentStyle={{ 
-                          backgroundColor: 'white', 
-                          border: '1px solid #e5e7eb', 
-                          borderRadius: '8px', 
-                          padding: '4px 12px',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                          fontFamily: 'inherit',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px'
-                        }}
-                        labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                        itemStyle={{ color: '#111827', fontWeight: 600 }}
-                        separator=": "
-                        cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+                    {/* Apps by User Count */}
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                      <h3 className="text-lg font-medium text-gray-900">Top Apps by User Count</h3>
+                      <p className="text-sm text-gray-500 mb-4">Applications ranked by number of users</p>
+                      <div className="h-96">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={getTop10AppsByUsers()} layout="vertical" margin={{ left: 150 }}>
+                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                            <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
+                            <YAxis
+                              dataKey="name"
+                              type="category"
+                              axisLine={false}
+                              tickLine={false}
+                              width={140}
+                              tick={{ fill: '#111827', fontSize: 12 }}
+                            />
+                            <Bar 
+                              dataKey="value" 
+                              name="Users" 
+                              radius={[0, 4, 4, 0]} 
+                              barSize={20}
+                              strokeWidth={1}
+                              stroke="#fff"
+                              cursor="pointer"
+                              onClick={(data) => {
+                                const app = applications.find(a => a.name === data.name);
+                                if (app) {
+                                  setMainView("list");
+                                  setSelectedAppId(app.id);
+                                  setIsUserModalOpen(true);
+                                }
+                              }}
+                            >
+                              {getTop10AppsByUsers().map((entry, index) => (
+                                <Cell 
+                                  key={`cell-${index}`} 
+                                  fill={entry.color} 
+                                  fillOpacity={1}
+                                />
+                              ))}
+                            </Bar>
+                            <RechartsTooltip
+                              formatter={(value) => [`${value} users`, ""]}
+                              contentStyle={{ 
+                                backgroundColor: 'white', 
+                                border: '1px solid #e5e7eb', 
+                                borderRadius: '8px', 
+                                padding: '4px 12px',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                fontFamily: 'inherit',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}
+                              labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                              itemStyle={{ color: '#111827', fontWeight: 600 }}
+                              separator=": "
+                              cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
 
-            
-                
-                  {/* Risk Level Distribution */}
-                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-                    <h3 className="text-lg font-medium text-gray-900">Risk Level Distribution</h3>
-                    <p className="text-sm text-gray-500 mb-4">Number of applications by risk level</p>
-                    <div className="h-80">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={getRiskChartData()} layout="vertical">
-                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                          <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                          <YAxis
-                            dataKey="name"
-                            type="category"
-                            axisLine={false}
-                            tickLine={false}
-                            width={80} 
-                            tick={(props) => {
-                              const { x, y, payload } = props;
-                              return (
+                  
+                      
+                        {/* Risk Level Distribution */}
+                        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                          <h3 className="text-lg font-medium text-gray-900">Risk Level Distribution</h3>
+                          <p className="text-sm text-gray-500 mb-4">Number of applications by risk level</p>
+                          <div className="h-80">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={getRiskChartData()} layout="vertical">
+                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
+                                <YAxis
+                                  dataKey="name"
+                                  type="category"
+                                  axisLine={false}
+                                  tickLine={false}
+                                  width={80} 
+                                  tick={(props) => {
+                                    const { x, y, payload } = props;
+                                    return (
+                                      <g transform={`translate(${x},${y})`}>
+                                        <text
+                                          x={-3}
+                                          y={0}
+                                          dy={4}
+                                          textAnchor="end"
+                                          fill="#111827"
+                                          fontSize={12}
+                                          className="cursor-pointer hover:fill-primary transition-colors"
+                                          onClick={() => {
+                                            // Clear all filters first
+                                            setFilterCategory(null);
+                                            setFilterManaged(null);
+                                            // Set the new risk filter
+                                            setFilterRisk(payload.value);
+                                            setMainView("list");
+                                          }}
+                                        >
+                                          {payload.value}
+                                        </text>
+                                      </g>
+                                    );
+                                  }}
+                                />
+                                <Bar 
+                                  dataKey="value" 
+                                  name="Applications" 
+                                  radius={[0, 4, 4, 0]} 
+                                  barSize={30}
+                                  strokeWidth={1}
+                                  stroke="#fff"
+                                  cursor="pointer"
+                                  onClick={(data) => {
+                                    // Clear all filters first
+                                    setFilterCategory(null);
+                                    setFilterManaged(null);
+                                    // Set the new risk filter
+                                    setFilterRisk(data.name);
+                                    setMainView("list");
+                                  }}
+                                >
+                                  {getRiskChartData().map((entry, index) => (
+                                    <Cell 
+                                      key={`cell-${index}`} 
+                                      fill={entry.color}
+                                      fillOpacity={1}
+                                    />
+                                  ))}
+                                </Bar>
+                                <RechartsTooltip
+                                  formatter={(value) => [`${value} applications`, ""]}
+                                  contentStyle={{ 
+                                    backgroundColor: 'white', 
+                                    border: '1px solid #e5e7eb', 
+                                  borderRadius: '8px', 
+                                  padding: '4px 12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                  fontFamily: 'inherit',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px'
+                                }}
+                                labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                separator=": "
+                                cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                              />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Apps by Scope Permissions */}
+                      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                        <h3 className="text-lg font-medium text-gray-900">Top Apps by Scope Permissions</h3>
+                        <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
+                        <div className="h-96">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={getTop10AppsByPermissions()} layout="vertical" margin={{ left: 150 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                              <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
+                              <YAxis
+                                dataKey="name"
+                                type="category"
+                                axisLine={false}
+                                tickLine={false}
+                                width={140}
+                                tick={{ fill: '#111827', fontSize: 12 }}
+                              />
+                              <Bar 
+                                dataKey="value" 
+                                name="Permissions" 
+                                radius={[0, 4, 4, 0]} 
+                                barSize={20}
+                                strokeWidth={1}
+                                stroke="#fff"
+                                cursor="pointer"
+                                onClick={(data) => {
+                                  const app = applications.find(a => a.name === data.name);
+                                  if (app) {
+                                    setMainView("list");
+                                    setSelectedAppId(app.id);
+                                    setIsUserModalOpen(true);
+                                  }
+                                }}
+                              >
+                                {getTop10AppsByPermissions().map((entry, index) => (
+                                  <Cell 
+                                    key={`cell-${index}`} 
+                                    fill={entry.color} 
+                                    fillOpacity={1}
+                                  />
+                                ))}
+                              </Bar>
+                              <RechartsTooltip
+                                formatter={(value) => [`${value} permissions`, ""]}
+                                contentStyle={{ 
+                                  backgroundColor: 'white', 
+                                  border: '1px solid #e5e7eb', 
+                                  borderRadius: '8px', 
+                                  padding: '4px 12px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                  fontFamily: 'inherit',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px'
+                                }}
+                                labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                separator=": "
+                                cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                              />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    
+                  
+
+                  {/* Application Similarity Groups */}
+                  
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 col-span-2">
+                      <h3 className="text-lg font-medium text-gray-900">Application Similarity Groups</h3>
+                      <p className="text-sm text-gray-500 mb-4">
+                        Groups of applications that share similar characteristics and usage patterns.
+                      </p>
+                      <div className="h-[500px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={applications.map(app => ({
+                              name: app.name,
+                              users: app.userCount,
+                              permissions: app.totalPermissions,
+                              similar: getSimilarApps(app, applications).length,
+                              category: app.category,
+                            }))}
+                            layout="vertical"
+                            margin={{ left: 150, right: 20, top: 20, bottom: 20 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                            <XAxis type="number" />
+                            <YAxis
+                              type="category"
+                              dataKey="name"
+                              width={140}
+                              tick={({ x, y, payload }) => (
                                 <g transform={`translate(${x},${y})`}>
                                   <text
                                     x={-3}
@@ -1870,906 +2076,741 @@ export default function ShadowITDashboard() {
                                     fontSize={12}
                                     className="cursor-pointer hover:fill-primary transition-colors"
                                     onClick={() => {
-                                      // Clear all filters first
-                                      setFilterCategory(null);
-                                      setFilterManaged(null);
-                                      // Set the new risk filter
-                                      setFilterRisk(payload.value);
-                                      setMainView("list");
+                                      const app = applications.find(a => a.name === payload.value);
+                                      if (app) {
+                                        setMainView("list");
+                                        setSelectedAppId(app.id);
+                                        setIsUserModalOpen(true);
+                                      }
                                     }}
                                   >
                                     {payload.value}
                                   </text>
                                 </g>
-                              );
-                            }}
-                          />
-                          <Bar 
-                            dataKey="value" 
-                            name="Applications" 
-                            radius={[0, 4, 4, 0]} 
-                            barSize={30}
-                            strokeWidth={1}
-                            stroke="#fff"
-                            cursor="pointer"
-                            onClick={(data) => {
-                              // Clear all filters first
-                              setFilterCategory(null);
-                              setFilterManaged(null);
-                              // Set the new risk filter
-                              setFilterRisk(data.name);
-                              setMainView("list");
-                            }}
-                          >
-                            {getRiskChartData().map((entry, index) => (
-                              <Cell 
-                                key={`cell-${index}`} 
-                                fill={entry.color}
-                                fillOpacity={1}
-                              />
-                            ))}
-                          </Bar>
-                          <RechartsTooltip
-                            formatter={(value) => [`${value} applications`, ""]}
-                            contentStyle={{ 
-                              backgroundColor: 'white', 
-                              border: '1px solid #e5e7eb', 
-                              borderRadius: '8px', 
-                              padding: '4px 12px',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                              fontFamily: 'inherit',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px'
-                            }}
-                            labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                            itemStyle={{ color: '#111827', fontWeight: 600 }}
-                            separator=": "
-                            cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  {/* Apps by Scope Permissions */}
-                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-                    <h3 className="text-lg font-medium text-gray-900">Top Apps by Scope Permissions</h3>
-                    <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
-                    <div className="h-96">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={getTop10AppsByPermissions()} layout="vertical" margin={{ left: 150 }}>
-                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                          <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                          <YAxis
-                            dataKey="name"
-                            type="category"
-                            axisLine={false}
-                            tickLine={false}
-                            width={140}
-                            tick={{ fill: '#111827', fontSize: 12 }}
-                          />
-                          <Bar 
-                            dataKey="value" 
-                            name="Permissions" 
-                            radius={[0, 4, 4, 0]} 
-                            barSize={20}
-                            strokeWidth={1}
-                            stroke="#fff"
-                            cursor="pointer"
-                            onClick={(data) => {
-                              const app = applications.find(a => a.name === data.name);
-                              if (app) {
-                                setMainView("list");
-                                setSelectedAppId(app.id);
-                                setIsUserModalOpen(true);
-                              }
-                            }}
-                          >
-                            {getTop10AppsByPermissions().map((entry, index) => (
-                              <Cell 
-                                key={`cell-${index}`} 
-                                fill={entry.color} 
-                                fillOpacity={1}
-                              />
-                            ))}
-                          </Bar>
-                          <RechartsTooltip
-                            formatter={(value) => [`${value} permissions`, ""]}
-                            contentStyle={{ 
-                              backgroundColor: 'white', 
-                              border: '1px solid #e5e7eb', 
-                              borderRadius: '8px', 
-                              padding: '4px 12px',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                              fontFamily: 'inherit',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px'
-                            }}
-                            labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                            itemStyle={{ color: '#111827', fontWeight: 600 }}
-                            separator=": "
-                            cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                
-              
-
-              {/* Application Similarity Groups */}
-              
-                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 col-span-2">
-                  <h3 className="text-lg font-medium text-gray-900">Application Similarity Groups</h3>
-                  <p className="text-sm text-gray-500 mb-4">
-                    Groups of applications that share similar characteristics and usage patterns.
-                  </p>
-                  <div className="h-[500px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={applications.map(app => ({
-                          name: app.name,
-                          users: app.userCount,
-                          permissions: app.totalPermissions,
-                          similar: getSimilarApps(app, applications).length,
-                          category: app.category,
-                        }))}
-                        layout="vertical"
-                        margin={{ left: 150, right: 20, top: 20, bottom: 20 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                        <XAxis type="number" />
-                        <YAxis
-                          type="category"
-                          dataKey="name"
-                          width={140}
-                          tick={({ x, y, payload }) => (
-                            <g transform={`translate(${x},${y})`}>
-                              <text
-                                x={-3}
-                                y={0}
-                                dy={4}
-                                textAnchor="end"
-                                fill="#111827"
-                                fontSize={12}
-                                className="cursor-pointer hover:fill-primary transition-colors"
-                                onClick={() => {
-                                  const app = applications.find(a => a.name === payload.value);
-                                  if (app) {
+                              )}
+                            />
+                            <Bar
+                              dataKey="users"
+                              stackId="a"
+                              name="Users"
+                              fill="#4B5563"
+                              radius={[0, 4, 4, 0]}
+                            >
+                              {applications.map((app, index) => (
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={getCategoryColor(app.category)}
+                                  fillOpacity={0.8}
+                                  cursor="pointer"
+                                  onClick={() => {
                                     setMainView("list");
                                     setSelectedAppId(app.id);
                                     setIsUserModalOpen(true);
+                                  }}
+                                />
+                              ))}
+                            </Bar>
+                            <RechartsTooltip
+                              content={({ active, payload, label }) => {
+                                if (active && payload && payload.length) {
+                                  const app = applications.find(a => a.name === label);
+                                  if (!app) return null;
+
+                                  const similarApps = getSimilarApps(app, applications);
+                                  return (
+                                    <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
+                                      <p className="font-medium">{label}</p>
+                                      <p className="text-sm text-gray-500">{app.category}</p>
+                                      <div className="text-sm mt-2">
+                                        <div className="font-medium">Similar Apps:</div>
+                                        <div className="mt-1 space-y-1">
+                                          {similarApps.map(({ app: similarApp, score }, index) => (
+                                            <div key={index} className="flex items-center gap-2">
+                                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(similarApp.category) }} />
+                                              <span>{similarApp.name}</span>
+                                              <span className="text-gray-500">({Math.round(score * 100)}% match)</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
+                              cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                            />
+                            <Legend />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  
+                </div>
+              )}
+            </div>
+          ) : (
+            // User detail view
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-medium text-gray-800">
+                    {(() => {
+                      // Count how many filters are active
+                      const activeFilters = [filterCategory, filterRisk, filterManaged].filter(Boolean).length;
+                      
+                      if (activeFilters === 0) {
+                        return `Hey, we found ${sortedApps.length} applications.`;
+                      }
+
+                      // Single filter messages
+                      if (activeFilters === 1) {
+                        if (filterCategory) {
+                          return `Hey, we found ${sortedApps.length} applications in ${filterCategory}.`;
+                        }
+                        if (filterRisk) {
+                          return `Hey, we found ${sortedApps.length} ${filterRisk.toLowerCase()} risk applications.`;
+                        }
+                        if (filterManaged) {
+                          return `Hey, we found ${sortedApps.length} ${filterManaged.toLowerCase()} applications.`;
+                        }
+                      }
+
+                      // Multiple filters - show total count with "filtered"
+                      return `Hey, we found ${sortedApps.length} filtered applications.`;
+                    })()}
+                  </h2>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    variant={mainView === "list" ? "default" : "outline"} 
+                    onClick={() => {
+                      setMainView("list");
+                      handleCloseUserModal();
+                    }}
+                    className={mainView === "list" ? "bg-gray-900 hover:bg-gray-800" : ""}
+                  >
+                    <LayoutGrid className="h-4 w-4 mr-2" />
+                    Applications
+                  </Button>
+                  <Button 
+                    variant={mainView === "Insights" ? "default" : "outline"} 
+                    onClick={() => {
+                      setMainView("Insights");
+                      handleCloseUserModal();
+                    }}
+                    className={mainView === "Insights" ? "bg-gray-900 hover:bg-gray-800" : ""}
+                  >
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Insights
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="border-gray-200"
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Settings
+                  </Button>
+
+                  {/* Profile Menu */}
+                  <div className="relative" ref={profileRef}>
+                    <button
+                      onClick={() => setIsProfileOpen(!isProfileOpen)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setIsProfileOpen(!isProfileOpen);
+                        } else if (e.key === 'Escape') {
+                          setIsProfileOpen(false);
+                        }
+                      }}
+                      aria-expanded={isProfileOpen}
+                      aria-haspopup="true"
+                      aria-label="User menu"
+                      className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors overflow-hidden"
+                    >
+                      {userInfo?.avatar_url ? (
+                        <img 
+                          src={userInfo.avatar_url} 
+                          alt={userInfo.name || "User"} 
+                          className="h-10 w-10 object-cover"
+                        />
+                      ) : userInfo?.name ? (
+                        <span className="text-sm font-medium">
+                          {userInfo.name.split(' ').map(n => n[0]).join('')}
+                        </span>
+                      ) : (
+                        <User className="h-5 w-5 text-gray-600" />
+                      )}
+                    </button>
+
+                    {isProfileOpen && (
+                      <div 
+                        className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50"
+                        role="menu"
+                        aria-orientation="vertical"
+                        aria-labelledby="user-menu"
+                      >
+                        {userInfo && (
+                          <>
+                            <div className="px-4 py-3 border-b border-gray-100">
+                              <div className="flex items-center gap-3 mb-2">
+                                <div>
+                                  <p className="font-medium text-gray-900">{userInfo.name}</p>
+                                  <p className="text-sm text-gray-500 truncate max-w-[200px]">{userInfo.email}</p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="px-2 py-2">
+                              <button
+                                onClick={handleSignOut}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    handleSignOut();
                                   }
                                 }}
+                                role="menuitem"
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
                               >
-                                {payload.value}
-                              </text>
-                            </g>
-                          )}
-                        />
-                        <Bar
-                          dataKey="users"
-                          stackId="a"
-                          name="Users"
-                          fill="#4B5563"
-                          radius={[0, 4, 4, 0]}
-                        >
-                          {applications.map((app, index) => (
-                            <Cell
-                              key={`cell-${index}`}
-                              fill={getCategoryColor(app.category)}
-                              fillOpacity={0.8}
-                              cursor="pointer"
-                              onClick={() => {
-                                setMainView("list");
-                                setSelectedAppId(app.id);
-                                setIsUserModalOpen(true);
-                              }}
-                            />
-                          ))}
-                        </Bar>
-                        <RechartsTooltip
-                          content={({ active, payload, label }) => {
-                            if (active && payload && payload.length) {
-                              const app = applications.find(a => a.name === label);
-                              if (!app) return null;
-
-                              const similarApps = getSimilarApps(app, applications);
-                              return (
-                                <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
-                                  <p className="font-medium">{label}</p>
-                                  <p className="text-sm text-gray-500">{app.category}</p>
-                                  <div className="text-sm mt-2">
-                                    <div className="font-medium">Similar Apps:</div>
-                                    <div className="mt-1 space-y-1">
-                                      {similarApps.map(({ app: similarApp, score }, index) => (
-                                        <div key={index} className="flex items-center gap-2">
-                                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(similarApp.category) }} />
-                                          <span>{similarApp.name}</span>
-                                          <span className="text-gray-500">({Math.round(score * 100)}% match)</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            return null;
-                          }}
-                          cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                        />
-                        <Legend />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              
-            </div>
-          )}
-        </div>
-      ) : (
-        // User detail view
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-medium text-gray-800">
-                {(() => {
-                  // Count how many filters are active
-                  const activeFilters = [filterCategory, filterRisk, filterManaged].filter(Boolean).length;
-                  
-                  if (activeFilters === 0) {
-                    return `Hey, we found ${sortedApps.length} applications.`;
-                  }
-
-                  // Single filter messages
-                  if (activeFilters === 1) {
-                    if (filterCategory) {
-                      return `Hey, we found ${sortedApps.length} applications in ${filterCategory}.`;
-                    }
-                    if (filterRisk) {
-                      return `Hey, we found ${sortedApps.length} ${filterRisk.toLowerCase()} risk applications.`;
-                    }
-                    if (filterManaged) {
-                      return `Hey, we found ${sortedApps.length} ${filterManaged.toLowerCase()} applications.`;
-                    }
-                  }
-
-                  // Multiple filters - show total count with "filtered"
-                  return `Hey, we found ${sortedApps.length} filtered applications.`;
-                })()}
-              </h2>
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                variant={mainView === "list" ? "default" : "outline"} 
-                onClick={() => {
-                  setMainView("list");
-                  handleCloseUserModal();
-                }}
-                className={mainView === "list" ? "bg-gray-900 hover:bg-gray-800" : ""}
-              >
-                <LayoutGrid className="h-4 w-4 mr-2" />
-                Applications
-              </Button>
-              <Button 
-                variant={mainView === "Insights" ? "default" : "outline"} 
-                onClick={() => {
-                  setMainView("Insights");
-                  handleCloseUserModal();
-                }}
-                className={mainView === "Insights" ? "bg-gray-900 hover:bg-gray-800" : ""}
-              >
-                <BarChart3 className="h-4 w-4 mr-2" />
-                Insights
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setIsSettingsOpen(true)}
-                className="border-gray-200"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
-              </Button>
-
-              {/* Profile Menu */}
-              <div className="relative" ref={profileRef}>
-                <button
-                  onClick={() => setIsProfileOpen(!isProfileOpen)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setIsProfileOpen(!isProfileOpen);
-                    } else if (e.key === 'Escape') {
-                      setIsProfileOpen(false);
-                    }
-                  }}
-                  aria-expanded={isProfileOpen}
-                  aria-haspopup="true"
-                  aria-label="User menu"
-                  className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors overflow-hidden"
-                >
-                  {userInfo?.avatar_url ? (
-                    <img 
-                      src={userInfo.avatar_url} 
-                      alt={userInfo.name || "User"} 
-                      className="h-10 w-10 object-cover"
-                    />
-                  ) : userInfo?.name ? (
-                    <span className="text-sm font-medium">
-                      {userInfo.name.split(' ').map(n => n[0]).join('')}
-                    </span>
-                  ) : (
-                    <User className="h-5 w-5 text-gray-600" />
-                  )}
-                </button>
-
-                {isProfileOpen && (
-                  <div 
-                    className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50"
-                    role="menu"
-                    aria-orientation="vertical"
-                    aria-labelledby="user-menu"
-                  >
-                    {userInfo && (
-                      <>
-                        <div className="px-4 py-3 border-b border-gray-100">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div>
-                              <p className="font-medium text-gray-900">{userInfo.name}</p>
-                              <p className="text-sm text-gray-500 truncate max-w-[200px]">{userInfo.email}</p>
+                                <LogOut className="h-4 w-4" />
+                                Sign out
+                              </button>
                             </div>
-                          </div>
-                        </div>
-                        <div className="px-2 py-2">
-                          <button
-                            onClick={handleSignOut}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                handleSignOut();
-                              }
-                            }}
-                            role="menuitem"
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                          >
-                            <LogOut className="h-4 w-4" />
-                            Sign out
-                          </button>
-                        </div>
-                      </>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-            <div className="p-6">
-            {selectedApp && (
-              <>
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCloseUserModal}
-                      className="flex items-center gap-1 text-gray-700 hover:bg-gray-100"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      <span>Back</span>
-                    </Button>
-                    <div>
-                      <h2 className="text-xl font-bold">{selectedApp.name}</h2>
-                      <p className="text-sm text-muted-foreground">{selectedApp.userCount} users with access</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+                <div className="p-6">
+                {selectedApp && (
+                  <>
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleCloseUserModal}
+                          className="flex items-center gap-1 text-gray-700 hover:bg-gray-100"
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                          <span>Back</span>
+                        </Button>
+                        <div>
+                          <h2 className="text-xl font-bold">{selectedApp.name}</h2>
+                          <p className="text-sm text-muted-foreground">{selectedApp.userCount} users with access</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm text-muted-foreground font-medium">Risk:</span>
+                            <RiskBadge level={selectedApp.riskLevel} />
+                          </div>
                     
-                      <div className="flex items-center gap-1">
-                        <span className="text-sm text-muted-foreground font-medium">Risk:</span>
-                        <RiskBadge level={selectedApp.riskLevel} />
-                      </div>
-                
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm text-muted-foreground font-medium">Status:</span>
-                      <select
-                          className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
-                        value={editedStatuses[selectedApp.id] || selectedApp.managementStatus}
-                        onChange={(e) => handleStatusChange(selectedApp.id, e.target.value)}
-                      >
-                        <option value="Managed">Managed</option>
-                        <option value="Unmanaged">Unmanaged</option>
-                        <option value="Needs Review">Needs Review</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* App Details Card */}
-                <div className="mb-6 p-5 rounded-lg bg-gray-50 border border-gray-200">
-                  <h3 className="text-sm font-semibold mb-2">Application Details</h3>
-                  <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <dt className="text-muted-foreground font-medium">Category</dt>
-                      <dd className="font-medium">{selectedApp.category}</dd>
-                    </div>
-                    
-                      <div>
-                        <dt className="text-muted-foreground font-medium">Total Scope Permissions</dt>
-                        <dd className="font-medium">{selectedApp.totalPermissions}</dd>
-                      </div>
-                  
-                    <div>
-                      <dt className="text-muted-foreground font-medium">Created</dt>
-                      <dd className="font-medium">{selectedApp.created_at && formatDate(selectedApp.created_at)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground font-medium">Owner</dt>
-                      <dd className="font-medium">{selectedApp.ownerEmail || "Not assigned"}</dd>
-                    </div>
-                  </dl>
-                </div>
-
-                <Tabs defaultValue="users" className="mb-6">
-                  <TabsList className="bg-gray-100 p-1">
-                    <TabsTrigger value="users" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                      Users
-                    </TabsTrigger>
-                    <TabsTrigger value="scopes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                      Scopes
-                    </TabsTrigger>
-                    <TabsTrigger value="similar" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                      Similar Apps
-                    </TabsTrigger>
-                    <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                      Notes
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="users">
-                    <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
-                      <div className="flex-1">
-                        <Label htmlFor="userSearch" className="text-sm font-medium">
-                          Search Users
-                        </Label>
-                        <Input
-                          id="userSearch"
-                          placeholder="Search by name or email..."
-                          value={userSearchTerm}
-                          onChange={(e) => setUserSearchTerm(e.target.value)}
-                          className="mt-1"
-                        />
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm text-muted-foreground font-medium">Status:</span>
+                          <select
+                              className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                            value={editedStatuses[selectedApp.id] || selectedApp.managementStatus}
+                            onChange={(e) => handleStatusChange(selectedApp.id, e.target.value)}
+                          >
+                            <option value="Managed">Managed</option>
+                            <option value="Unmanaged">Unmanaged</option>
+                            <option value="Needs Review">Needs Review</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="rounded-md border">
-                        <div className="max-h-[800px] overflow-y-auto">
-                      <Table>
-                            <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
-                          <TableRow>
-                                <TableHead className="w-[50px] rounded-tl-lg bg-transparent">#</TableHead>
-                                <TableHead 
-                                  className="w-[200px] cursor-pointer bg-transparent" 
-                                  onClick={() => handleUserSort("name")}
-                                >
-                                  <div className="flex items-center">
-                                    User
-                                    {getUserSortIcon("name")}
-                                  </div>
-                                </TableHead>
-                                <TableHead 
-                                  className="cursor-pointer bg-transparent"
-                                  onClick={() => handleUserSort("email")}
-                                >
-                                  <div className="flex items-center">
-                                    Email
-                                    {getUserSortIcon("email")}
-                                  </div>
-                                </TableHead>
-                                <TableHead 
-                                  className="cursor-pointer bg-transparent"
-                                  onClick={() => handleUserSort("created")}
-                                >
-                                  <div className="flex items-center">
-                                    Created
-                                    {getUserSortIcon("created")}
-                                  </div>
-                                </TableHead>
-                                <TableHead className="bg-transparent">Scopes</TableHead>
-                                <TableHead 
-                                  className="cursor-pointer rounded-tr-lg bg-transparent"
-                                  onClick={() => handleUserSort("riskLevel")}
-                                >
-                                  <div className="flex items-center">
-                                    Risk Level
-                                    {getUserSortIcon("riskLevel")}
-                                  </div>
-                                </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                              {currentUsers.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                                No users found matching your search
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                                currentUsers.map((user, index) => (
-                              <TableRow key={user.id} className={index % 2 === 0 ? "bg-muted/30" : ""}>
-                                    <TableCell className="text-muted-foreground">{userStartIndex + index + 1}</TableCell>
-                                <TableCell>
-                                  <div className="flex items-center gap-2">
-                                    <Avatar className="h-8 w-8">
-                                      <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                                        {user.name
-                                          .split(" ")
-                                          .map((n) => n[0])
-                                          .join("")}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                    <span className="font-medium">{user.name}</span>
-                                  </div>
-                                </TableCell>
-                                <TableCell>{user.email}</TableCell>
-                                <TableCell>{user.created_at ? formatDate(user.created_at) : 'N/A'}</TableCell>
-                                <TableCell>
-                                  <div className="max-h-24 overflow-y-auto text-sm">
-                                    {user.scopes.map((scope, i) => (
-                                      <div key={i} className="py-1 border-b border-muted last:border-0">
-                                        {scope}
+                    {/* App Details Card */}
+                    <div className="mb-6 p-5 rounded-lg bg-gray-50 border border-gray-200">
+                      <h3 className="text-sm font-semibold mb-2">Application Details</h3>
+                      <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <dt className="text-muted-foreground font-medium">Category</dt>
+                          <dd className="font-medium">{selectedApp.category}</dd>
+                        </div>
+                        
+                          <div>
+                            <dt className="text-muted-foreground font-medium">Total Scope Permissions</dt>
+                            <dd className="font-medium">{selectedApp.totalPermissions}</dd>
+                          </div>
+                      
+                        <div>
+                          <dt className="text-muted-foreground font-medium">Created</dt>
+                          <dd className="font-medium">{selectedApp.created_at && formatDate(selectedApp.created_at)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground font-medium">Owner</dt>
+                          <dd className="font-medium">{selectedApp.ownerEmail || "Not assigned"}</dd>
+                        </div>
+                      </dl>
+                    </div>
+
+                    <Tabs defaultValue="users" className="mb-6">
+                      <TabsList className="bg-gray-100 p-1">
+                        <TabsTrigger value="users" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                          Users
+                        </TabsTrigger>
+                        <TabsTrigger value="scopes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                          Scopes
+                        </TabsTrigger>
+                        <TabsTrigger value="similar" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                          Similar Apps
+                        </TabsTrigger>
+                        <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                          Notes
+                        </TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="users">
+                        <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
+                          <div className="flex-1">
+                            <Label htmlFor="userSearch" className="text-sm font-medium">
+                              Search Users
+                            </Label>
+                            <Input
+                              id="userSearch"
+                              placeholder="Search by name or email..."
+                              value={userSearchTerm}
+                              onChange={(e) => setUserSearchTerm(e.target.value)}
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="rounded-md border">
+                            <div className="max-h-[800px] overflow-y-auto">
+                          <Table>
+                                <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
+                              <TableRow>
+                                    <TableHead className="w-[50px] rounded-tl-lg bg-transparent">#</TableHead>
+                                    <TableHead 
+                                      className="w-[200px] cursor-pointer bg-transparent" 
+                                      onClick={() => handleUserSort("name")}
+                                    >
+                                      <div className="flex items-center">
+                                        User
+                                        {getUserSortIcon("name")}
                                       </div>
-                                    ))}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <TooltipProvider>
-                                    <Tooltip delayDuration={300}>
-                                      <TooltipTrigger asChild>
-                                        <div className="flex items-center justify-center">
-                                          <RiskBadge level={user.riskLevel} />
-                                        </div>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="right" className="p-2">
-                                        <p className="text-xs">{user.riskReason}</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </TableCell>
+                                    </TableHead>
+                                    <TableHead 
+                                      className="cursor-pointer bg-transparent"
+                                      onClick={() => handleUserSort("email")}
+                                    >
+                                      <div className="flex items-center">
+                                        Email
+                                        {getUserSortIcon("email")}
+                                      </div>
+                                    </TableHead>
+                                    <TableHead 
+                                      className="cursor-pointer bg-transparent"
+                                      onClick={() => handleUserSort("created")}
+                                    >
+                                      <div className="flex items-center">
+                                        Created
+                                        {getUserSortIcon("created")}
+                                      </div>
+                                    </TableHead>
+                                    <TableHead className="bg-transparent">Scopes</TableHead>
+                                    <TableHead 
+                                      className="cursor-pointer rounded-tr-lg bg-transparent"
+                                      onClick={() => handleUserSort("riskLevel")}
+                                    >
+                                      <div className="flex items-center">
+                                        Risk Level
+                                        {getUserSortIcon("riskLevel")}
+                                      </div>
+                                    </TableHead>
                               </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                        </div>
-
-                        {/* User pagination controls */}
-                        <div className="mt-4 flex items-center justify-between px-4 py-2 border-t border-gray-200">
-                          <div className="text-sm text-muted-foreground">
-                            Showing {userStartIndex + 1}-{Math.min(userEndIndex, filteredUsers.length)} of {filteredUsers.length} users
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setUserCurrentPage(1)}
-                              disabled={userCurrentPage === 1}
-                            >
-                              First
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setUserCurrentPage(prev => Math.max(1, prev - 1))}
-                              disabled={userCurrentPage === 1}
-                            >
-                              Previous
-                            </Button>
-                            <div className="flex items-center space-x-1">
-                              {getUserPageNumbers().map((page, index) => (
-                                page === '...' ? (
-                                  <span key={`ellipsis-${index}`} className="px-2">...</span>
-                                ) : (
-                                  <Button
-                                    key={page}
-                                    variant={userCurrentPage === page ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => setUserCurrentPage(Number(page))}
-                                    className="w-8"
-                                  >
-                                    {page}
-                                  </Button>
-                                )
-                              ))}
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setUserCurrentPage(prev => Math.min(totalUserPages, prev + 1))}
-                              disabled={userCurrentPage === totalUserPages}
-                            >
-                              Next
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setUserCurrentPage(totalUserPages)}
-                              disabled={userCurrentPage === totalUserPages}
-                            >
-                              Last
-                            </Button>
-                          </div>
-                        </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="scopes">
-                    <div className="p-5 border border-gray-200 rounded-md bg-white">
-                      <h3 className="text-lg font-medium mb-4">Scope Groups</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Users are grouped by identical permission sets. Each group represents a unique set of
-                        permissions.
-                      </p>
-
-                        {(() => {
-                          const scopeGroups = getScopeGroups(selectedApp)
-                          const totalScopePages = Math.ceil(scopeGroups.length / itemsPerPage)
-                          const scopeStartIndex = (scopeCurrentPage - 1) * itemsPerPage
-                          const scopeEndIndex = scopeStartIndex + itemsPerPage
-                          const currentScopeGroups = scopeGroups.slice(scopeStartIndex, scopeEndIndex)
-
-                          return (
-                            <>
-                              {currentScopeGroups.map((group, groupIndex) => (
-                        <div key={groupIndex} className="mb-6 border rounded-md overflow-hidden">
-                          <div className={`p-3 flex justify-between items-center border-b border-gray-200 ${group.isAllScopes ? "bg-blue-50" : "bg-gray-50"}`}>
-                            <h4 className="font-medium">
-                              {group.isAllScopes ? (
-                                <span className="flex items-center">
-                                  <Info className="h-4 w-4 mr-1 text-blue-600" />
-                                  All Application Scopes
-                                </span>
+                            </TableHeader>
+                            <TableBody>
+                                  {currentUsers.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                                    No users found matching your search
+                                  </TableCell>
+                                </TableRow>
                               ) : (
-                                `User Group ${scopeStartIndex + groupIndex + (scopeCurrentPage === 1 ? 0 : -1)} - ${group.users.length} ${group.users.length === 1 ? "user" : "users"}`
+                                    currentUsers.map((user, index) => (
+                                  <TableRow key={user.id} className={index % 2 === 0 ? "bg-muted/30" : ""}>
+                                        <TableCell className="text-muted-foreground">{userStartIndex + index + 1}</TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-2">
+                                        <Avatar className="h-8 w-8">
+                                          <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                                            {user.name
+                                              .split(" ")
+                                              .map((n) => n[0])
+                                              .join("")}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <span className="font-medium">{user.name}</span>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>{user.email}</TableCell>
+                                    <TableCell>{user.created_at ? formatDate(user.created_at) : 'N/A'}</TableCell>
+                                    <TableCell>
+                                      <div className="max-h-24 overflow-y-auto text-sm">
+                                        {user.scopes.map((scope, i) => (
+                                          <div key={i} className="py-1 border-b border-muted last:border-0">
+                                            {scope}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <TooltipProvider>
+                                        <Tooltip delayDuration={300}>
+                                          <TooltipTrigger asChild>
+                                            <div className="flex items-center justify-center">
+                                              <RiskBadge level={user.riskLevel} />
+                                            </div>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="right" className="p-2">
+                                            <p className="text-xs">{user.riskReason}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
                               )}
-                            </h4>
-                            <Badge variant={group.isAllScopes ? "default" : "outline"} className={group.isAllScopes ? "bg-blue-600" : "bg-primary/10"}>
-                              {group.scopes.length} {group.scopes.length === 1 ? "permission" : "permissions"}
-                            </Badge>
-                          </div>
-
-                          <div className="p-3 border-b">
-                                    <h5 className="text-sm font-medium mb-2">
-                                      {group.isAllScopes ? "Total Available Permissions:" : "Permissions:"}
-                                    </h5>
-                                    <div className="max-h-60 overflow-y-auto">
-                                      {group.scopes.map((scope, scopeIndex) => (
-                                        <div key={scopeIndex} className="py-1 border-b border-muted last:border-0 text-sm">
-                                          {scope}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-
-                                  <div className="p-3">
-                            <h5 className="text-sm font-medium mb-2">
-                              {group.isAllScopes 
-                                ? "This represents all permissions the application could request from any user"
-                                : "Users with this permission set:"}
-                            </h5>
-                            {group.isAllScopes ? (
-                              <div className="text-sm text-muted-foreground italic">
-                                No single user has all these permissions. Different users have granted different subsets.
-                              </div>
-                            ) : (
-                              <div className="flex flex-wrap gap-2">
-                                {group.users.map((user, userIndex) => (
-                                  <div
-                                    key={userIndex}
-                                    className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
-                                  >
-                                    <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-200 text-xs font-medium text-gray-800">
-                                      {user.name
-                                        .split(" ")
-                                        .map((n) => n[0])
-                                        .join("")}
-                                    </div>
-                                    <span className="text-sm">{user.name}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                                </div>
-                              ))}
-
-                              {/* Scope Groups pagination controls */}
-                              {scopeGroups.length > itemsPerPage && (
-                                <div className="mt-4 flex items-center justify-between px-4 py-2 border-t border-gray-200">
-                                  <div className="text-sm text-muted-foreground">
-                                    Showing {scopeStartIndex + 1}-{Math.min(scopeEndIndex, scopeGroups.length)} of {scopeGroups.length} scope groups
-                                </div>
-                                  <div className="flex items-center space-x-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setScopeCurrentPage(1)}
-                                      disabled={scopeCurrentPage === 1}
-                                    >
-                                      First
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setScopeCurrentPage(prev => Math.max(1, prev - 1))}
-                                      disabled={scopeCurrentPage === 1}
-                                    >
-                                      Previous
-                                    </Button>
-                                    <div className="flex items-center space-x-1">
-                                      {getScopePageNumbers(totalScopePages).map((page, index) => (
-                                        page === '...' ? (
-                                          <span key={`ellipsis-${index}`} className="px-2">...</span>
-                                        ) : (
-                                          <Button
-                                            key={page}
-                                            variant={scopeCurrentPage === page ? "default" : "outline"}
-                                            size="sm"
-                                            onClick={() => setScopeCurrentPage(Number(page))}
-                                            className="w-8"
-                                          >
-                                            {page}
-                                          </Button>
-                                        )
-                              ))}
+                            </TableBody>
+                          </Table>
                             </div>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setScopeCurrentPage(prev => Math.min(totalScopePages, prev + 1))}
-                                    disabled={scopeCurrentPage === totalScopePages}
-                                  >
-                                    Next
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setScopeCurrentPage(totalScopePages)}
-                                    disabled={scopeCurrentPage === totalScopePages}
-                                  >
-                                    Last
-                                  </Button>
-                          </div>
-                        </div>
-                              )}
-                            </>
-                          )
-                        })()}
-                    </div>
-                  </TabsContent>
 
-                  <TabsContent value="similar">
-                    <div className="p-5 border border-gray-200 rounded-md bg-white">
-                      <h3 className="text-lg font-medium mb-4">Similar Applications</h3>
-                      <p className="text-sm text-muted-foreground mb-6">
-                        Apps that share similar usage patterns with {selectedApp.name}, based on user behavior and functional overlap.
-                      </p>
-
-                      <div className="space-y-6">
-                        {getSimilarApps(selectedApp, applications).map(({ app, score, reasons }) => (
-                          <div key={app.id} className="p-4 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-3">
-                                  <AppIcon name={app.name} logoUrl={app.logoUrl} logoUrlFallback={app.logoUrlFallback} />
-                                  <div>
-                                    <h4 className="font-medium">{app.name}</h4>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm text-muted-foreground">{app.category}</span>
-                                      <span className="text-sm text-muted-foreground">•</span>
-                                      <span className="text-sm font-medium text-primary">{Math.round(score * 100)}% match</span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Usage Stats */}
-                                <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-50 rounded-md">
-                                  <div>
-                                    <div className="text-sm text-muted-foreground">Shared Users</div>
-                                    <div className="text-lg font-medium">
-                                      {app.users.filter(u => 
-                                        selectedApp.users.some(su => su.email === u.email)
-                                      ).length}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="text-sm text-muted-foreground">Common Functions</div>
-                                    <div className="text-lg font-medium">
-                                      {Array.from(getAppFunctionality(app.scopes)).filter(f => 
-                                        getAppFunctionality(selectedApp.scopes).has(f)
-                                      ).length}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="text-sm text-muted-foreground">Active Users</div>
-                                    <div className="text-lg font-medium">
-                                      {app.users.length}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Similarity Reasons */}
-                                <div className="space-y-2">
-                                  {reasons.map((reason, index) => (
-                                    <div key={index} className="flex items-center gap-2">
-                                      <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
-                                      <span className="text-sm">{reason}</span>
-                        </div>
-                      ))}
-                                </div>
+                            {/* User pagination controls */}
+                            <div className="mt-4 flex items-center justify-between px-4 py-2 border-t border-gray-200">
+                              <div className="text-sm text-muted-foreground">
+                                Showing {userStartIndex + 1}-{Math.min(userEndIndex, filteredUsers.length)} of {filteredUsers.length} users
                               </div>
-
-                              <div className="flex flex-col items-end gap-3">
-                                <RiskBadge level={app.riskLevel} />
+                              <div className="flex items-center space-x-2">
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => {
-                                    setSelectedAppId(app.id);
-                                    setIsUserModalOpen(true);
-                                  }}
-                                  className="whitespace-nowrap"
+                                  onClick={() => setUserCurrentPage(1)}
+                                  disabled={userCurrentPage === 1}
                                 >
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  View Details
+                                  First
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setUserCurrentPage(prev => Math.max(1, prev - 1))}
+                                  disabled={userCurrentPage === 1}
+                                >
+                                  Previous
+                                </Button>
+                                <div className="flex items-center space-x-1">
+                                  {getUserPageNumbers().map((page, index) => (
+                                    page === '...' ? (
+                                      <span key={`ellipsis-${index}`} className="px-2">...</span>
+                                    ) : (
+                                      <Button
+                                        key={page}
+                                        variant={userCurrentPage === page ? "default" : "outline"}
+                                        size="sm"
+                                        onClick={() => setUserCurrentPage(Number(page))}
+                                        className="w-8"
+                                      >
+                                        {page}
+                                      </Button>
+                                    )
+                                  ))}
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setUserCurrentPage(prev => Math.min(totalUserPages, prev + 1))}
+                                  disabled={userCurrentPage === totalUserPages}
+                                >
+                                  Next
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setUserCurrentPage(totalUserPages)}
+                                  disabled={userCurrentPage === totalUserPages}
+                                >
+                                  Last
                                 </Button>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </TabsContent>
+                        </div>
+                      </TabsContent>
 
-                  <TabsContent value="notes">
-                    <div className="p-5 border border-gray-200 rounded-md bg-white">
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="owner" className="text-sm font-medium">
-                            Owner Email
-                          </Label>
-                          <Input
-                            id="owner"
-                            placeholder="Enter owner email"
-                            defaultValue={selectedApp.ownerEmail || ""}
-                            className="mt-1"
-                          />
+                      <TabsContent value="scopes">
+                        <div className="p-5 border border-gray-200 rounded-md bg-white">
+                          <h3 className="text-lg font-medium mb-4">Scope Groups</h3>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Users are grouped by identical permission sets. Each group represents a unique set of
+                            permissions.
+                          </p>
+
+                            {(() => {
+                              const scopeGroups = getScopeGroups(selectedApp)
+                              const totalScopePages = Math.ceil(scopeGroups.length / itemsPerPage)
+                              const scopeStartIndex = (scopeCurrentPage - 1) * itemsPerPage
+                              const scopeEndIndex = scopeStartIndex + itemsPerPage
+                              const currentScopeGroups = scopeGroups.slice(scopeStartIndex, scopeEndIndex)
+
+                              return (
+                                <>
+                                  {currentScopeGroups.map((group, groupIndex) => (
+                            <div key={groupIndex} className="mb-6 border rounded-md overflow-hidden">
+                              <div className={`p-3 flex justify-between items-center border-b border-gray-200 ${group.isAllScopes ? "bg-blue-50" : "bg-gray-50"}`}>
+                                <h4 className="font-medium">
+                                  {group.isAllScopes ? (
+                                    <span className="flex items-center">
+                                      <Info className="h-4 w-4 mr-1 text-blue-600" />
+                                      All Application Scopes
+                                    </span>
+                                  ) : (
+                                    `User Group ${scopeStartIndex + groupIndex + (scopeCurrentPage === 1 ? 0 : -1)} - ${group.users.length} ${group.users.length === 1 ? "user" : "users"}`
+                                  )}
+                                </h4>
+                                <Badge variant={group.isAllScopes ? "default" : "outline"} className={group.isAllScopes ? "bg-blue-600" : "bg-primary/10"}>
+                                  {group.scopes.length} {group.scopes.length === 1 ? "permission" : "permissions"}
+                                </Badge>
+                              </div>
+
+                              <div className="p-3 border-b">
+                                        <h5 className="text-sm font-medium mb-2">
+                                          {group.isAllScopes ? "Total Available Permissions:" : "Permissions:"}
+                                        </h5>
+                                        <div className="max-h-60 overflow-y-auto">
+                                          {group.scopes.map((scope, scopeIndex) => (
+                                            <div key={scopeIndex} className="py-1 border-b border-muted last:border-0 text-sm">
+                                              {scope}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      <div className="p-3">
+                                <h5 className="text-sm font-medium mb-2">
+                                  {group.isAllScopes 
+                                    ? "This represents all permissions the application could request from any user"
+                                    : "Users with this permission set:"}
+                                </h5>
+                                {group.isAllScopes ? (
+                                  <div className="text-sm text-muted-foreground italic">
+                                    No single user has all these permissions. Different users have granted different subsets.
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-wrap gap-2">
+                                    {group.users.map((user, userIndex) => (
+                                      <div
+                                        key={userIndex}
+                                        className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
+                                      >
+                                        <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-200 text-xs font-medium text-gray-800">
+                                          {user.name
+                                            .split(" ")
+                                            .map((n) => n[0])
+                                            .join("")}
+                                        </div>
+                                        <span className="text-sm">{user.name}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                                    </div>
+                                  ))}
+
+                                  {/* Scope Groups pagination controls */}
+                                  {scopeGroups.length > itemsPerPage && (
+                                    <div className="mt-4 flex items-center justify-between px-4 py-2 border-t border-gray-200">
+                                      <div className="text-sm text-muted-foreground">
+                                        Showing {scopeStartIndex + 1}-{Math.min(scopeEndIndex, scopeGroups.length)} of {scopeGroups.length} scope groups
+                                    </div>
+                                      <div className="flex items-center space-x-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => setScopeCurrentPage(1)}
+                                          disabled={scopeCurrentPage === 1}
+                                        >
+                                          First
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => setScopeCurrentPage(prev => Math.max(1, prev - 1))}
+                                          disabled={scopeCurrentPage === 1}
+                                        >
+                                          Previous
+                                        </Button>
+                                        <div className="flex items-center space-x-1">
+                                          {getScopePageNumbers(totalScopePages).map((page, index) => (
+                                            page === '...' ? (
+                                              <span key={`ellipsis-${index}`} className="px-2">...</span>
+                                            ) : (
+                                              <Button
+                                                key={page}
+                                                variant={scopeCurrentPage === page ? "default" : "outline"}
+                                                size="sm"
+                                                onClick={() => setScopeCurrentPage(Number(page))}
+                                                className="w-8"
+                                              >
+                                                {page}
+                                              </Button>
+                                            )
+                                  ))}
+                                </div>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setScopeCurrentPage(prev => Math.min(totalScopePages, prev + 1))}
+                                        disabled={scopeCurrentPage === totalScopePages}
+                                      >
+                                        Next
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setScopeCurrentPage(totalScopePages)}
+                                        disabled={scopeCurrentPage === totalScopePages}
+                                      >
+                                        Last
+                                      </Button>
+                              </div>
+                            </div>
+                                  )}
+                                </>
+                              )
+                            })()}
                         </div>
-                        <div>
-                          <Label htmlFor="notes" className="text-sm font-medium">
-                            Notes
-                          </Label>
-                          <textarea
-                            id="notes"
-                            className="w-full min-h-[100px] p-3 rounded-md border border-input bg-background mt-1"
-                            placeholder="Add notes about this application..."
-                            defaultValue={selectedApp.notes || ""}
-                          />
+                      </TabsContent>
+
+                      <TabsContent value="similar">
+                        <div className="p-5 border border-gray-200 rounded-md bg-white">
+                          <h3 className="text-lg font-medium mb-4">Similar Applications</h3>
+                          <p className="text-sm text-muted-foreground mb-6">
+                            Apps that share similar usage patterns with {selectedApp.name}, based on user behavior and functional overlap.
+                          </p>
+
+                          <div className="space-y-6">
+                            {getSimilarApps(selectedApp, applications).map(({ app, score, reasons }) => (
+                              <div key={app.id} className="p-4 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-3">
+                                      <AppIcon name={app.name} logoUrl={app.logoUrl} logoUrlFallback={app.logoUrlFallback} />
+                                      <div>
+                                        <h4 className="font-medium">{app.name}</h4>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm text-muted-foreground">{app.category}</span>
+                                          <span className="text-sm text-muted-foreground">•</span>
+                                          <span className="text-sm font-medium text-primary">{Math.round(score * 100)}% match</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Usage Stats */}
+                                    <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-50 rounded-md">
+                                      <div>
+                                        <div className="text-sm text-muted-foreground">Shared Users</div>
+                                        <div className="text-lg font-medium">
+                                          {app.users.filter(u => 
+                                            selectedApp.users.some(su => su.email === u.email)
+                                          ).length}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-sm text-muted-foreground">Common Functions</div>
+                                        <div className="text-lg font-medium">
+                                          {Array.from(getAppFunctionality(app.scopes)).filter(f => 
+                                            getAppFunctionality(selectedApp.scopes).has(f)
+                                          ).length}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-sm text-muted-foreground">Active Users</div>
+                                        <div className="text-lg font-medium">
+                                          {app.users.length}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Similarity Reasons */}
+                                    <div className="space-y-2">
+                                      {reasons.map((reason, index) => (
+                                        <div key={index} className="flex items-center gap-2">
+                                          <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
+                                          <span className="text-sm">{reason}</span>
+                            </div>
+                          ))}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col items-end gap-3">
+                                    <RiskBadge level={app.riskLevel} />
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedAppId(app.id);
+                                        setIsUserModalOpen(true);
+                                      }}
+                                      className="whitespace-nowrap"
+                                    >
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View Details
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <Button>Save Changes</Button>
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </>
-            )}
+                      </TabsContent>
+
+                      <TabsContent value="notes">
+                        <div className="p-5 border border-gray-200 rounded-md bg-white">
+                          <div className="space-y-4">
+                            <div>
+                              <Label htmlFor="owner" className="text-sm font-medium">
+                                Owner Email
+                              </Label>
+                              <Input
+                                id="owner"
+                                placeholder="Enter owner email"
+                                defaultValue={selectedApp.ownerEmail || ""}
+                                className="mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="notes" className="text-sm font-medium">
+                                Notes
+                              </Label>
+                              <textarea
+                                id="notes"
+                                className="w-full min-h-[100px] p-3 rounded-md border border-input bg-background mt-1"
+                                placeholder="Add notes about this application..."
+                                defaultValue={selectedApp.notes || ""}
+                              />
+                            </div>
+                            <Button>Save Changes</Button>
+                          </div>
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+                  </>
+                )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+       </main>
 
       {/* Settings Dialog */}
       {isSettingsOpen && (
@@ -2894,6 +2935,56 @@ export default function ShadowITDashboard() {
           </div>
         </div>
       )}
+
+      <div className="max-w-[70rem] mx-auto px-4 sm:px-8">
+          <h2 className="text-2xl font-semibold mb-8 sm:mb-14 text-gray-900 text-center mt-11">
+          Complete visibility. Real control. All in one place
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8">
+            <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
+                <ScanSearch className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Spot unauthorized apps instantly</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+              Automatically detect all the AI and SaaS apps your employees are using across Google Workspace or Microsoft 365. Identify your org's managed apps and mark specific apps for review
+              </p>
+            </div>
+            <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
+                <ShieldAlert className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Smart risk assessment</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+              Get instant visibility into OAuth scopes and user activity. See clear risk indicators based on scope access and usage patterns
+              </p>
+            </div>
+            <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
+                <ChartNoAxesCombined className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Granular insights</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+              Track every user's permissions and activities for each app. View app insights by category, risk, and scope groups—all in one place. Catch risky behavior before it becomes a problem
+              </p>
+            </div>
+            <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
+                <Bell className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Continuous monitoring & real-time alerts</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+              Get notified when new apps or users appear, or when high-risk apps gain new users. Your environment, under control
+              </p>
+            </div>
+          </div>
+      </div>
+
+      <FAQ />
+
+      <WhyStitchflow className="bg-[#FAF8FA]" />
+
+      <FeedbackChat />
 
       {/* Update the custom styles */}
       <style jsx global>{`
