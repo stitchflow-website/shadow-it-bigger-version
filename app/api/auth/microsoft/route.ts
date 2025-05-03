@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     
     if (!code) {
       console.error('No authorization code received from Microsoft');
-      return NextResponse.redirect(new URL('/login?error=no_code', request.url));
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=no_code', request.url));
     }
 
     // Exchange code for tokens
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     
     if (!clientId || !clientSecret || !redirectUri) {
       console.error('Missing Microsoft OAuth configuration');
-      return NextResponse.redirect(new URL('/login?error=config_missing', request.url));
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=config_missing', request.url));
     }
 
     // Ensure redirect URI matches what was used in the authorization request
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text();
       console.error('Token exchange failed:', errorData);
-      return NextResponse.redirect(new URL('/login?error=auth_failed', request.url));
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=auth_failed', request.url));
     }
 
     const tokenData = await tokenResponse.json();
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
 
     if (!userResponse.ok) {
       console.error('Failed to fetch user data');
-      return NextResponse.redirect(new URL('/login?error=user_data_failed', request.url));
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=user_data_failed', request.url));
     }
 
     const userData = await userResponse.json();
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
         console.error('Error recording failed signup:', err);
       }
       
-      return NextResponse.redirect(new URL('/login?error=not_work_account', request.url));
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=not_work_account', request.url));
     }
     
     // Check if user is an admin by checking directory roles
@@ -180,7 +180,7 @@ export async function GET(request: NextRequest) {
         console.error('Error recording failed signup:', err);
       }
       
-      return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/login?error=admin_required', request.url));
+      return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/?error=admin_required', request.url));
     }
 
     // First check if user exists
@@ -273,7 +273,7 @@ export async function GET(request: NextRequest) {
 
     if (syncStatusError) {
       console.error('Error creating sync status:', syncStatusError);
-      return NextResponse.redirect(new URL('/login?error=sync_failed', request.url));
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
     }
 
     // Create URL for loading page with syncId parameter
@@ -322,6 +322,6 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('Auth error:', error);
-    return NextResponse.redirect(new URL('/login?error=unknown', request.url));
+    return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=unknown', request.url));
   }
 } 

@@ -24,6 +24,7 @@ import {
   ChartNoAxesCombined,
   Bell,
 } from "lucide-react"
+
 import { Badge } from "@/components/ui/badge"
 import { WhyStitchflow } from "@/components/ui/demo";
 import { Button } from "@/components/ui/button"
@@ -53,6 +54,7 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { FAQ } from "@/components/ui/faq"
 import { FeedbackChat } from "@/components/ui/feedback";
+import { Share } from "@/components/ui/share";
 
 // Type definitions
 type Application = {
@@ -173,6 +175,9 @@ export default function ShadowITDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
+  // Add this state near your other useState declarations
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
   // Add new function to check categories
   const checkCategories = async () => {
     try {
@@ -243,25 +248,326 @@ export default function ShadowITDashboard() {
     try {
       setIsLoading(true);
       
-      const urlParams = new URLSearchParams(window.location.search);
-      let orgId = urlParams.get('orgId');
-      
-      if (!orgId) {
-        try {
+      // Check for orgId cookie
           const cookies = document.cookie.split(';');
           const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
-          if (orgIdCookie) {
-            orgId = orgIdCookie.split('=')[1].trim();
-          }
-        } catch (cookieError) {
-          console.error("Error parsing cookies:", cookieError);
-        }
-      }
+      const userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
       
-      if (!orgId) {
-        router.push('/tools/shadow-it-scan/login');
+      if (!orgIdCookie || !userEmailCookie) {
+        // Use dummy data if no cookies found
+        const dummyData = [
+          {
+            "Apps": "Slack",
+            "Category": "Productivity & Collaboration",
+            "Users": [
+              "Adam Williams",
+              "Ashley Parker",
+              "Brooke Evans",
+              "Daniel Carter",
+              "Diana Myers",
+              "Donna Reynolds",
+              "Grace Henderson",
+              "Julia Scott",
+              "Jack Thompson",
+              "James Bennett",
+              "Joseph Brooks",
+              "Kevin Anderson",
+              "Matthew Collins",
+              "Nathan Harris",
+              "Peter Russell",
+              "Patrick Walsh",
+              "Paul Simmons",
+              "Ryan Mitchell",
+              "Sandbox User",
+              "Samuel Hayes",
+              "Steven Morgan",
+              "Shane Robinson",
+              "Sara Price",
+              "Victoria Barnes",
+              "Taylor Monroe",
+              "Thomas Greene",
+              "Vanessa Reed",
+              "Valerie Patterson",
+              "Violet Richardson"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid",
+              "https://www.googleapis.com/auth/calendar.events",
+              "https://www.googleapis.com/auth/activity",
+              "https://www.googleapis.com/auth/drive.activity",
+              "https://www.googleapis.com/auth/calendar.readonly",
+              "https://www.googleapis.com/auth/drive",
+              "https://www.googleapis.com/auth/admin.directory.group.readonly",
+              "https://www.googleapis.com/auth/admin.directory.group.member.readonly",
+              "https://www.googleapis.com/auth/admin.directory.user.readonly"
+            ],
+            "Total Scopes": 11,
+            "Risk": "High",
+            "Status": "Managed"
+          },
+          {
+            "Apps": "HubSpot",
+            "Category": "Sales & Marketing",
+            "Users": [
+              "Peter Russell",
+              "Ashley Parker",
+              "Adam Williams",
+              "Andrew Patterson",
+              "Grace Henderson",
+              "Joseph Brooks",
+              "Jack Thompson",
+              "James Bennett",
+              "Kevin Anderson",
+              "Matthew Collins",
+              "Nathan Harris",
+              "Ryan Mitchell",
+              "Ray Smith",
+              "Sandbox User",
+              "Samuel Hayes",
+              "Shane Robinson",
+              "Victoria Barnes",
+              "Sandbox User",
+              "Taylor Monroe",
+              "Thomas Greene"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid",
+              "https://www.googleapis.com/auth/calendar.events",
+              "https://www.googleapis.com/auth/calendar.readonly",
+              "https://www.googleapis.com/auth/gmail.readonly",
+              "https://www.googleapis.com/auth/gmail.send"
+            ],
+            "Total Scopes": 7,
+            "Risk": "High",
+            "Status": "Managed"
+          },
+          {
+            "Apps": "Kandji",
+            "Category": "Identity & Access Management",
+            "Users": [
+              "Ashley Parker",
+              "Peter Russell",
+              "Shane Robinson",
+              "Taylor Monroe"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid",
+              "https://www.googleapis.com/auth/admin.directory.group.readonly",
+              "https://www.googleapis.com/auth/admin.directory.user.readonly"
+            ],
+            "Total Scopes": 5,
+            "Risk": "High",
+            "Status": "Managed"
+          },
+          {
+            "Apps": "ClickUp",
+            "Category": "Productivity & Collaboration",
+            "Users": [
+              "Ashley Parker",
+              "Diana Myers",
+              "Grace Henderson",
+              "Julia Scott",
+              "Jack Thompson",
+              "James Bennett",
+              "Samuel Hayes",
+              "Thomas Greene",
+              "Vanessa Reed"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid",
+              "https://www.googleapis.com/auth/calendar"
+            ],
+            "Total Scopes": 4,
+            "Risk": "Medium",
+            "Status": "Unmanaged"
+          },
+          {
+            "Apps": "Zoom",
+            "Category": "Productivity & Collaboration",
+            "Users": [
+              "Adam Williams",
+              "Ashley Parker",
+              "Victor Sanders",
+              "Brooke Evans",
+              "Daniel Carter",
+              "Diana Myers",
+              "Donna Reynolds",
+              "Grace Henderson",
+              "Julia Scott",
+              "Joseph Brooks",
+              "Jack Thompson",
+              "James Bennett",
+              "Joseph Brooks",
+              "Kevin Anderson",
+              "Matthew Collins",
+              "Peter Russell",
+              "Patrick Walsh",
+              "Sandbox User",
+              "Samuel Hayes",
+              "Shane Robinson",
+              "Sara Price",
+              "Victoria Barnes",
+              "Taylor Monroe",
+              "Thomas Greene",
+              "Vanessa Reed",
+              "Valerie Patterson"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid",
+              "https://www.googleapis.com/auth/calendar.events",
+              "https://www.googleapis.com/auth/contacts",
+              "https://www.googleapis.com/auth/calendar"
+            ],
+            "Total Scopes": 6,
+            "Risk": "Medium",
+            "Status": "Managed"
+          },
+          {
+            "Apps": "Docker",
+            "Category": "Cloud Platforms & Infrastructure",
+            "Users": [
+              "Brooke Evans",
+              "Peter Russell",
+              "Patrick Walsh"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid"
+            ],
+            "Total Scopes": 3,
+            "Risk": "Low",
+            "Status": "Needs Review"
+          },
+          {
+            "Apps": "Strapi Cloud",
+            "Category": "Cloud Platforms & Infrastructure",
+            "Users": [
+              "Samuel Hayes",
+              "Sandbox User"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid"
+            ],
+            "Total Scopes": 3,
+            "Risk": "Low",
+            "Status": "Unmanaged"
+          },
+          {
+            "Apps": "Datadog",
+            "Category": "IT Operations & Security",
+            "Users": [
+              "Brooke Evans",
+              "Joseph Brooks",
+              "Joseph Brooks",
+              "Peter Russell",
+              "Patrick Walsh",
+              "Taylor Monroe",
+              "Thomas Greene"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid"
+            ],
+            "Total Scopes": 3,
+            "Risk": "Low",
+            "Status": "Managed"
+          },
+          {
+            "Apps": "Looker Studio",
+            "Category": "Analytics & Business Intelligence",
+            "Users": [
+              "Grace Henderson",
+              "Paul Simmons"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/analytics.readonly",
+              "https://www.googleapis.com/auth/webmasters.readonly",
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/adwords",
+              "https://www.googleapis.com/auth/drive"
+            ],
+            "Total Scopes": 5,
+            "Risk": "High",
+            "Status": "Unmanaged"
+          },
+          {
+            "Apps": "Framer",
+            "Category": "Design & Creative Tools",
+            "Users": [
+              "Adam Williams",
+              "Nathan Harris",
+              "Samuel Hayes",
+              "Sandbox User"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid",
+              "https://www.googleapis.com/auth/drive.file"
+            ],
+            "Total Scopes": 4,
+            "Risk": "High",
+            "Status": "Needs Review"
+          },
+          {
+            "Apps": "Canva",
+            "Category": "Design & Creative Tools",
+            "Users": [
+              "Ashley Parker",
+              "James Bennett",
+              "Samuel Hayes",
+              "Taylor Monroe"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid"
+            ],
+            "Total Scopes": 3,
+            "Risk": "Low",
+            "Status": "Managed"
+          },
+          {
+            "Apps": "Otter.ai",
+            "Category": "Productivity & Collaboration",
+            "Users": [
+              "Ashley Parker",
+              "Julia Scott",
+              "Samuel Hayes",
+              "Vanessa Reed"
+            ],
+            "Scopes": [
+              "https://www.googleapis.com/auth/userinfo.profile",
+              "https://www.googleapis.com/auth/userinfo.email",
+              "openid",
+              "https://www.googleapis.com/auth/calendar.readonly"
+            ],
+            "Total Scopes": 4,
+            "Risk": "Medium",
+            "Status": "Needs Review"
+          }
+        ]
+        
+        setApplications(transformDummyData(dummyData));
+        setIsLoading(false);
         return;
       }
+
+      const orgId = orgIdCookie.split('=')[1].trim();
 
       const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${orgId}`);
       if (!response.ok) {
@@ -271,7 +577,7 @@ export default function ShadowITDashboard() {
       const data: Application[] = await response.json();
       setApplications(data);
       
-      // Track apps still uncategorized (category === 'Unknown')
+      // Track apps still uncategorized
       const unknownIds = new Set<string>();
       data.forEach((app: Application) => {
         if (app.category === 'Unknown') unknownIds.add(app.id);
@@ -348,7 +654,7 @@ export default function ShadowITDashboard() {
     localStorage.clear();
     
     // Redirect to login page
-    router.push('/tools/shadow-it-scan/login');
+    router.push('/tools/shadow-it-scan/');
   };
 
   
@@ -581,11 +887,45 @@ export default function ShadowITDashboard() {
     return pages
   }
 
-  // Handle opening user details
+  // Modify the checkAuth function to be more generic
+  const isAuthenticated = () => {
+    const cookies = document.cookie.split(';');
+    const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
+    const userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
+    
+    return !!(orgIdCookie && userEmailCookie);
+  };
+
+  const checkAuth = (action: () => void) => {
+    if (!isAuthenticated()) {
+      setShowLoginModal(true);
+      return false;
+    }
+    
+    action();
+    return true;
+  };
+
+  // Modify click handlers for insights tab
+  const handleViewInsights = () => {
+    checkAuth(() => {
+      setMainView("Insights");
+      handleCloseUserModal();
+    });
+  };
+
+  // Modify click handlers for settings
+  const handleOpenSettings = () => {
+    checkAuth(() => setIsSettingsOpen(true));
+  };
+
+  // Modify your click handlers to use checkAuth
   const handleSeeUsers = (appId: string) => {
-    setSelectedAppId(appId)
-    setIsUserModalOpen(true)
-  }
+    checkAuth(() => {
+      setSelectedAppId(appId);
+      setIsUserModalOpen(true);
+    });
+  };
 
   // Handle closing user details
   const handleCloseUserModal = () => {
@@ -1199,6 +1539,318 @@ export default function ShadowITDashboard() {
     };
   }, []);
 
+  // Helper function to generate a random ID
+  const generateId = () => Math.random().toString(36).substr(2, 9);
+
+  // Helper function to transform user data
+  const transformUser = (name: string, appId: string, scopes: string[]): AppUser => ({
+    id: generateId(),
+    appId,
+    name,
+    email: `${name.toLowerCase().replace(' ', '.')}@example.com`,
+    scopes,
+    riskLevel: Math.random() > 0.7 ? "High" : Math.random() > 0.4 ? "Medium" : "Low",
+    riskReason: "Based on scope permissions and usage patterns",
+  });
+
+
+    // Helper to convert app name to likely domain format
+  function appNameToDomain(appName: string): string {
+    // Common apps with special domain formats
+    const knownDomains: Record<string, string> = {
+      'slack': 'slack.com',
+      'stitchflow': 'stitchflow.io',
+      'yeshid': 'yeshid.com',
+      'onelogin': 'onelogin.com',
+      'google drive': 'drive.google.com',
+      'google chrome': 'google.com',
+      'accessowl': 'accessowl.com',
+      'accessowl scanner': 'accessowl.com',
+      'mode analytics': 'mode.com',
+      'hubspot': 'hubspot.com',
+      'github': 'github.com',
+      'gmail': 'gmail.com',
+      'zoom': 'zoom.us',
+      'notion': 'notion.so',
+      'figma': 'figma.com',
+      'jira': 'atlassian.com',
+      'confluence': 'atlassian.com',
+      'asana': 'asana.com',
+      'trello': 'trello.com',
+      'dropbox': 'dropbox.com',
+      'box': 'box.com',
+      'microsoft': 'microsoft.com',
+      'office365': 'office.com'
+    };
+    
+    // Convert app name to lowercase for case-insensitive lookup
+    const lowerAppName = appName.toLowerCase();
+    
+    // Check for exact matches in known domains
+    if (knownDomains[lowerAppName]) {
+      return knownDomains[lowerAppName];
+    }
+    
+    // Check for partial matches (e.g., if app name contains known key)
+    for (const [key, domain] of Object.entries(knownDomains)) {
+      if (lowerAppName.includes(key)) {
+        return domain;
+      }
+    }
+    
+    // Default processing for unknown apps
+    // Remove special characters, spaces, and convert to lowercase
+    const sanitized = lowerAppName
+      .replace(/[^\w\s-]/gi, '')  // Keep hyphens as they're common in domains
+      .replace(/\s+/g, '');
+    
+    // Default to .com instead of .io
+    return sanitized + '.com';
+  }
+
+  function getAppLogoUrl(appName: string) {
+    const domain = appNameToDomain(appName);
+    
+    // Try to get the app icon using Logo.dev
+    const logoUrl = `https://img.logo.dev/${domain}?token=pk_ZLJInZ4_TB-ZDbNe2FnQ_Q&format=png&retina=true`;
+    
+    // We could also provide a fallback URL using other icon services if needed
+    // This gives us multiple ways to find a logo if the primary method fails
+    const fallbackUrl = `https://icon.horse/icon/${domain}`;
+    
+    // Return both URLs so the frontend can try multiple sources
+    return {
+      primary: logoUrl,
+      fallback: fallbackUrl
+    };
+  }
+
+  // Function to transform the dummy data into our app's format
+  const transformDummyData = (dummyData: any[]): Application[] => {
+    return dummyData.map(item => {
+      
+      const id = generateId();
+      const logoUrls = getAppLogoUrl(item.Apps);
+      return {
+        id,
+        name: item.Apps,
+        category: item.Category,
+        userCount: item.Users.length,
+        users: item.Users.map((user: string) => transformUser(user, id, item.Scopes)),
+        riskLevel: item.Risk as "Low" | "Medium" | "High",
+        riskReason: "Based on scope permissions and usage patterns",
+        totalPermissions: item["Total Scopes"],
+        scopeVariance: { userGroups: Math.floor(Math.random() * 5) + 1, scopeGroups: Math.floor(Math.random() * 3) + 1 },
+        managementStatus: item.Status as "Managed" | "Unmanaged" | "Needs Review",
+        ownerEmail: "",
+        logoUrl: logoUrls.primary,
+        notes: "",
+        scopes: item.Scopes,
+        isInstalled: true,
+        isAuthAnonymously: false
+      };
+    });
+  };
+
+  // Update the LoginModal component to fix both the top gap and maintain button spacing
+  const LoginModal = () => {
+    const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [loginProvider, setLoginProvider] = useState<'google' | 'microsoft' | null>(null);
+    
+    // Add useEffect to check URL for error parameters
+    useEffect(() => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const errorParam = searchParams.get('error');
+      
+      if (errorParam) {
+        switch (errorParam) {
+          case 'no_code':
+            setError('No authorization code received. Please try again.');
+            break;
+          case 'auth_failed':
+            setError('Authentication failed. Please try again.');
+            break;
+          case 'not_workspace_account':
+            setError('Please sign in with a Google Workspace account. Personal Gmail accounts are not supported');
+            break;
+          case 'not_work_account':
+            setError('Please sign in with a Microsoft 365 workspace account. Personal accounts are not supported');
+            break;
+          case 'admin_required':
+            setError('Please sign in with an admin account that has appropriate permissions.');
+            break;
+          case 'config_missing':
+            setError('Authentication configuration is missing. Please contact support.');
+            break;
+          default:
+            setError('An error occurred during authentication. Please try again or contact support');
+        }
+        
+        // Show the login modal if there was an error
+        setShowLoginModal(true);
+        
+        // Clean up the URL by removing the error parameter
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('error');
+        window.history.replaceState({}, document.title, cleanUrl.toString());
+      }
+    }, []);
+
+    const handleGoogleLogin = () => {
+      try {
+        setIsLoading(true);
+        setLoginProvider('google');
+        setError(null);
+
+        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+        let redirectUri = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI;
+
+        if (!clientId || !redirectUri) {
+          setError("Missing Google OAuth configuration");
+          console.error('Missing env variables:', { clientId, redirectUri });
+          return;
+        }
+
+        // If we're on localhost, modify the redirect URI to match the main site's domain
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          const baseUrl = `${window.location.protocol}//${window.location.host}`;
+          redirectUri = window.location.origin + '/tools/shadow-it-scan/api/auth/google';
+        }
+        
+        const scopes = [
+          'https://www.googleapis.com/auth/admin.directory.user.readonly',
+          'https://www.googleapis.com/auth/admin.directory.domain.readonly',
+          'https://www.googleapis.com/auth/admin.directory.user.security',
+          'openid',
+          'profile',
+          'email'
+        ].join(' ');
+
+        const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+        authUrl.searchParams.append('client_id', clientId);
+        authUrl.searchParams.append('redirect_uri', redirectUri);
+        authUrl.searchParams.append('response_type', 'code');
+        authUrl.searchParams.append('scope', scopes);
+        authUrl.searchParams.append('access_type', 'offline');
+        authUrl.searchParams.append('prompt', 'consent');
+
+        localStorage.setItem('auth_provider', 'google');
+
+        window.location.href = authUrl.toString();
+      } catch (err) {
+        console.error('Login error:', err);
+        setError('Failed to initialize login. Please try again.');
+        setIsLoading(false);
+        setLoginProvider(null);
+      }
+    };
+
+    const handleMicrosoftLogin = () => {
+      try {
+        setIsLoading(true);
+        setLoginProvider('microsoft');
+        setError(null);
+
+        const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
+        let redirectUri = process.env.NEXT_PUBLIC_MICROSOFT_REDIRECT_URI;
+
+        if (!clientId || !redirectUri) {
+          setError("Missing Microsoft OAuth configuration");
+          console.error('Missing env variables:', { 
+            clientId: clientId ? 'present' : 'missing',
+            redirectUri: redirectUri ? 'present' : 'missing'
+          });
+          setIsLoading(false);
+          setLoginProvider(null);
+          return;
+        }
+
+        // If we're on localhost, update the redirect URI
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          redirectUri = window.location.origin + '/api/auth/microsoft';
+        } else {
+          redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
+        }
+        
+        const scopes = [
+          'User.Read',
+          'Directory.Read.All',
+          'Application.Read.All',
+          'DelegatedPermissionGrant.ReadWrite.All',
+          'AppRoleAssignment.ReadWrite.All',
+          'offline_access',
+          'openid',
+          'profile',
+          'email'
+        ].join(' ');
+
+        const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+        authUrl.searchParams.append('client_id', clientId);
+        authUrl.searchParams.append('redirect_uri', redirectUri);
+        authUrl.searchParams.append('response_type', 'code');
+        authUrl.searchParams.append('scope', scopes);
+        authUrl.searchParams.append('response_mode', 'query');
+        authUrl.searchParams.append('prompt', 'consent');
+
+        localStorage.setItem('auth_provider', 'microsoft');
+        window.location.href = authUrl.toString();
+      } catch (err) {
+        console.error('Microsoft login error:', err);
+        setError('Failed to initialize Microsoft login. Please try again.');
+        setIsLoading(false);
+        setLoginProvider(null);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+        <div className="bg-white rounded-xl shadow-lg w-full max-w-md">
+          <div className="p-6">
+            <h2 className="text-xl font-semibold mb-2">Sign in to continue</h2>
+            <p className="text-sm text-gray-500 mb-6">
+              Ensure you connect your admin org account to get started with the app
+            </p>
+            
+            {error && (
+              <div className="mb-4 p-4 text-sm text-red-800 bg-red-100 rounded-lg">
+                {error}
+              </div>
+            )}
+            
+            <div className="flex flex-col space-y-4">
+              <Button 
+                onClick={handleGoogleLogin}
+                className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                size="lg"
+                disabled={isLoading}
+              >
+                <img src="/tools/shadow-it-scan/images/google-logo.svg" alt="Google logo" className="h-5 w-5" />
+                {isLoading && loginProvider === 'google' ? 'Connecting...' : 'Sign in with Google Workspace'}
+              </Button>
+              
+              <Button 
+                onClick={handleMicrosoftLogin}
+                className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                size="lg"
+                disabled={isLoading}
+              >
+                <img src="/tools/shadow-it-scan/images/microsoft-logo.svg" alt="Microsoft logo" className="h-5 w-5" />
+                {isLoading && loginProvider === 'microsoft' ? 'Connecting...' : 'Sign in with Microsoft Entra ID'}
+              </Button>
+            </div>
+            
+            <div className="flex justify-end mt-6">
+              <Button variant="outline" onClick={() => setShowLoginModal(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="mx-auto py-8 space-y-4 font-sans text-gray-900 bg-[#FAF8FA]">
 
@@ -1239,11 +1891,37 @@ export default function ShadowITDashboard() {
               </p>
             </div>
           </div>
+
+
         
 
       <main className="pt-[40px] pl-10 pr-10 bg-white mt-4 pb-10">
-            <div className="flex flex-col mb-0">
+
+            {!isAuthenticated() && (
+              <div className="bg-black border border-gray-800 rounded-lg p-4 mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-yellow-500">👋</span>
+                    <p className="text-gray-200">
+                    This is a preview of the app. Sign in to scan your org's shadowed Apps.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      setShowLoginModal(true)
+                    }}
+                    variant="outline"
+                    className="w-full sm:w-auto bg-white hover:bg-white/90 text-black border-white hover:text-black transition-colors"
+                  >
+                    Get Started for Free
+                  </Button>
+                </div>
+              </div>
+             )}
+
+            <div className="flex items-center gap-2 mb-4">
               <h2 className="text-xl font-bold">Shadow IT Overview</h2>
+              <Share url="https://www.stitchflow.com/tools/shadow-it-scan" />
             </div>
 
             {isLoading ? (
@@ -1300,10 +1978,7 @@ export default function ShadowITDashboard() {
                     </Button>
                     <Button 
                       variant={mainView === "Insights" ? "default" : "outline"} 
-                      onClick={() => {
-                        setMainView("Insights");
-                        handleCloseUserModal();
-                      }}
+                      onClick={handleViewInsights}
                       className={mainView === "Insights" ? "bg-gray-900 hover:bg-gray-800" : ""}
                     >
                       <BarChart3 className="h-4 w-4 mr-2" />
@@ -1311,14 +1986,15 @@ export default function ShadowITDashboard() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => setIsSettingsOpen(true)}
+                      onClick={handleOpenSettings}
                       className="border-gray-200"
                     >
                       <Settings className="h-4 w-4 mr-2" />
                       Settings
                     </Button>
 
-                    {/* Profile Menu */}
+                    {/* Only show profile if authenticated */}
+                    {isAuthenticated() && (
                     <div className="relative" ref={profileRef}>
                       <button
                         onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -1388,6 +2064,7 @@ export default function ShadowITDashboard() {
                         </div>
                       )}
                     </div>
+                    )}
                   </div>
                 </div>
 
@@ -1396,7 +2073,7 @@ export default function ShadowITDashboard() {
                     <div className="p-6">
                       {/* Filter section */}
                       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
-                        <div className="flex-1">
+                        <div className="flex-1 mt-1">
                           <div className="flex justify-between items-center mb-1">
                             <Label htmlFor="search" className="text-sm font-medium text-gray-700">
                             Search Applications
@@ -1418,6 +2095,7 @@ export default function ShadowITDashboard() {
                             className="mt-1 border-gray-200"
                           />
                         </div>
+                        
                         <div className="flex flex-col md:flex-row gap-4">
                           <div className="min-w-[150px]">
                             <div className="flex justify-between items-center mb-1">
@@ -1434,7 +2112,13 @@ export default function ShadowITDashboard() {
                             <select
                               className="w-full min-w-[300px] h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 truncate"
                               value={filterCategory || ""}
-                              onChange={(e) => setFilterCategory(e.target.value || null)}
+                              onChange={(e) => {
+                                if (!isAuthenticated()) {
+                                  setShowLoginModal(true);
+                                  return;
+                                }
+                                setFilterCategory(e.target.value || null);
+                              }}
                             >
                               <option value="">All Categories</option>
                               {uniqueCategories.map((category) => (
@@ -1655,7 +2339,17 @@ export default function ShadowITDashboard() {
                                     <select
                                       className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
                                       value={editedStatuses[app.id] || app.managementStatus}
-                                      onChange={(e) => handleStatusChange(app.id, e.target.value)}
+                                      onChange={(e) => {
+                                        if (checkAuth(() => {
+                                          handleStatusChange(app.id, e.target.value);
+                                        })) {
+                                          // If authenticated, update the UI immediately
+                                          setEditedStatuses(prev => ({
+                                            ...prev,
+                                            [app.id]: e.target.value
+                                          }));
+                                        }
+                                      }}
                                     >
                                       <option value="Managed">Managed</option>
                                       <option value="Unmanaged">Unmanaged</option>
@@ -1767,12 +2461,14 @@ export default function ShadowITDashboard() {
                               strokeWidth={2}
                               stroke="#fff"
                               onClick={(data) => {
+                                checkAuth(() => {
                                 // Clear all filters first
                                 setFilterRisk(null);
                                 setFilterManaged(null);
                                 // Set the new category filter
                                 setFilterCategory(data.name);
                                 setMainView("list");
+                                });
                               }}
                               style={{ cursor: 'pointer' }}
                             >
@@ -1794,12 +2490,14 @@ export default function ShadowITDashboard() {
                                   <span 
                                     className="text-gray-900 cursor-pointer hover:text-primary"
                                     onClick={() => {
+                                      checkAuth(() => {
                                       // Clear all filters first
                                       setFilterRisk(null);
                                       setFilterManaged(null);
                                       // Set the new category filter
                                       setFilterCategory(value);
                                       setMainView("list");
+                                      });
                                     }}
                                   >
                                     {value}{" "}
@@ -2195,10 +2893,7 @@ export default function ShadowITDashboard() {
                   </Button>
                   <Button 
                     variant={mainView === "Insights" ? "default" : "outline"} 
-                    onClick={() => {
-                      setMainView("Insights");
-                      handleCloseUserModal();
-                    }}
+                    onClick={handleViewInsights}
                     className={mainView === "Insights" ? "bg-gray-900 hover:bg-gray-800" : ""}
                   >
                     <BarChart3 className="h-4 w-4 mr-2" />
@@ -2206,14 +2901,15 @@ export default function ShadowITDashboard() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => setIsSettingsOpen(true)}
+                    onClick={handleOpenSettings}
                     className="border-gray-200"
                   >
                     <Settings className="h-4 w-4 mr-2" />
                     Settings
                   </Button>
 
-                  {/* Profile Menu */}
+                  {/* Only show profile if authenticated */}
+                  {isAuthenticated() && (
                   <div className="relative" ref={profileRef}>
                     <button
                       onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -2283,6 +2979,7 @@ export default function ShadowITDashboard() {
                       </div>
                     )}
                   </div>
+                  )}
                 </div>
               </div>
 
@@ -2938,8 +3635,11 @@ export default function ShadowITDashboard() {
               </p>
             </div>
             <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="relative">
+            
               <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
                 <ShieldAlert className="h-6 w-6 text-primary" />
+                </div>
               </div>
               <h3 className="text-lg font-semibold mb-2">Smart risk assessment</h3>
               <p className="text-gray-600 text-sm leading-relaxed">
@@ -2947,8 +3647,18 @@ export default function ShadowITDashboard() {
               </p>
             </div>
             <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="relative">
+                <div className="absolute -top-3 -right-3">
+                  <div className="bg-black text-white text-xs font-medium px-3 py-1 rounded-full flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M13 3L4 14H13L11 21L20 10H11L13 3Z" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Stitchflow exclusive
+                  </div>
+                </div>
               <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
                 <ChartNoAxesCombined className="h-6 w-6 text-primary" />
+                </div>
               </div>
               <h3 className="text-lg font-semibold mb-2">Granular insights</h3>
               <p className="text-gray-600 text-sm leading-relaxed">
@@ -2956,8 +3666,18 @@ export default function ShadowITDashboard() {
               </p>
             </div>
             <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="relative">
+                <div className="absolute -top-3 -right-3">
+                  <div className="bg-black text-white text-xs font-medium px-3 py-1 rounded-full flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M13 3L4 14H13L11 21L20 10H11L13 3Z" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Stitchflow exclusive
+                  </div>
+                </div>
               <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
                 <Bell className="h-6 w-6 text-primary" />
+                </div>
               </div>
               <h3 className="text-lg font-semibold mb-2">Continuous monitoring & real-time alerts</h3>
               <p className="text-gray-600 text-sm leading-relaxed">
@@ -2972,6 +3692,8 @@ export default function ShadowITDashboard() {
       <WhyStitchflow className="bg-[#FAF8FA]" />
 
       <FeedbackChat />
+
+      
 
       {/* Update the custom styles */}
       <style jsx global>{`
@@ -3061,6 +3783,7 @@ export default function ShadowITDashboard() {
           background-color: #1f2937;
         }
       `}</style>
+      {showLoginModal && <LoginModal />}
     </div>
   )
 }

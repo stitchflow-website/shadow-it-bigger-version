@@ -60,7 +60,7 @@ switch (platform) {
 
     try {
 
-      await navigator.clipboard.writeText("https://renewaltracker.stitchflow.io/");
+      await navigator.clipboard.writeText("https://www.stitchflow.com/tools/shadow-it-scan");
 
       setShowShareSuccess(true);
 
@@ -77,12 +77,12 @@ switch (platform) {
   case 'twitter':
 
     // window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`, '_blank');
-    window.open(`https://twitter.com/intent/tweet?text=Check%20out%20Renewal%20Tracker%2C%20a%20free%20SaaS%20contract%20renewal%20tracking%20tool%20from%20%40StitchflowHQ%0A%0AOrganize%20SaaS%20contracts%2C%20track%20renewal%20dates%2C%20and%20get%20automated%20alerts%20via%20email%20%26%20calendar%E2%80%94never%20miss%20a%20deadline.%0A%0A%F0%9F%91%89renewaltracker.stitchflow.io%2F%0A%0A&url=`);
+    window.open(`https://x.com/intent/post?text=Check%20out%20Shadow%20IT%20Scanner%2C%20a%20free%20SaaS%20apps%20discovery%20%2B%20risk%20tool%20from%20%40StitchflowHQ%0A%0AOne%20click%20%E2%86%92%20get%20a%20full%20inventory%20of%20every%20app%20connected%20to%20your%20Google%20Workspace%2FM365%20org%2C%20per-user%20scope%20analysis%2C%20and%20real-time%20alerts%20for%20high-risk%20apps.%20%F0%9F%9A%80%0A%0A%F0%9F%91%89%20https%3A%2F%2Fwww.stitchflow.com%2Ftools%2Fshadow-it-scan%2F&url=`);
     break;
 
   case 'reddit':
 
-    window.open(`https://www.reddit.com/submit?url=https%3A%2F%2Frenewaltracker.stitchflow.io%2F&title=Check+out+Renewal+Tracker+by+Stitchflow%2C+a+free+tool+for+IT+teams+to+organize+SaaS+contracts%2C+track+renewals+%26+get+auto-reminders&type=LINK`);
+    window.open(`https://www.reddit.com/submit?url=https%3A%2F%2Fwww.stitchflow.com%2Ftools%2Fshadow-it-scan%2F&title=Check+out+Shadow+IT+Scanner%2C+a+free+tool+from+Stitchflow+-+Discover%2C+monitor+%26+remediate+risky+SaaS+apps+in+seconds&type=LINK`);
 
     break;
 
@@ -98,21 +98,23 @@ return (
 
     <Button 
 
-      variant="outline" 
+      variant="ghost" 
 
-      className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2 shadow-sm"
+      size="sm"
+
+      className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 hover:bg-transparent rounded-md h-7 px-1.5"
 
     >
 
-      <Share2 className="h-4 w-4" />
+      <Share2 className="h-3 w-3" />
 
-      Share this tool
+      <span>Share</span>
 
     </Button>
 
   </PopoverTrigger>
 
-  <PopoverContent className="w-[290px] p-5" align="end">
+  <PopoverContent className="w-[290px] p-5">
 
     <div className="space-y-4">
 

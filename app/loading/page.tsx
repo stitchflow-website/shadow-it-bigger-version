@@ -220,7 +220,7 @@ function LoadingContent() {
                     "Initializing connection..."
                   ) : (
                     <>
-                      We're scanning {getProviderName()} to discover all connected applications.
+                      We're scanning your organization to discover all connected applications.
                       <br />
                       This process is running in the background, so you'll be redirected once it completes.
                     </>

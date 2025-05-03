@@ -78,7 +78,7 @@ return (
 
       <p className="text-sm text-gray-600 dark:text-gray-400">
 
-      If you'd like us to add anything to the shadow IT scanner or build something new, drop us your thoughts at{" "}
+      If you'd like us to add anything to the Shadow IT Scanner or build something new, drop us your thoughts at{" "}
 
         <a
 
