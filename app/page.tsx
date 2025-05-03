@@ -166,95 +166,86 @@ export default function ShadowITDashboard() {
 
   const [isPolling, setIsPolling] = useState(false)
   const [uncategorizedApps, setUncategorizedApps] = useState<Set<string>>(new Set())
+  const [appCategories, setAppCategories] = useState<Record<string, string>>({})
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
 
   const [userInfo, setUserInfo] = useState<{ name: string; email: string; avatar_url: string | null } | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  // Add polling effect
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const orgId = urlParams.get('orgId');
-
-    if (orgId && uncategorizedApps.size > 0) {
-      // Start polling
-      pollingInterval.current = setInterval(() => {
-        checkCategorizationStatus(orgId);
-      }, 5000) as NodeJS.Timeout;
-
-      return () => {
-        if (pollingInterval.current) {
-          clearInterval(pollingInterval.current);
-          pollingInterval.current = null;
-        }
-      };
-    }
-  }, [uncategorizedApps.size]); // Only re-run when number of uncategorized apps changes
-
-  // Update the checkCategorizationStatus function
-  const checkCategorizationStatus = async (orgId: string) => {
+  // Add new function to check categories
+  const checkCategories = async () => {
     try {
-      // Use the path that will be rewritten by our middleware
-      const response = await fetch(`/tools/shadow-it-scan/api/categorization/status?orgId=${orgId}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch categorization status');
-      }
-      const statuses = await response.json();
+      const urlParams = new URLSearchParams(window.location.search);
+      let orgId = urlParams.get('orgId');
       
-      setApplications(prevApps => {
-        const updatedApps = [...prevApps];
-        const newUncategorizedApps = new Set<string>();
-        
-        for (const status of statuses) {
-          // If the status is for organization-wide categorization (no application_id)
-          // Skip for now as we're handling app-specific categorization
-          if (!status.application_id) continue;
-          
-          const appIndex = updatedApps.findIndex(app => app.id === status.application_id);
-          if (appIndex !== -1) {
-            if (status.status === 'COMPLETED') {
-              // Extract category from message if available
-              let category = 'Others';
-              if (status.message && status.message.includes(':')) {
-                category = status.message.split(':')[1]?.trim() || 'Others';
-              }
-              
-              updatedApps[appIndex] = {
-                ...updatedApps[appIndex],
-                category,
-                isCategorizing: false
-              };
-            } else if (status.status === 'IN_PROGRESS' || status.status === 'PENDING') {
-              updatedApps[appIndex] = {
-                ...updatedApps[appIndex],
-                isCategorizing: true
-              };
-              newUncategorizedApps.add(status.application_id);
-            }
+      if (!orgId) {
+        try {
+          const cookies = document.cookie.split(';');
+          const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
+          if (orgIdCookie) {
+            orgId = orgIdCookie.split('=')[1].trim();
           }
+        } catch (cookieError) {
+          console.error("Error parsing cookies:", cookieError);
         }
-        
-        setUncategorizedApps(newUncategorizedApps);
-        setIsPolling(newUncategorizedApps.size > 0);
-        
-        return updatedApps;
+      }
+      
+      if (!orgId) return;
+
+      // Only fetch categories for uncategorized apps
+      const uncategorizedIds = Array.from(uncategorizedApps);
+      if (uncategorizedIds.length === 0) return;
+
+      const response = await fetch(`/tools/shadow-it-scan/api/applications/categories?ids=${uncategorizedIds.join(',')}&orgId=${orgId}`);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      
+      // Update only the categories state
+      setAppCategories(prev => ({ ...prev, ...data }));
+      
+      // Remove categorized apps from uncategorized set
+      setUncategorizedApps(prev => {
+        const next = new Set(prev);
+        Object.entries(data).forEach(([id, category]) => {
+          if (category && category !== 'Unknown') {
+            next.delete(id);
+          }
+        });
+        return next;
       });
     } catch (error) {
-      console.error("Error checking categorization status:", error);
+      console.error("Error checking categories:", error);
     }
   };
 
-  // Modify the fetchData function
+  // Modify the polling effect to use checkCategories
+  useEffect(() => {
+    if (uncategorizedApps.size > 0) {
+      pollingInterval.current = setInterval(checkCategories, 5000) as NodeJS.Timeout;
+    } else {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+      }
+    }
+    return () => {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+      }
+    };
+  }, [uncategorizedApps]);
+
+  // Modify fetchData to only set initial data
   const fetchData = async () => {
     try {
       setIsLoading(true);
       
-      // Get orgId from URL params
       const urlParams = new URLSearchParams(window.location.search);
       let orgId = urlParams.get('orgId');
       
-      // If no orgId in params, check cookies
       if (!orgId) {
         try {
           const cookies = document.cookie.split(';');
@@ -272,25 +263,26 @@ export default function ShadowITDashboard() {
         return;
       }
 
-      // Fetch applications - keep the original path for this API
       const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${orgId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch applications');
       }
 
-      const data = await response.json();
+      const data: Application[] = await response.json();
       setApplications(data);
       
-      // Check categorization status with our new API
-      if (orgId) {
-        await checkCategorizationStatus(orgId);
-      }
+      // Track apps still uncategorized (category === 'Unknown')
+      const unknownIds = new Set<string>();
+      data.forEach((app: Application) => {
+        if (app.category === 'Unknown') unknownIds.add(app.id);
+      });
+      setUncategorizedApps(unknownIds);
       
       setIsLoading(false);
     } catch (error) {
       console.error("Error fetching application data:", error);
       setIsLoading(false);
-      setApplications([]); // Reset applications on error
+      setApplications([]);
     }
   };
 
@@ -907,22 +899,26 @@ export default function ShadowITDashboard() {
   };
 
   // Update the getCategoryColor function in the CategoryBadge component
-  const CategoryBadge = ({ category, isCategorizing }: { category: string | null; isCategorizing?: boolean }) => {
-    if (isCategorizing) {
+  const CategoryBadge = ({ category, appId, isCategorizing }: { category: string | null; appId: string; isCategorizing?: boolean }) => {
+    // Use the latest category from appCategories if available, otherwise use the prop
+    const currentCategory = appCategories[appId] || category;
+    const isCurrentlyCategorizing = isCategorizing || (uncategorizedApps.has(appId) && (!currentCategory || currentCategory === 'Unknown'));
+
+    if (isCurrentlyCategorizing) {
       return (
         <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
           <div className="mr-1 h-2 w-2 rounded-full bg-blue-400 animate-pulse"></div>
           Categorizing...
         </div>
-      )
+      );
     }
 
-    if (!category) {
+    if (!currentCategory) {
       return (
         <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
           Uncategorized
         </div>
-      )
+      );
     }
 
     const getCategoryBadgeColor = (category: string) => {
@@ -947,8 +943,8 @@ export default function ShadowITDashboard() {
     };
 
     return (
-      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryBadgeColor(category)}`}>
-        {category}
+      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryBadgeColor(currentCategory)}`}>
+        {currentCategory}
       </div>
     )
   }
@@ -1569,7 +1565,7 @@ export default function ShadowITDashboard() {
                                     <div className="flex items-center gap-3">
                                       <AppIcon name={app.name} logoUrl={app.logoUrl} logoUrlFallback={app.logoUrlFallback} />
                                       <div 
-                                        className="font-medium cursor-pointer hover:text-primary transition-colors"
+                                        className="font-medium cursor-pointer hover:text-primary transition-colors truncate max-w-[200px]"
                                         onClick={() => handleSeeUsers(app.id)}
                                       >
                                         {app.name}
@@ -1577,7 +1573,11 @@ export default function ShadowITDashboard() {
                                     </div>
                                   </TableCell>
                                   <TableCell>
-                                    <CategoryBadge category={app.category} isCategorizing={app.isCategorizing} />
+                                    <CategoryBadge 
+                                      category={app.category} 
+                                      appId={app.id} 
+                                      isCategorizing={uncategorizedApps.has(app.id)} 
+                                    />
                                   </TableCell>
                                   <TableCell className="text-center">
                                       <TooltipProvider>
@@ -2343,10 +2343,6 @@ export default function ShadowITDashboard() {
                           </div>
                       
                         <div>
-                          <dt className="text-muted-foreground font-medium">Created</dt>
-                          <dd className="font-medium">{selectedApp.created_at && formatDate(selectedApp.created_at)}</dd>
-                        </div>
-                        <div>
                           <dt className="text-muted-foreground font-medium">Owner</dt>
                           <dd className="font-medium">{selectedApp.ownerEmail || "Not assigned"}</dd>
                         </div>
@@ -2409,15 +2405,7 @@ export default function ShadowITDashboard() {
                                         {getUserSortIcon("email")}
                                       </div>
                                     </TableHead>
-                                    <TableHead 
-                                      className="cursor-pointer bg-transparent"
-                                      onClick={() => handleUserSort("created")}
-                                    >
-                                      <div className="flex items-center">
-                                        Created
-                                        {getUserSortIcon("created")}
-                                      </div>
-                                    </TableHead>
+                                  
                                     <TableHead className="bg-transparent">Scopes</TableHead>
                                     <TableHead 
                                       className="cursor-pointer rounded-tr-lg bg-transparent"
@@ -2455,7 +2443,6 @@ export default function ShadowITDashboard() {
                                       </div>
                                     </TableCell>
                                     <TableCell>{user.email}</TableCell>
-                                    <TableCell>{user.created_at ? formatDate(user.created_at) : 'N/A'}</TableCell>
                                     <TableCell>
                                       <div className="max-h-24 overflow-y-auto text-sm">
                                         {user.scopes.map((scope, i) => (

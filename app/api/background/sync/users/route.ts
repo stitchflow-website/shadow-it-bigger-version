@@ -187,13 +187,39 @@ async function processUsers(
     if (usersToUpsert.length > 0) {
       console.log('Sample user data:', usersToUpsert.slice(0, 2));
     }
-    
-    // Use a single batch upsert operation for all users (more efficient)
-    const { error: usersError } = await supabaseAdmin
+
+    // Check for existing users by email and separate insert/update
+    const { data: existingUsersData, error: fetchExistingError } = await supabaseAdmin
       .from('users')
-      .upsert(usersToUpsert);
-    
-    if (usersError) throw usersError;
+      .select('email')
+      .eq('organization_id', organization_id);
+    if (fetchExistingError) throw fetchExistingError;
+    const existingEmails = new Set(existingUsersData.map(u => u.email));
+
+    const usersToInsert = usersToUpsert.filter(u => !existingEmails.has(u.email));
+    const usersToUpdate = usersToUpsert.filter(u => existingEmails.has(u.email));
+
+    if (usersToInsert.length > 0) {
+      const { error: insertError } = await supabaseAdmin
+        .from('users')
+        .insert(usersToInsert);
+      if (insertError) throw insertError;
+    }
+
+    for (const user of usersToUpdate) {
+      const { error: updateError } = await supabaseAdmin
+        .from('users')
+        .update({
+          name: user.name,
+          role: user.role,
+          department: user.department,
+          google_user_id: user.google_user_id,
+          updated_at: user.updated_at
+        })
+        .eq('email', user.email)
+        .eq('organization_id', organization_id);
+      if (updateError) throw updateError;
+    }
     
     await updateSyncStatus(sync_id, 30, 'User sync completed');
     
