@@ -56,12 +56,12 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error('OAuth error received:', error);
-      return NextResponse.redirect(createRedirectUrl(`/login?error=${error}`));
+      return NextResponse.redirect(new URL(`/tools/shadow-it-scan/?error=${error}`, request.url));
     }
 
     if (!code) {
       console.error('No authorization code received');
-      return NextResponse.redirect(createRedirectUrl('/login?error=no_code'));
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=no_code', request.url));
     }
 
     console.log('2. Initializing Google Workspace service...');
@@ -110,7 +110,7 @@ export async function GET(request: Request) {
         console.error('Error recording failed signup:', err);
       }
         
-      return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/login?error=not_workspace_account', request.url));
+      return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/?error=not_workspace_account', request.url));
     }
     
     // Check if user is an admin
@@ -142,7 +142,7 @@ export async function GET(request: Request) {
         console.error('Error recording failed signup:', err);
       }
         
-      return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/login?error=not_workspace_account', request.url));
+      return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/?error=admin_required', request.url));
     }
 
     // Create organization ID from domain
@@ -187,7 +187,7 @@ export async function GET(request: Request) {
 
     if (syncStatusError) {
       console.error('Error creating sync status:', syncStatusError);
-      return NextResponse.redirect(new URL('/login?error=sync_failed', request.url));
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
     }
 
     // Create URL for loading page with syncId parameter
@@ -256,7 +256,7 @@ export async function GET(request: Request) {
     return response;
   } catch (error) {
     console.error('Auth error:', error);
-    return NextResponse.redirect(new URL('/login?error=unknown', request.url));
+    return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=unknown', request.url));
   }
 }
 
