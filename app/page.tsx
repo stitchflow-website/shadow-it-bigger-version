@@ -181,22 +181,30 @@ export default function ShadowITDashboard() {
   // Add new function to check categories
   const checkCategories = async () => {
     try {
-      const urlParams = new URLSearchParams(window.location.search);
-      let orgId = urlParams.get('orgId');
+      let orgId: string | null = null;
       
-      if (!orgId) {
-        try {
-          const cookies = document.cookie.split(';');
-          const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
-          if (orgIdCookie) {
-            orgId = orgIdCookie.split('=')[1].trim();
+      // Only run client-side code in browser environment
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        orgId = urlParams.get('orgId');
+        
+        if (!orgId) {
+          try {
+            const cookies = document.cookie.split(';');
+            const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
+            if (orgIdCookie) {
+              orgId = orgIdCookie.split('=')[1].trim();
+            }
+          } catch (cookieError) {
+            console.error("Error parsing cookies:", cookieError);
           }
-        } catch (cookieError) {
-          console.error("Error parsing cookies:", cookieError);
         }
+        
+        if (!orgId) return;
+      } else {
+        // Skip this function on the server
+        return;
       }
-      
-      if (!orgId) return;
 
       // Only fetch categories for uncategorized apps
       const uncategorizedIds = Array.from(uncategorizedApps);
@@ -248,10 +256,15 @@ export default function ShadowITDashboard() {
     try {
       setIsLoading(true);
       
-      // Check for orgId cookie
-          const cookies = document.cookie.split(';');
-          const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
-      const userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
+      let orgIdCookie = null;
+      let userEmailCookie = null;
+      
+      // Only access cookies in the browser
+      if (typeof window !== 'undefined') {
+        const cookies = document.cookie.split(';');
+        orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
+        userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
+      }
       
       if (!orgIdCookie || !userEmailCookie) {
         // Use dummy data if no cookies found
@@ -643,15 +656,18 @@ export default function ShadowITDashboard() {
   }, []);
 
   const handleSignOut = () => {
-    // Clear all cookies
-    document.cookie.split(';').forEach(cookie => {
-      document.cookie = cookie
-        .replace(/^ +/, '')
-        .replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`);
-    });
-    
-    // Clear local storage
-    localStorage.clear();
+    // Only run in browser environment
+    if (typeof window !== 'undefined') {
+      // Clear all cookies
+      document.cookie.split(';').forEach(cookie => {
+        document.cookie = cookie
+          .replace(/^ +/, '')
+          .replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`);
+      });
+      
+      // Clear local storage
+      localStorage.clear();
+    }
     
     // Redirect to login page
     router.push('/tools/shadow-it-scan/');
@@ -889,6 +905,11 @@ export default function ShadowITDashboard() {
 
   // Modify the checkAuth function to be more generic
   const isAuthenticated = () => {
+    // Only access cookies in the browser
+    if (typeof window === 'undefined') {
+      return false; // On server, consider not authenticated
+    }
+    
     const cookies = document.cookie.split(';');
     const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
     const userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
@@ -1527,16 +1548,19 @@ export default function ShadowITDashboard() {
 
   // Add click outside handler for profile dropdown
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
-        setIsProfileOpen(false);
+    // Only add event listeners in browser environment
+    if (typeof window !== 'undefined') {
+      function handleClickOutside(event: MouseEvent) {
+        if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+          setIsProfileOpen(false);
+        }
       }
-    }
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
   }, []);
 
   // Helper function to generate a random ID
@@ -1693,7 +1717,7 @@ export default function ShadowITDashboard() {
         // Clean up the URL by removing the error parameter
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('error');
-        window.history.replaceState({}, document.title, cleanUrl.toString());
+        window.history.replaceState({}, typeof document !== 'undefined' ? document.title : '', cleanUrl.toString());
       }
     }, []);
 
