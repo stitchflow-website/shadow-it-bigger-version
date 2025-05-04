@@ -934,6 +934,8 @@ export default function ShadowITDashboard() {
     return !!(orgIdCookie && userEmailCookie);
   };
 
+   console.log("isAuthenticated", isAuthenticated()+ " " + isAuth);
+
   const checkAuth = (action: () => void) => {
     if (!isAuthenticated()) {
       setShowLoginModal(true);
@@ -1938,7 +1940,7 @@ export default function ShadowITDashboard() {
 
       <main className="pt-[40px] pl-10 pr-10 bg-white mt-4 pb-10">
 
-            {!isAuth && (
+            {!isAuthenticated() && (
               <div className="bg-black border border-gray-800 rounded-lg p-4 mb-6">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="flex items-center gap-2">
@@ -1958,7 +1960,7 @@ export default function ShadowITDashboard() {
                   </Button>
                 </div>
               </div>
-             )}
+            )}
 
             <div className="flex items-center gap-2 mb-4">
               <h2 className="text-xl font-bold">Shadow IT Overview</h2>
@@ -2035,7 +2037,7 @@ export default function ShadowITDashboard() {
                     </Button>
 
                     {/* Only show profile if authenticated */}
-                    {isAuth && (
+                    {!isAuthenticated() && (
                     <div className="relative" ref={profileRef}>
                       <button
                         onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -2950,7 +2952,7 @@ export default function ShadowITDashboard() {
                   </Button>
 
                   {/* Only show profile if authenticated */}
-                  {isAuth && (
+                  {!isAuthenticated() && (
                   <div className="relative" ref={profileRef}>
                     <button
                       onClick={() => setIsProfileOpen(!isProfileOpen)}
