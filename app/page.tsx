@@ -251,40 +251,27 @@ export default function ShadowITDashboard() {
     };
   }, [uncategorizedApps]);
 
-  let isAuth = false;
-
   // Modify fetchData to only set initial data
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      
-      let orgIdCookie = null;
-      let userEmailCookie = null;
-      
-      
-      // Only access cookies in the browser
-      if (typeof window !== 'undefined') {
-        const cookies = document.cookie.split(';');
-        orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
-        userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
-        isAuth = !!(orgIdCookie && userEmailCookie);
-      }
       
       // Check URL parameters for orgId (which might be set during OAuth redirect)
       let fetchOrgId = null;
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
         const urlOrgId = urlParams.get('orgId');
+        
         if (urlOrgId) {
           fetchOrgId = urlOrgId;
-          isAuth = true;
-        } else if (orgIdCookie) {
-          fetchOrgId = orgIdCookie.split('=')[1].trim();
+        } else if (document.cookie.split(';').find(cookie => cookie.trim().startsWith('orgId='))) {
+          const orgIdCookie = document.cookie.split(';').find(cookie => cookie.trim().startsWith('orgId='));
+          fetchOrgId = orgIdCookie?.split('=')[1].trim();
         }
       }
       
       // Only load dummy data if not authenticated
-      if (!isAuth) {
+      if (!isAuthenticated()) {
         console.log('Not authenticated, loading dummy data');
         // Use dummy data if no cookies found
         const dummyData = [
@@ -927,14 +914,34 @@ export default function ShadowITDashboard() {
       return false; // On server, consider not authenticated
     }
     
+    // Debug: Log all cookies to see what's available
+    const allCookies = document.cookie;
+    console.log("All cookies:", allCookies);
+    
     const cookies = document.cookie.split(';');
+    console.log("Split cookies:", cookies);
+    
+    // Trim the cookies and check for orgId and userEmail
     const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
     const userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
     
-    return !!(orgIdCookie && userEmailCookie);
+    console.log("orgIdCookie:", orgIdCookie);
+    console.log("userEmailCookie:", userEmailCookie);
+    
+    // Use the same logic as in fetchData to also check URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlOrgId = urlParams.get('orgId');
+    
+    console.log("URL orgId:", urlOrgId);
+    
+    // Consider authenticated if either cookies or URL param is present
+    const authenticated = !!(orgIdCookie && userEmailCookie) || !!urlOrgId;
+    console.log("Authentication result:", authenticated);
+    
+    return authenticated;
   };
 
-   console.log("isAuthenticated", isAuthenticated()+ " " + isAuth);
+  console.log("isAuthenticated", isAuthenticated());
 
   const checkAuth = (action: () => void) => {
     if (!isAuthenticated()) {
@@ -2037,7 +2044,7 @@ export default function ShadowITDashboard() {
                     </Button>
 
                     {/* Only show profile if authenticated */}
-                    {!isAuthenticated() && (
+                    {isAuthenticated() && (
                     <div className="relative" ref={profileRef}>
                       <button
                         onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -2952,7 +2959,7 @@ export default function ShadowITDashboard() {
                   </Button>
 
                   {/* Only show profile if authenticated */}
-                  {!isAuthenticated() && (
+                  {isAuthenticated() && (
                   <div className="relative" ref={profileRef}>
                     <button
                       onClick={() => setIsProfileOpen(!isProfileOpen)}
