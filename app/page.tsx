@@ -181,26 +181,26 @@ export default function ShadowITDashboard() {
   // Add new function to check categories
   const checkCategories = async () => {
     try {
-      let orgId: string | null = null;
+      let categoryOrgId: string | null = null;
       
       // Only run client-side code in browser environment
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
-        orgId = urlParams.get('orgId');
+        categoryOrgId = urlParams.get('orgId');
         
-        if (!orgId) {
+        if (!categoryOrgId) {
           try {
             const cookies = document.cookie.split(';');
             const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
             if (orgIdCookie) {
-              orgId = orgIdCookie.split('=')[1].trim();
+              categoryOrgId = orgIdCookie.split('=')[1].trim();
             }
           } catch (cookieError) {
             console.error("Error parsing cookies:", cookieError);
           }
         }
         
-        if (!orgId) return;
+        if (!categoryOrgId) return;
       } else {
         // Skip this function on the server
         return;
@@ -210,7 +210,7 @@ export default function ShadowITDashboard() {
       const uncategorizedIds = Array.from(uncategorizedApps);
       if (uncategorizedIds.length === 0) return;
 
-      const response = await fetch(`/tools/shadow-it-scan/api/applications/categories?ids=${uncategorizedIds.join(',')}&orgId=${orgId}`);
+      const response = await fetch(`/tools/shadow-it-scan/api/applications/categories?ids=${uncategorizedIds.join(',')}&orgId=${categoryOrgId}`);
       if (!response.ok) return;
 
       const data = await response.json();
@@ -258,15 +258,32 @@ export default function ShadowITDashboard() {
       
       let orgIdCookie = null;
       let userEmailCookie = null;
+      let isAuth = false;
       
       // Only access cookies in the browser
       if (typeof window !== 'undefined') {
         const cookies = document.cookie.split(';');
         orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
         userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
+        isAuth = !!(orgIdCookie && userEmailCookie);
       }
       
-      if (!orgIdCookie || !userEmailCookie) {
+      // Check URL parameters for orgId (which might be set during OAuth redirect)
+      let fetchOrgId = null;
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlOrgId = urlParams.get('orgId');
+        if (urlOrgId) {
+          fetchOrgId = urlOrgId;
+          isAuth = true;
+        } else if (orgIdCookie) {
+          fetchOrgId = orgIdCookie.split('=')[1].trim();
+        }
+      }
+      
+      // Only load dummy data if not authenticated
+      if (!isAuth) {
+        console.log('Not authenticated, loading dummy data');
         // Use dummy data if no cookies found
         const dummyData = [
           {
@@ -484,7 +501,6 @@ export default function ShadowITDashboard() {
             "Users": [
               "Brooke Evans",
               "Joseph Brooks",
-              "Joseph Brooks",
               "Peter Russell",
               "Patrick Walsh",
               "Taylor Monroe",
@@ -580,9 +596,8 @@ export default function ShadowITDashboard() {
         return;
       }
 
-      const orgId = orgIdCookie.split('=')[1].trim();
-
-      const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${orgId}`);
+      const fetchOrgIdValue = fetchOrgId || '';
+      const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${fetchOrgIdValue}`);
       if (!response.ok) {
         throw new Error('Failed to fetch applications');
       }
