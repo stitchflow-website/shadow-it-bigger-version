@@ -251,6 +251,8 @@ export default function ShadowITDashboard() {
     };
   }, [uncategorizedApps]);
 
+  let isAuth = false;
+
   // Modify fetchData to only set initial data
   const fetchData = async () => {
     try {
@@ -258,7 +260,7 @@ export default function ShadowITDashboard() {
       
       let orgIdCookie = null;
       let userEmailCookie = null;
-      let isAuth = false;
+      
       
       // Only access cookies in the browser
       if (typeof window !== 'undefined') {
@@ -1936,7 +1938,7 @@ export default function ShadowITDashboard() {
 
       <main className="pt-[40px] pl-10 pr-10 bg-white mt-4 pb-10">
 
-            {!isAuthenticated() && (
+            {!isAuth && (
               <div className="bg-black border border-gray-800 rounded-lg p-4 mb-6">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="flex items-center gap-2">
@@ -2033,7 +2035,7 @@ export default function ShadowITDashboard() {
                     </Button>
 
                     {/* Only show profile if authenticated */}
-                    {isAuthenticated() && (
+                    {isAuth && (
                     <div className="relative" ref={profileRef}>
                       <button
                         onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -2948,7 +2950,7 @@ export default function ShadowITDashboard() {
                   </Button>
 
                   {/* Only show profile if authenticated */}
-                  {isAuthenticated() && (
+                  {isAuth && (
                   <div className="relative" ref={profileRef}>
                     <button
                       onClick={() => setIsProfileOpen(!isProfileOpen)}
