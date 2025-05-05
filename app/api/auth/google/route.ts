@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
+import { sendSuccessSignupWebhook, sendFailedSignupWebhook } from '@/lib/webhook';
 
 // Helper function to safely format date
 function formatDate(dateValue: any): string {
@@ -106,6 +107,9 @@ export async function GET(request: Request) {
             created_at: new Date().toISOString(),
           });
         console.log('Recorded failed signup: not_workspace_account');
+        
+        // Send webhook notification for failed signup
+        await sendFailedSignupWebhook(userInfo.email, userInfo.name, 'not_workspace_account', 'google');
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
@@ -138,6 +142,9 @@ export async function GET(request: Request) {
             created_at: new Date().toISOString(),
           });
         console.log('Recorded failed signup: not_admin');
+        
+        // Send webhook notification for failed signup
+        await sendFailedSignupWebhook(userInfo.email, userInfo.name, 'not_admin', 'google');
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
@@ -216,6 +223,15 @@ export async function GET(request: Request) {
       path: '/'
     });
 
+    // Check if user already exists before storing info and sending webhook
+    const { data: existingUser } = await supabaseAdmin
+      .from('users_signedup')
+      .select('id')
+      .eq('email', userInfo.email)
+      .single();
+    
+    const isNewUser = !existingUser;
+
     // Store basic user info in the background
     Promise.resolve(
       supabaseAdmin
@@ -229,6 +245,11 @@ export async function GET(request: Request) {
     )
       .then(() => {
         console.log('Basic user info stored');
+        
+        // Send webhook notification for successful signup (only for new users)
+        if (isNewUser) {
+          sendSuccessSignupWebhook(userInfo.email, userInfo.name, 'google');
+        }
       })
       .catch((error: Error) => {
         console.error('Error storing basic user info:', error);

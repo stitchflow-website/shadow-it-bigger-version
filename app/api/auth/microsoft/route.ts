@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { sendSuccessSignupWebhook, sendFailedSignupWebhook } from '@/lib/webhook';
 
 export async function GET(request: NextRequest) {
   try {
@@ -109,6 +110,9 @@ export async function GET(request: NextRequest) {
             created_at: new Date().toISOString(),
           });
         console.log('Recorded failed signup: not_work_account');
+        
+        // Send webhook notification for failed signup
+        await sendFailedSignupWebhook(userData.userPrincipalName, userData.displayName, 'not_work_account', 'microsoft');
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
@@ -176,6 +180,9 @@ export async function GET(request: NextRequest) {
             created_at: new Date().toISOString(),
           });
         console.log('Recorded failed signup: not_admin');
+        
+        // Send webhook notification for failed signup
+        await sendFailedSignupWebhook(userData.userPrincipalName, userData.displayName, 'not_admin', 'microsoft');
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
@@ -189,6 +196,9 @@ export async function GET(request: NextRequest) {
       .select('id')
       .eq('email', userData.userPrincipalName)
       .single();
+      
+    // Flag to track if this is a new user
+    const isNewUser = !existingUser;
 
     // Create or update user in users_signedup
     const userToUpsert = {
@@ -208,6 +218,11 @@ export async function GET(request: NextRequest) {
     if (userError) {
       console.error('Error creating user record:', userError);
       throw userError;
+    }
+
+    // If this is a new user, send webhook notification
+    if (isNewUser) {
+      await sendSuccessSignupWebhook(userData.userPrincipalName, userData.displayName, 'microsoft');
     }
 
     // Create organization based on email domain

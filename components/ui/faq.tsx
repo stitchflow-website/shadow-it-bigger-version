@@ -114,7 +114,7 @@ export function FAQ() {
             <AccordionContent className="px-6 pb-6">
               <div className="text-gray-600 space-y-4">
                 <p className="text-sm leading-relaxed">
-                The Shadow IT Scanner uses limited scope access to gather data as security is our top priority. We do not collect or store any sensitive content beyond what's necessary to provide the service. As a part of Stitchflow, the tool adheres with the platform-wide <a href="https://www.stitchflow.com/security" className="text-blue-500 hover:underline">https://www.stitchflow.com/security</a>
+                The Shadow IT Scanner uses limited scope access to gather data as security is our top priority. We do not collect or store any sensitive content beyond what's necessary to provide the service. As a part of Stitchflow, the tool adheres with the platform-wide <a href="https://www.stitchflow.com/security" className="text-blue-500 hover:underline">security terms</a>
                 </p>
               </div>
             </AccordionContent>

@@ -47,6 +47,68 @@ export class GoogleWorkspaceService {
     return this.oauth2Client.credentials;
   }
 
+  /**
+   * Refreshes the access token if it's expired or about to expire
+   * @returns Object with refreshed tokens or null if refresh wasn't needed
+   */
+  async refreshAccessToken() {
+    try {
+      // Check if we have a refresh token and if the access token is expired or about to expire
+      const credentials = this.oauth2Client.credentials;
+      
+      if (!credentials.refresh_token) {
+        console.log('No refresh token available, cannot refresh access token');
+        return null;
+      }
+      
+      // If expiry_date doesn't exist or is within 5 minutes of expiring, refresh the token
+      const now = Date.now();
+      const expiryDate = credentials.expiry_date as number;
+      const fiveMinutesInMs = 5 * 60 * 1000;
+      
+      if (!expiryDate || now >= expiryDate - fiveMinutesInMs) {
+        console.log('Access token expired or about to expire, refreshing...');
+        
+        // Request a new access token
+        const response = await this.oauth2Client.getAccessToken();
+        const token = response.token || '';
+        
+        if (typeof token !== 'string') {
+          // If token is an object (which it should be)
+          const newCredentials = {
+            access_token: token.access_token || credentials.access_token,
+            refresh_token: token.refresh_token || credentials.refresh_token,
+            expiry_date: token.expiry_date || credentials.expiry_date
+          };
+          
+          // Update the client with new tokens
+          this.oauth2Client.setCredentials(newCredentials);
+          
+          console.log('Successfully refreshed access token');
+          return newCredentials;
+        } else {
+          // If token is just a string (access token)
+          this.oauth2Client.setCredentials({
+            ...credentials,
+            access_token: token
+          });
+          
+          console.log('Successfully refreshed access token (string format)');
+          return {
+            ...credentials,
+            access_token: token
+          };
+        }
+      }
+      
+      console.log('Access token still valid, no refresh needed');
+      return null;
+    } catch (error) {
+      console.error('Error refreshing access token:', error);
+      throw error;
+    }
+  }
+
   async getUsersList() {
     const response = await this.admin.users.list({
       customer: 'my_customer',

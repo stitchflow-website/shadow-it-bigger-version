@@ -64,12 +64,20 @@ interface OAuth2Grant {
 export class MicrosoftWorkspaceService {
   private client: Client;
   private credential: ClientSecretCredential;
+  private clientId: string;
+  private clientSecret: string;
+  private tenantId: string;
+  private currentTokens: any = null;
 
   constructor(credentials: any) {
+    this.clientId = credentials.client_id;
+    this.clientSecret = credentials.client_secret;
+    this.tenantId = credentials.tenant_id;
+    
     this.credential = new ClientSecretCredential(
-      credentials.tenant_id,
-      credentials.client_id,
-      credentials.client_secret
+      this.tenantId,
+      this.clientId,
+      this.clientSecret
     );
 
     const authProvider = new TokenCredentialAuthenticationProvider(this.credential, {
@@ -82,6 +90,9 @@ export class MicrosoftWorkspaceService {
   }
 
   async setCredentials(tokens: any) {
+    // Store the tokens
+    this.currentTokens = tokens;
+    
     // For Microsoft, we'll use the access token directly with the client
     this.client = Client.init({
       authProvider: (done) => {
@@ -91,7 +102,69 @@ export class MicrosoftWorkspaceService {
   }
 
   getCredentials() {
-    return this.client;
+    return this.currentTokens;
+  }
+
+  /**
+   * Refreshes the access token using the refresh token
+   * @returns Object with the new tokens or null if refresh wasn't needed/possible
+   */
+  async refreshAccessToken() {
+    try {
+      // Check if we have a refresh token
+      if (!this.currentTokens || !this.currentTokens.refresh_token) {
+        console.log('No refresh token available for Microsoft, cannot refresh');
+        return null;
+      }
+
+      console.log('Refreshing Microsoft access token...');
+      
+      // Prepare the token endpoint request
+      const tokenEndpoint = `https://login.microsoftonline.com/${this.tenantId}/oauth2/v2.0/token`;
+      const params = new URLSearchParams({
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        refresh_token: this.currentTokens.refresh_token,
+        grant_type: 'refresh_token',
+        scope: 'https://graph.microsoft.com/.default offline_access'
+      });
+
+      // Make the refresh token request
+      const response = await fetch(tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString(),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Failed to refresh Microsoft token:', errorData);
+        throw new Error(`Failed to refresh token: ${response.status} ${response.statusText}`);
+      }
+
+      // Parse the new tokens
+      const newTokens = await response.json();
+      
+      // Merge with existing tokens, ensuring we keep the refresh token if not returned
+      const updatedTokens = {
+        ...this.currentTokens,
+        access_token: newTokens.access_token,
+        id_token: newTokens.id_token || this.currentTokens.id_token,
+        refresh_token: newTokens.refresh_token || this.currentTokens.refresh_token,
+        expires_at: Date.now() + (newTokens.expires_in * 1000)
+      };
+      
+      // Update the client with the new tokens
+      await this.setCredentials(updatedTokens);
+      
+      console.log('Successfully refreshed Microsoft access token');
+      return updatedTokens;
+    } catch (error) {
+      console.error('Error refreshing Microsoft access token:', error);
+      throw error;
+    }
   }
 
   async getToken(code: string) {

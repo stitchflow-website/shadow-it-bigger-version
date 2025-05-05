@@ -42,21 +42,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       const orgId = getOrgIdFromCookieOrUrl();
       
       if (!orgId) {
-        throw new Error('Organization ID not found');
+        throw new Error('Organization ID not found. Please try logging in again.');
       }
       
       // Fetch user email from cookies
       const userEmail = getUserEmailFromCookie();
       
       if (!userEmail) {
-        throw new Error('User email not found');
+        throw new Error('Session expired. Please try logging in again.');
       }
       
       // Fetch notification preferences
       const response = await fetch(`/api/user/notification-preferences?orgId=${orgId}`);
       
       if (!response.ok) {
-        throw new Error('Failed to load notification preferences');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to load notification preferences. Please try again.');
       }
       
       const data = await response.json();
@@ -71,7 +72,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       }
     } catch (err) {
       console.error('Error loading notification preferences:', err);
-      setError('Failed to load notification preferences');
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -150,11 +151,17 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   // Helper function to get user email from cookie
   const getUserEmailFromCookie = (): string | null => {
     if (typeof window !== 'undefined') {
-      const cookies = document.cookie.split(';');
-      const userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
+      const cookies = document.cookie.split(';').map(cookie => cookie.trim());
+      const userEmailCookie = cookies.find(cookie => cookie.startsWith('userEmail='));
       
       if (userEmailCookie) {
-        return userEmailCookie.split('=')[1].trim();
+        try {
+          // Decode the cookie value as it might be URL encoded
+          return decodeURIComponent(userEmailCookie.split('=')[1]);
+        } catch (error) {
+          console.error('Error parsing userEmail cookie:', error);
+          return null;
+        }
       }
     }
     

@@ -1065,8 +1065,9 @@ export default function ShadowITDashboard() {
     const categoryMap = new Map<string, number>()
 
     applications.forEach((app) => {
-      const category = app.category || "Uncategorized"
-      categoryMap.set(category, (categoryMap.get(category) || 0) + 1)
+      // Use the latest category from appCategories if available, or fall back to app.category
+      const currentCategory = appCategories[app.id] || app.category || "Uncategorized"
+      categoryMap.set(currentCategory, (categoryMap.get(currentCategory) || 0) + 1)
     })
 
     return Array.from(categoryMap.entries()).map(([name, value]) => ({
@@ -1080,12 +1081,13 @@ export default function ShadowITDashboard() {
     const categoryMap = new Map<string, { apps: number; users: number }>()
 
     applications.forEach((app) => {
-      const category = app.category || "Uncategorized"
-      if (!categoryMap.has(category)) {
-        categoryMap.set(category, { apps: 0, users: 0 })
+      // Use the latest category from appCategories if available, or fall back to app.category
+      const currentCategory = appCategories[app.id] || app.category || "Uncategorized"
+      if (!categoryMap.has(currentCategory)) {
+        categoryMap.set(currentCategory, { apps: 0, users: 0 })
       }
 
-      const data = categoryMap.get(category)!
+      const data = categoryMap.get(currentCategory)!
       data.apps += 1
       data.users += app.userCount
     })
@@ -1102,7 +1104,7 @@ export default function ShadowITDashboard() {
     return sorted.slice(0, 10).map((app) => ({
       name: app.name,
       value: app.userCount, // Keep value for chart compatibility
-      color: getCategoryColor(app.category), // Use category color
+      color: getCategoryColor(appCategories[app.id] || app.category), // Use latest category color
     }))
   }
 
@@ -1112,7 +1114,7 @@ export default function ShadowITDashboard() {
     return sorted.slice(0, 10).map((app) => ({
       name: app.name,
       value: app.totalPermissions, // Keep value for chart compatibility
-      color: getCategoryColor(app.category), // Use category color
+      color: getCategoryColor(appCategories[app.id] || app.category), // Use latest category color
     }))
   }
 
@@ -1151,8 +1153,9 @@ export default function ShadowITDashboard() {
     const categoryCount = new Map<string, number>()
 
     applications.forEach((app) => {
-      const category = app.category || "Uncategorized"
-      categoryCount.set(category, (categoryCount.get(category) || 0) + 1)
+      // Use the latest category from appCategories if available, or fall back to app.category
+      const currentCategory = appCategories[app.id] || app.category || "Uncategorized"
+      categoryCount.set(currentCategory, (categoryCount.get(currentCategory) || 0) + 1)
     })
 
     const totalApps = applications.length
@@ -1471,8 +1474,18 @@ export default function ShadowITDashboard() {
     return allApps
       .filter(app => app.id !== currentApp.id)
       .map(app => {
-        const score = calculateSimilarityScore(currentApp, app);
-        const reasons = getSimilarityReasons(currentApp, app);
+        // Create a temporary app object with updated category for similarity calculation
+        const appWithCurrentCategory = {
+          ...app,
+          category: appCategories[app.id] || app.category
+        };
+        const currentAppWithUpdatedCategory = {
+          ...currentApp,
+          category: appCategories[currentApp.id] || currentApp.category
+        };
+        
+        const score = calculateSimilarityScore(currentAppWithUpdatedCategory, appWithCurrentCategory);
+        const reasons = getSimilarityReasons(currentAppWithUpdatedCategory, appWithCurrentCategory);
         return { app, score, reasons };
       })
       .filter(result => result.score > 0)
@@ -1522,7 +1535,12 @@ export default function ShadowITDashboard() {
       reasons.push(`Similar functionality: ${sharedFunctions.join(', ')}`);
     }
     
-    // Removed usage patterns check that was using lastActive
+    // Check if they belong to the same category
+    const category1 = app1.category;
+    const category2 = app2.category;
+    if (category1 && category2 && category1 === category2 && category1 !== 'Unknown') {
+      reasons.push(`Same category: ${category1}`);
+    }
     
     return reasons;
   }
@@ -1886,6 +1904,12 @@ export default function ShadowITDashboard() {
     );
   };
 
+  // Add a useEffect to force re-rendering the charts when in Insights view after new categories arrive
+  useEffect(() => {
+    // This effect will trigger whenever appCategories or mainView changes
+    // No action needed - just having this dependency will cause charts to re-render
+  }, [appCategories, mainView]);
+
   return (
     <div className="mx-auto py-8 space-y-4 font-sans text-gray-900 bg-[#FAF8FA]">
 
@@ -1938,7 +1962,7 @@ export default function ShadowITDashboard() {
                   <div className="flex items-center gap-2">
                     <span className="text-yellow-500">👋</span>
                     <p className="text-gray-200">
-                    This is a preview of the app. Sign in to scan your org's shadowed Apps.
+                    This is a preview of the app. Sign in to begin the Shadow IT scan for your workspace.
                     </p>
                   </div>
                   <Button
@@ -2787,7 +2811,7 @@ export default function ShadowITDashboard() {
                               users: app.userCount,
                               permissions: app.totalPermissions,
                               similar: getSimilarApps(app, applications).length,
-                              category: app.category,
+                              category: appCategories[app.id] || app.category,
                             }))}
                             layout="vertical"
                             margin={{ left: 150, right: 20, top: 20, bottom: 20 }}
@@ -3570,7 +3594,7 @@ export default function ShadowITDashboard() {
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M13 3L4 14H13L11 21L20 10H11L13 3Z" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    Stitchflow exclusive
+                    Stitchflow Exclusive
                   </div>
                 </div>
               <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
@@ -3589,7 +3613,7 @@ export default function ShadowITDashboard() {
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M13 3L4 14H13L11 21L20 10H11L13 3Z" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    Stitchflow exclusive
+                    Stitchflow Exclusive
                   </div>
                 </div>
               <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">

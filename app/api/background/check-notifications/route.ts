@@ -489,6 +489,24 @@ async function processGoogleWorkspace(org: any) {
       console.log(`No valid sync record found for Google org ${org.id}`);
       return;
     }
+
+    // Get provider information
+    const { data: orgDetails, error: orgDetailsError } = await supabaseAdmin
+      .from('organizations')
+      .select('auth_provider')
+      .eq('id', org.id)
+      .single();
+
+    if (orgDetailsError) {
+      console.error(`Error fetching organization details for org ${org.id}:`, orgDetailsError);
+      return;
+    }
+
+    // Skip if organization is not using Google
+    if (orgDetails.auth_provider !== 'google' && orgDetails.auth_provider !== null) {
+      console.log(`Organization ${org.id} is not using Google, skipping Google workspace check`);
+      return;
+    }
     
     // Initialize Google Workspace service
     console.log(`Initializing Google Workspace service for org ${org.id}...`);
@@ -498,257 +516,302 @@ async function processGoogleWorkspace(org: any) {
       redirect_uri: process.env.GOOGLE_REDIRECT_URI,
     });
     
+    // Set the credentials from the latest sync
     await googleService.setCredentials({
       access_token: latestSync.access_token,
       refresh_token: latestSync.refresh_token,
-      expiry_date: Date.now() + 3600 * 1000
+      expiry_date: latestSync.token_expiry || Date.now() + 3600 * 1000
     });
+    
+    // Try to refresh the token before making any API calls
+    try {
+      const refreshedTokens = await googleService.refreshAccessToken();
+      
+      // If tokens were refreshed, update them in the database
+      if (refreshedTokens) {
+        console.log(`Tokens refreshed for org ${org.id}, updating in database...`);
+        
+        const { error: updateError } = await supabaseAdmin
+          .from('sync_status')
+          .update({
+            access_token: refreshedTokens.access_token,
+            refresh_token: refreshedTokens.refresh_token || latestSync.refresh_token,
+            token_expiry: refreshedTokens.expiry_date,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', latestSync.id);
+        
+        if (updateError) {
+          console.error(`Error updating refreshed tokens in database:`, updateError);
+        }
+      }
+    } catch (refreshError) {
+      console.error(`Error refreshing tokens for org ${org.id}:`, refreshError);
+      // Continue with the existing tokens, they might still work
+    }
     
     // Fetch current apps from Google Workspace
     console.log(`Fetching current apps from Google Workspace for org ${org.id}...`);
-    const tokens = await googleService.getOAuthTokens();
-    console.log(`Fetched ${tokens.length} tokens from Google Workspace for org ${org.id}`);
     
-    // Group tokens by application
-    const appMap = new Map<string, any>(); // clientId -> app info
-    for (const token of tokens) {
-      if (!token.clientId || !token.displayText) continue;
+    try {
+      const tokens = await googleService.getOAuthTokens();
+      console.log(`Fetched ${tokens.length} tokens from Google Workspace for org ${org.id}`);
       
-      if (!appMap.has(token.clientId)) {
-        // Calculate all unique scopes for this app across all users
-        const allScopes = new Set<string>();
-        if (token.scopes && Array.isArray(token.scopes)) {
-          token.scopes.forEach(scope => allScopes.add(scope));
+      // Group tokens by application
+      const appMap = new Map<string, any>(); // clientId -> app info
+      for (const token of tokens) {
+        if (!token.clientId || !token.displayText) continue;
+        
+        if (!appMap.has(token.clientId)) {
+          // Calculate all unique scopes for this app across all users
+          const allScopes = new Set<string>();
+          if (token.scopes && Array.isArray(token.scopes)) {
+            token.scopes.forEach(scope => allScopes.add(scope));
+          }
+          
+          appMap.set(token.clientId, {
+            clientId: token.clientId,
+            name: token.displayText,
+            scopes: allScopes,
+            users: new Set(),
+            riskLevel: determineRiskLevel(token.scopes),
+          });
+        } else {
+          // Update existing app entry
+          const app = appMap.get(token.clientId);
+          if (token.scopes && Array.isArray(token.scopes)) {
+            token.scopes.forEach(scope => app.scopes.add(scope));
+          }
+          
+          // Update risk level if needed
+          const tokenRisk = determineRiskLevel(token.scopes);
+          if (tokenRisk === 'HIGH' || (tokenRisk === 'MEDIUM' && app.riskLevel !== 'HIGH')) {
+            app.riskLevel = tokenRisk;
+          }
         }
         
-        appMap.set(token.clientId, {
-          clientId: token.clientId,
-          name: token.displayText,
-          scopes: allScopes,
-          users: new Set(),
-          riskLevel: determineRiskLevel(token.scopes),
-        });
-      } else {
-        // Update existing app entry
-        const app = appMap.get(token.clientId);
-        if (token.scopes && Array.isArray(token.scopes)) {
-          token.scopes.forEach(scope => app.scopes.add(scope));
-        }
-        
-        // Update risk level if needed
-        const tokenRisk = determineRiskLevel(token.scopes);
-        if (tokenRisk === 'HIGH' || (tokenRisk === 'MEDIUM' && app.riskLevel !== 'HIGH')) {
-          app.riskLevel = tokenRisk;
+        // Add user to this app
+        if (token.userEmail) {
+          appMap.get(token.clientId).users.add(token.userEmail);
         }
       }
       
-      // Add user to this app
-      if (token.userEmail) {
-        appMap.get(token.clientId).users.add(token.userEmail);
+      console.log(`Processed ${appMap.size} unique apps from Google Workspace for org ${org.id}`);
+      
+      // Get existing apps from our database
+      const { data: existingApps, error: appError } = await supabaseAdmin
+        .from('applications')
+        .select('id, name, google_app_id, category, risk_level, total_permissions, management_status, created_at')
+        .eq('organization_id', org.id);
+      
+      if (appError) {
+        console.error(`Error fetching existing apps for org ${org.id}:`, appError);
+        return;
       }
-    }
-    
-    console.log(`Processed ${appMap.size} unique apps from Google Workspace for org ${org.id}`);
-    
-    // Get existing apps from our database
-    const { data: existingApps, error: appError } = await supabaseAdmin
-      .from('applications')
-      .select('id, name, google_app_id, category, risk_level, total_permissions, management_status, created_at')
-      .eq('organization_id', org.id);
-    
-    if (appError) {
-      console.error(`Error fetching existing apps for org ${org.id}:`, appError);
-      return;
-    }
-    
-    // Create a map of existing apps by Google client ID
-    const existingAppMap = new Map<string, any>();
-    existingApps?.forEach(app => {
-      if (app.google_app_id) {
-        // Handle multiple client IDs separated by commas
-        app.google_app_id.split(',').forEach((clientId: string) => {
-          existingAppMap.set(clientId.trim(), app);
-        });
-      }
-    });
-    
-    // Check for new apps
-    const newApps = [];
-    for (const [clientId, appInfo] of appMap.entries()) {
-      if (!existingAppMap.has(clientId)) {
-        // This is a new app
-        newApps.push({
-          clientId,
-          name: appInfo.name,
-          scopes: Array.from(appInfo.scopes),
-          userCount: appInfo.users.size,
-          riskLevel: appInfo.riskLevel,
-        });
-      }
-    }
-    
-    console.log(`Found ${newApps.length} new apps from Google Workspace for org ${org.id}`);
-    
-    // Add new apps to the database and send notifications
-    for (const newApp of newApps) {
-      try {
-        // Add app to database
-        const { data: insertedApp, error: insertError } = await supabaseAdmin
-          .from('applications')
-          .insert({
-            organization_id: org.id,
-            name: newApp.name,
-            google_app_id: newApp.clientId,
-            risk_level: newApp.riskLevel,
-            total_permissions: newApp.scopes.length,
-            all_scopes: newApp.scopes,
-            user_count: newApp.userCount,
-            management_status: 'NEEDS_REVIEW',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-        
-        if (insertError) {
-          console.error(`Error inserting new app ${newApp.name}:`, insertError);
-          continue;
+      
+      // Create a map of existing apps by Google client ID
+      const existingAppMap = new Map<string, any>();
+      existingApps?.forEach(app => {
+        if (app.google_app_id) {
+          // Handle multiple client IDs separated by commas
+          app.google_app_id.split(',').forEach((clientId: string) => {
+            existingAppMap.set(clientId.trim(), app);
+          });
         }
-        
-        console.log(`Added new app to database: ${newApp.name} (${insertedApp.id})`);
-        
-        // Send notifications to users who have enabled them
-        await sendNewAppNotifications(org, insertedApp);
-        
-      } catch (error) {
-        console.error(`Error processing new app ${newApp.name}:`, error);
-      }
-    }
-    
-    // Now check for new users in existing apps
-    console.log(`Checking for new users in existing apps for org ${org.id}...`);
-    
-    // Get all existing user-app relationships for Google
-    const { data: existingUserApps, error: userAppError } = await supabaseAdmin
-      .from('user_applications')
-      .select(`
-        id, 
-        application_id, 
-        user:users (email)
-      `)
-      .eq('organization_id', org.id);
-    
-    if (userAppError) {
-      console.error(`Error fetching existing user-app relationships for org ${org.id}:`, userAppError);
-      return;
-    }
-    
-    // Create a set of existing user-app combinations
-    const existingUserAppSet = new Set<string>();
-    existingUserApps?.forEach(userApp => {
-      // Access the email correctly from the nested user object
-      const key = `${userApp.application_id}-${userApp.user?.[0]?.email}`;
-      existingUserAppSet.add(key);
-    });
-    
-    // Get all users from the database
-    const { data: dbUsers, error: usersError } = await supabaseAdmin
-      .from('users')
-      .select('id, email, name')
-      .eq('organization_id', org.id);
-    
-    if (usersError) {
-      console.error(`Error fetching users for org ${org.id}:`, usersError);
-      return;
-    }
-    
-    // Create a map of email to user ID and name
-    const userEmailMap = new Map<string, { id: string, name: string }>();
-    dbUsers?.forEach(user => {
-      userEmailMap.set(user.email, { id: user.id, name: user.name || user.email });
-    });
-    
-    // Check for new user-app relationships
-    const newUserApps = [];
-    
-    for (const [clientId, appInfo] of appMap.entries()) {
-      // Skip if app doesn't exist in our database
-      if (!existingAppMap.has(clientId)) continue;
+      });
       
-      const dbApp = existingAppMap.get(clientId);
-      const isReviewApp = dbApp.management_status === 'NEEDS_REVIEW';
-      
-      // Check each user for this app
-      for (const userEmail of appInfo.users) {
-        // Skip if user doesn't exist in our database
-        if (!userEmailMap.has(userEmail)) continue;
-        
-        const userId = userEmailMap.get(userEmail)!.id;
-        const userName = userEmailMap.get(userEmail)!.name;
-        
-        // Check if this user-app relationship already exists
-        const userAppKey = `${dbApp.id}-${userEmail}`;
-        if (!existingUserAppSet.has(userAppKey)) {
-          // This is a new user-app relationship
-          newUserApps.push({
-            appId: dbApp.id,
-            appName: dbApp.name,
-            userEmail,
-            userId,
-            userName,
-            isReviewApp
+      // Check for new apps
+      const newApps = [];
+      for (const [clientId, appInfo] of appMap.entries()) {
+        if (!existingAppMap.has(clientId)) {
+          // This is a new app
+          newApps.push({
+            clientId,
+            name: appInfo.name,
+            scopes: Array.from(appInfo.scopes),
+            userCount: appInfo.users.size,
+            riskLevel: appInfo.riskLevel,
           });
         }
       }
-    }
-    
-    console.log(`Found ${newUserApps.length} new user-app relationships for org ${org.id}`);
-    
-    // Process new user-app relationships
-    for (const newUserApp of newUserApps) {
-      try {
-        // Create user-app relationship in database
-        const { error: insertError } = await supabaseAdmin
-          .from('user_applications')
-          .insert({
-            application_id: newUserApp.appId,
-            user_id: newUserApp.userId,
-            organization_id: org.id,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        
-        if (insertError) {
-          console.error(`Error inserting user-app relationship:`, insertError);
-          continue;
+      
+      console.log(`Found ${newApps.length} new apps from Google Workspace for org ${org.id}`);
+      
+      // Add new apps to the database and send notifications
+      for (const newApp of newApps) {
+        try {
+          // Add app to database
+          const { data: insertedApp, error: insertError } = await supabaseAdmin
+            .from('applications')
+            .insert({
+              organization_id: org.id,
+              name: newApp.name,
+              google_app_id: newApp.clientId,
+              risk_level: newApp.riskLevel,
+              total_permissions: newApp.scopes.length,
+              all_scopes: newApp.scopes,
+              user_count: newApp.userCount,
+              management_status: 'NEEDS_REVIEW',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+          
+          if (insertError) {
+            console.error(`Error inserting new app ${newApp.name}:`, insertError);
+            continue;
+          }
+          
+          console.log(`Added new app to database: ${newApp.name} (${insertedApp.id})`);
+          
+          // Send notifications to users who have enabled them
+          await sendNewAppNotifications(org, insertedApp);
+          
+        } catch (error) {
+          console.error(`Error processing new app ${newApp.name}:`, error);
         }
-        
-        console.log(`Added new user-app relationship: ${newUserApp.userEmail} - ${newUserApp.appName}`);
-        
-        // Get full app details for notification
-        const { data: app } = await supabaseAdmin
-          .from('applications')
-          .select('*')
-          .eq('id', newUserApp.appId)
-          .single();
-        
-        if (!app) {
-          console.error(`Could not find app with ID ${newUserApp.appId}`);
-          continue;
-        }
-        
-        // Send notifications
-        await sendNewUserNotifications(
-          org, 
-          app, 
-          newUserApp.userEmail, 
-          newUserApp.userName, 
-          newUserApp.isReviewApp
-        );
-        
-      } catch (error) {
-        console.error(`Error processing new user-app relationship:`, error);
       }
+      
+      // Now check for new users in existing apps
+      console.log(`Checking for new users in existing apps for org ${org.id}...`);
+      
+      // Get all existing user-app relationships for Google
+      const { data: existingUserApps, error: userAppError } = await supabaseAdmin
+        .from('user_applications')
+        .select(`
+          id, 
+          application_id, 
+          user:users (email)
+        `)
+        .eq('organization_id', org.id);
+      
+      if (userAppError) {
+        console.error(`Error fetching existing user-app relationships for org ${org.id}:`, userAppError);
+        return;
+      }
+      
+      // Create a set of existing user-app combinations
+      const existingUserAppSet = new Set<string>();
+      existingUserApps?.forEach(userApp => {
+        // Access the email correctly from the nested user object
+        const key = `${userApp.application_id}-${userApp.user?.[0]?.email}`;
+        existingUserAppSet.add(key);
+      });
+      
+      // Get all users from the database
+      const { data: dbUsers, error: usersError } = await supabaseAdmin
+        .from('users')
+        .select('id, email, name')
+        .eq('organization_id', org.id);
+      
+      if (usersError) {
+        console.error(`Error fetching users for org ${org.id}:`, usersError);
+        return;
+      }
+      
+      // Create a map of email to user ID and name
+      const userEmailMap = new Map<string, { id: string, name: string }>();
+      dbUsers?.forEach(user => {
+        userEmailMap.set(user.email, { id: user.id, name: user.name || user.email });
+      });
+      
+      // Check for new user-app relationships
+      const newUserApps = [];
+      
+      for (const [clientId, appInfo] of appMap.entries()) {
+        // Skip if app doesn't exist in our database
+        if (!existingAppMap.has(clientId)) continue;
+        
+        const dbApp = existingAppMap.get(clientId);
+        const isReviewApp = dbApp.management_status === 'NEEDS_REVIEW';
+        
+        // Check each user for this app
+        for (const userEmail of appInfo.users) {
+          // Skip if user doesn't exist in our database
+          if (!userEmailMap.has(userEmail)) continue;
+          
+          const userId = userEmailMap.get(userEmail)!.id;
+          const userName = userEmailMap.get(userEmail)!.name;
+          
+          // Check if this user-app relationship already exists
+          const userAppKey = `${dbApp.id}-${userEmail}`;
+          if (!existingUserAppSet.has(userAppKey)) {
+            // This is a new user-app relationship
+            newUserApps.push({
+              appId: dbApp.id,
+              appName: dbApp.name,
+              userEmail,
+              userId,
+              userName,
+              isReviewApp
+            });
+          }
+        }
+      }
+      
+      console.log(`Found ${newUserApps.length} new user-app relationships for org ${org.id}`);
+      
+      // Process new user-app relationships
+      for (const newUserApp of newUserApps) {
+        try {
+          // Create user-app relationship in database
+          const { error: insertError } = await supabaseAdmin
+            .from('user_applications')
+            .insert({
+              application_id: newUserApp.appId,
+              user_id: newUserApp.userId,
+              organization_id: org.id,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          
+          if (insertError) {
+            console.error(`Error inserting user-app relationship:`, insertError);
+            continue;
+          }
+          
+          console.log(`Added new user-app relationship: ${newUserApp.userEmail} - ${newUserApp.appName}`);
+          
+          // Get full app details for notification
+          const { data: app } = await supabaseAdmin
+            .from('applications')
+            .select('*')
+            .eq('id', newUserApp.appId)
+            .single();
+          
+          if (!app) {
+            console.error(`Could not find app with ID ${newUserApp.appId}`);
+            continue;
+          }
+          
+          // Send notifications
+          await sendNewUserNotifications(
+            org, 
+            app, 
+            newUserApp.userEmail, 
+            newUserApp.userName, 
+            newUserApp.isReviewApp
+          );
+          
+        } catch (error) {
+          console.error(`Error processing new user-app relationship:`, error);
+        }
+      }
+      
+    } catch (error: any) {
+      console.error(`Error fetching OAuth tokens from Google:`, error);
+      
+      // Update sync status to indicate authentication failure
+      await supabaseAdmin
+        .from('sync_status')
+        .insert({
+          organization_id: org.id,
+          status: 'FAILED',
+          error_message: `Authentication failed: ${error.message || 'Unknown error'}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
     }
     
   } catch (error) {
@@ -813,6 +876,24 @@ async function processMicrosoftEntra(org: any) {
       console.log(`No valid sync record found for Microsoft org ${org.id}`);
       return;
     }
+
+    // Get provider information
+    const { data: orgDetails, error: orgDetailsError } = await supabaseAdmin
+      .from('organizations')
+      .select('auth_provider')
+      .eq('id', org.id)
+      .single();
+
+    if (orgDetailsError) {
+      console.error(`Error fetching organization details for org ${org.id}:`, orgDetailsError);
+      return;
+    }
+
+    // Skip if organization is not using Microsoft
+    if (orgDetails.auth_provider !== 'microsoft' && orgDetails.auth_provider !== null) {
+      console.log(`Organization ${org.id} is not using Microsoft, skipping Microsoft Entra check`);
+      return;
+    }
     
     // Initialize Microsoft Entra service
     console.log(`Initializing Microsoft Entra service for org ${org.id}...`);
@@ -822,253 +903,299 @@ async function processMicrosoftEntra(org: any) {
       tenant_id: process.env.MICROSOFT_TENANT_ID!
     });
     
+    // Set the credentials from the latest sync
     await microsoftService.setCredentials({
       access_token: latestSync.access_token,
-      refresh_token: latestSync.refresh_token
+      refresh_token: latestSync.refresh_token,
+      expires_at: latestSync.token_expiry || Date.now() + 3600 * 1000
     });
+    
+    // Try to refresh the token before making any API calls
+    try {
+      const refreshedTokens = await microsoftService.refreshAccessToken();
+      
+      // If tokens were refreshed, update them in the database
+      if (refreshedTokens) {
+        console.log(`Microsoft tokens refreshed for org ${org.id}, updating in database...`);
+        
+        const { error: updateError } = await supabaseAdmin
+          .from('sync_status')
+          .update({
+            access_token: refreshedTokens.access_token,
+            refresh_token: refreshedTokens.refresh_token || latestSync.refresh_token,
+            token_expiry: refreshedTokens.expires_at,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', latestSync.id);
+        
+        if (updateError) {
+          console.error(`Error updating refreshed Microsoft tokens in database:`, updateError);
+        }
+      }
+    } catch (refreshError) {
+      console.error(`Error refreshing Microsoft tokens for org ${org.id}:`, refreshError);
+      // Continue with the existing tokens, they might still work
+    }
     
     // Fetch current apps from Microsoft Entra
     console.log(`Fetching current apps from Microsoft Entra for org ${org.id}...`);
-    const tokens = await microsoftService.getOAuthTokens();
-    console.log(`Fetched ${tokens.length} tokens from Microsoft Entra for org ${org.id}`);
     
-    // Group tokens by application
-    const appMap = new Map<string, any>(); // clientId -> app info
-    for (const token of tokens) {
-      if (!token.clientId || !token.displayText) continue;
+    try {
+      const tokens = await microsoftService.getOAuthTokens();
+      console.log(`Fetched ${tokens.length} tokens from Microsoft Entra for org ${org.id}`);
       
-      if (!appMap.has(token.clientId)) {
-        // Calculate all unique scopes for this app across all users
-        const allScopes = new Set<string>();
-        if (token.scopes && Array.isArray(token.scopes)) {
-          token.scopes.forEach(scope => allScopes.add(scope));
+      // Group tokens by application
+      const appMap = new Map<string, any>(); // clientId -> app info
+      for (const token of tokens) {
+        if (!token.clientId || !token.displayText) continue;
+        
+        if (!appMap.has(token.clientId)) {
+          // Calculate all unique scopes for this app across all users
+          const allScopes = new Set<string>();
+          if (token.scopes && Array.isArray(token.scopes)) {
+            token.scopes.forEach(scope => allScopes.add(scope));
+          }
+          
+          appMap.set(token.clientId, {
+            clientId: token.clientId,
+            name: token.displayText,
+            scopes: allScopes,
+            users: new Set(),
+            riskLevel: determineMicrosoftRiskLevel(token.scopes),
+          });
+        } else {
+          // Update existing app entry
+          const app = appMap.get(token.clientId);
+          if (token.scopes && Array.isArray(token.scopes)) {
+            token.scopes.forEach(scope => app.scopes.add(scope));
+          }
+          
+          // Update risk level if needed
+          const tokenRisk = determineMicrosoftRiskLevel(token.scopes);
+          if (tokenRisk === 'HIGH' || (tokenRisk === 'MEDIUM' && app.riskLevel !== 'HIGH')) {
+            app.riskLevel = tokenRisk;
+          }
         }
         
-        appMap.set(token.clientId, {
-          clientId: token.clientId,
-          name: token.displayText,
-          scopes: allScopes,
-          users: new Set(),
-          riskLevel: determineMicrosoftRiskLevel(token.scopes),
-        });
-      } else {
-        // Update existing app entry
-        const app = appMap.get(token.clientId);
-        if (token.scopes && Array.isArray(token.scopes)) {
-          token.scopes.forEach(scope => app.scopes.add(scope));
-        }
-        
-        // Update risk level if needed
-        const tokenRisk = determineMicrosoftRiskLevel(token.scopes);
-        if (tokenRisk === 'HIGH' || (tokenRisk === 'MEDIUM' && app.riskLevel !== 'HIGH')) {
-          app.riskLevel = tokenRisk;
+        // Add user to this app
+        if (token.userEmail) {
+          appMap.get(token.clientId).users.add(token.userEmail);
         }
       }
       
-      // Add user to this app
-      if (token.userEmail) {
-        appMap.get(token.clientId).users.add(token.userEmail);
+      console.log(`Processed ${appMap.size} unique apps from Microsoft Entra for org ${org.id}`);
+      
+      // Get existing apps from our database
+      const { data: existingApps, error: appError } = await supabaseAdmin
+        .from('applications')
+        .select('id, name, microsoft_app_id, category, risk_level, total_permissions, management_status, created_at')
+        .eq('organization_id', org.id);
+      
+      if (appError) {
+        console.error(`Error fetching existing apps for org ${org.id}:`, appError);
+        return;
       }
-    }
-    
-    console.log(`Processed ${appMap.size} unique apps from Microsoft Entra for org ${org.id}`);
-    
-    // Get existing apps from our database
-    const { data: existingApps, error: appError } = await supabaseAdmin
-      .from('applications')
-      .select('id, name, microsoft_app_id, category, risk_level, total_permissions, management_status, created_at')
-      .eq('organization_id', org.id);
-    
-    if (appError) {
-      console.error(`Error fetching existing apps for org ${org.id}:`, appError);
-      return;
-    }
-    
-    // Create a map of existing apps by Microsoft client ID
-    const existingAppMap = new Map<string, any>();
-    existingApps?.forEach(app => {
-      if (app.microsoft_app_id) {
-        existingAppMap.set(app.microsoft_app_id, app);
-      }
-    });
-    
-    // Check for new apps
-    const newApps = [];
-    for (const [clientId, appInfo] of appMap.entries()) {
-      if (!existingAppMap.has(clientId)) {
-        // This is a new app
-        newApps.push({
-          clientId,
-          name: appInfo.name,
-          scopes: Array.from(appInfo.scopes),
-          userCount: appInfo.users.size,
-          riskLevel: appInfo.riskLevel,
-        });
-      }
-    }
-    
-    console.log(`Found ${newApps.length} new apps from Microsoft Entra for org ${org.id}`);
-    
-    // Add new apps to the database and send notifications
-    for (const newApp of newApps) {
-      try {
-        // Add app to database
-        const { data: insertedApp, error: insertError } = await supabaseAdmin
-          .from('applications')
-          .insert({
-            organization_id: org.id,
-            name: newApp.name,
-            microsoft_app_id: newApp.clientId,
-            risk_level: newApp.riskLevel,
-            total_permissions: newApp.scopes.length,
-            all_scopes: newApp.scopes,
-            user_count: newApp.userCount,
-            management_status: 'NEEDS_REVIEW',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-        
-        if (insertError) {
-          console.error(`Error inserting new app ${newApp.name}:`, insertError);
-          continue;
+      
+      // Create a map of existing apps by Microsoft client ID
+      const existingAppMap = new Map<string, any>();
+      existingApps?.forEach(app => {
+        if (app.microsoft_app_id) {
+          existingAppMap.set(app.microsoft_app_id, app);
         }
-        
-        console.log(`Added new app to database: ${newApp.name} (${insertedApp.id})`);
-        
-        // Send notifications to users who have enabled them
-        await sendNewAppNotifications(org, insertedApp);
-        
-      } catch (error) {
-        console.error(`Error processing new app ${newApp.name}:`, error);
-      }
-    }
-    
-    // Now check for new users in existing apps
-    console.log(`Checking for new users in existing apps for org ${org.id}...`);
-    
-    // Get all existing user-app relationships for Microsoft
-    const { data: existingUserApps, error: userAppError } = await supabaseAdmin
-      .from('user_applications')
-      .select(`
-        id, 
-        application_id, 
-        user:users (email)
-      `)
-      .eq('organization_id', org.id);
-    
-    if (userAppError) {
-      console.error(`Error fetching existing user-app relationships for org ${org.id}:`, userAppError);
-      return;
-    }
-    
-    // Create a set of existing user-app combinations
-    const existingUserAppSet = new Set<string>();
-    existingUserApps?.forEach(userApp => {
-      // Access the email correctly from the nested user object
-      const key = `${userApp.application_id}-${userApp.user?.[0]?.email}`;
-      existingUserAppSet.add(key);
-    });
-    
-    // Get all users from the database
-    const { data: dbUsers, error: usersError } = await supabaseAdmin
-      .from('users')
-      .select('id, email, name')
-      .eq('organization_id', org.id);
-    
-    if (usersError) {
-      console.error(`Error fetching users for org ${org.id}:`, usersError);
-      return;
-    }
-    
-    // Create a map of email to user ID and name
-    const userEmailMap = new Map<string, { id: string, name: string }>();
-    dbUsers?.forEach(user => {
-      userEmailMap.set(user.email, { id: user.id, name: user.name || user.email });
-    });
-    
-    // Check for new user-app relationships
-    const newUserApps = [];
-    
-    for (const [clientId, appInfo] of appMap.entries()) {
-      // Skip if app doesn't exist in our database
-      if (!existingAppMap.has(clientId)) continue;
+      });
       
-      const dbApp = existingAppMap.get(clientId);
-      const isReviewApp = dbApp.management_status === 'NEEDS_REVIEW';
-      
-      // Check each user for this app
-      for (const userEmail of appInfo.users) {
-        // Skip if user doesn't exist in our database
-        if (!userEmailMap.has(userEmail)) continue;
-        
-        const userId = userEmailMap.get(userEmail)!.id;
-        const userName = userEmailMap.get(userEmail)!.name;
-        
-        // Check if this user-app relationship already exists
-        const userAppKey = `${dbApp.id}-${userEmail}`;
-        if (!existingUserAppSet.has(userAppKey)) {
-          // This is a new user-app relationship
-          newUserApps.push({
-            appId: dbApp.id,
-            appName: dbApp.name,
-            userEmail,
-            userId,
-            userName,
-            isReviewApp
+      // Check for new apps
+      const newApps = [];
+      for (const [clientId, appInfo] of appMap.entries()) {
+        if (!existingAppMap.has(clientId)) {
+          // This is a new app
+          newApps.push({
+            clientId,
+            name: appInfo.name,
+            scopes: Array.from(appInfo.scopes),
+            userCount: appInfo.users.size,
+            riskLevel: appInfo.riskLevel,
           });
         }
       }
-    }
-    
-    console.log(`Found ${newUserApps.length} new user-app relationships for org ${org.id}`);
-    
-    // Process new user-app relationships
-    for (const newUserApp of newUserApps) {
-      try {
-        // Create user-app relationship in database
-        const { error: insertError } = await supabaseAdmin
-          .from('user_applications')
-          .insert({
-            application_id: newUserApp.appId,
-            user_id: newUserApp.userId,
-            organization_id: org.id,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        
-        if (insertError) {
-          console.error(`Error inserting user-app relationship:`, insertError);
-          continue;
+      
+      console.log(`Found ${newApps.length} new apps from Microsoft Entra for org ${org.id}`);
+      
+      // Add new apps to the database and send notifications
+      for (const newApp of newApps) {
+        try {
+          // Add app to database
+          const { data: insertedApp, error: insertError } = await supabaseAdmin
+            .from('applications')
+            .insert({
+              organization_id: org.id,
+              name: newApp.name,
+              microsoft_app_id: newApp.clientId,
+              risk_level: newApp.riskLevel,
+              total_permissions: newApp.scopes.length,
+              all_scopes: newApp.scopes,
+              user_count: newApp.userCount,
+              management_status: 'NEEDS_REVIEW',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+          
+          if (insertError) {
+            console.error(`Error inserting new app ${newApp.name}:`, insertError);
+            continue;
+          }
+          
+          console.log(`Added new app to database: ${newApp.name} (${insertedApp.id})`);
+          
+          // Send notifications to users who have enabled them
+          await sendNewAppNotifications(org, insertedApp);
+          
+        } catch (error) {
+          console.error(`Error processing new app ${newApp.name}:`, error);
         }
-        
-        console.log(`Added new user-app relationship: ${newUserApp.userEmail} - ${newUserApp.appName}`);
-        
-        // Get full app details for notification
-        const { data: app } = await supabaseAdmin
-          .from('applications')
-          .select('*')
-          .eq('id', newUserApp.appId)
-          .single();
-        
-        if (!app) {
-          console.error(`Could not find app with ID ${newUserApp.appId}`);
-          continue;
-        }
-        
-        // Send notifications
-        await sendNewUserNotifications(
-          org, 
-          app, 
-          newUserApp.userEmail, 
-          newUserApp.userName, 
-          newUserApp.isReviewApp
-        );
-        
-      } catch (error) {
-        console.error(`Error processing new user-app relationship:`, error);
       }
+      
+      // Now check for new users in existing apps
+      console.log(`Checking for new users in existing apps for org ${org.id}...`);
+      
+      // Get all existing user-app relationships for Microsoft
+      const { data: existingUserApps, error: userAppError } = await supabaseAdmin
+        .from('user_applications')
+        .select(`
+          id, 
+          application_id, 
+          user:users (email)
+        `)
+        .eq('organization_id', org.id);
+      
+      if (userAppError) {
+        console.error(`Error fetching existing user-app relationships for org ${org.id}:`, userAppError);
+        return;
+      }
+      
+      // Create a set of existing user-app combinations
+      const existingUserAppSet = new Set<string>();
+      existingUserApps?.forEach(userApp => {
+        // Access the email correctly from the nested user object
+        const key = `${userApp.application_id}-${userApp.user?.[0]?.email}`;
+        existingUserAppSet.add(key);
+      });
+      
+      // Get all users from the database
+      const { data: dbUsers, error: usersError } = await supabaseAdmin
+        .from('users')
+        .select('id, email, name')
+        .eq('organization_id', org.id);
+      
+      if (usersError) {
+        console.error(`Error fetching users for org ${org.id}:`, usersError);
+        return;
+      }
+      
+      // Create a map of email to user ID and name
+      const userEmailMap = new Map<string, { id: string, name: string }>();
+      dbUsers?.forEach(user => {
+        userEmailMap.set(user.email, { id: user.id, name: user.name || user.email });
+      });
+      
+      // Check for new user-app relationships
+      const newUserApps = [];
+      
+      for (const [clientId, appInfo] of appMap.entries()) {
+        // Skip if app doesn't exist in our database
+        if (!existingAppMap.has(clientId)) continue;
+        
+        const dbApp = existingAppMap.get(clientId);
+        const isReviewApp = dbApp.management_status === 'NEEDS_REVIEW';
+        
+        // Check each user for this app
+        for (const userEmail of appInfo.users) {
+          // Skip if user doesn't exist in our database
+          if (!userEmailMap.has(userEmail)) continue;
+          
+          const userId = userEmailMap.get(userEmail)!.id;
+          const userName = userEmailMap.get(userEmail)!.name;
+          
+          // Check if this user-app relationship already exists
+          const userAppKey = `${dbApp.id}-${userEmail}`;
+          if (!existingUserAppSet.has(userAppKey)) {
+            // This is a new user-app relationship
+            newUserApps.push({
+              appId: dbApp.id,
+              appName: dbApp.name,
+              userEmail,
+              userId,
+              userName,
+              isReviewApp
+            });
+          }
+        }
+      }
+      
+      console.log(`Found ${newUserApps.length} new user-app relationships for org ${org.id}`);
+      
+      // Process new user-app relationships
+      for (const newUserApp of newUserApps) {
+        try {
+          // Create user-app relationship in database
+          const { error: insertError } = await supabaseAdmin
+            .from('user_applications')
+            .insert({
+              application_id: newUserApp.appId,
+              user_id: newUserApp.userId,
+              organization_id: org.id,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          
+          if (insertError) {
+            console.error(`Error inserting user-app relationship:`, insertError);
+            continue;
+          }
+          
+          console.log(`Added new user-app relationship: ${newUserApp.userEmail} - ${newUserApp.appName}`);
+          
+          // Get full app details for notification
+          const { data: app } = await supabaseAdmin
+            .from('applications')
+            .select('*')
+            .eq('id', newUserApp.appId)
+            .single();
+          
+          if (!app) {
+            console.error(`Could not find app with ID ${newUserApp.appId}`);
+            continue;
+          }
+          
+          // Send notifications
+          await sendNewUserNotifications(
+            org, 
+            app, 
+            newUserApp.userEmail, 
+            newUserApp.userName, 
+            newUserApp.isReviewApp
+          );
+          
+        } catch (error) {
+          console.error(`Error processing new user-app relationship:`, error);
+        }
+      }
+      
+    } catch (error: any) {
+      console.error(`Error fetching OAuth tokens from Microsoft:`, error);
+      
+      // Update sync status to indicate authentication failure
+      await supabaseAdmin
+        .from('sync_status')
+        .insert({
+          organization_id: org.id,
+          status: 'FAILED',
+          error_message: `Authentication failed: ${error.message || 'Unknown error'}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
     }
     
   } catch (error) {
