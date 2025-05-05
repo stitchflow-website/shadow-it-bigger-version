@@ -302,6 +302,23 @@ export async function GET(request: NextRequest) {
       path: '/'
     });
 
+    // Create default notification preferences for the user
+    try {
+      await fetch(`/tools/shadow-it-scan/api/auth/create-default-preferences`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orgId: org.id,
+          userEmail: userData.userPrincipalName
+        })
+      });
+      console.log('Created default notification preferences for user');
+    } catch (prefsError) {
+      console.error('Error creating default notification preferences:', prefsError);
+      // Continue despite error - not critical
+    }
     
     // // Trigger the Microsoft sync process in the background
     // // This will run after we've already redirected the user

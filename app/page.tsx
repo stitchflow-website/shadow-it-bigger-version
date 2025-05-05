@@ -55,6 +55,8 @@ import { useRouter } from "next/navigation"
 import { FAQ } from "@/components/ui/faq"
 import { FeedbackChat } from "@/components/ui/feedback";
 import { Share } from "@/components/ui/share";
+// Import the new SettingsModal component
+import SettingsModal from "@/app/components/SettingsModal";
 
 // Type definitions
 type Application = {
@@ -154,15 +156,6 @@ export default function ShadowITDashboard() {
 
   // Add new state for settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [notificationSettings, setNotificationSettings] = useState({
-    newAppDetected: true,
-    userLimitExceeded: true,
-    userLimitThreshold: "100",
-    newUserInReviewApp: true,
-    newUserInAnyApp: true,
-    periodicReview: "3",
-    periodicReviewEnabled: true,
-  })
 
   const [authProvider, setAuthProvider] = useState<'google' | 'microsoft' | null>(null);
 
@@ -1445,14 +1438,6 @@ export default function ShadowITDashboard() {
   }
 
   // Add before the return statement
-  const handleSettingChange = (setting: string, value: string | boolean) => {
-    setNotificationSettings(prev => ({
-      ...prev,
-      [setting]: value
-    }))
-  }
-
-  // Add this function at the component level, before the return statement
   function getAppFunctionality(scopes: string[]): Set<string> {
     const functions = new Set<string>();
     scopes.forEach(scope => {
@@ -3546,129 +3531,11 @@ export default function ShadowITDashboard() {
           )}
        </main>
 
-      {/* Settings Dialog */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-md overflow-hidden">
-            <div className="flex justify-between items-center p-6 border-b border-gray-100">
-              <h2 className="text-xl font-semibold">Settings</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsSettingsOpen(false)}
-                className="hover:bg-gray-100"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            
-            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-              <h3 className="text-base font-medium text-gray-900">Customize your email notification preferences</h3>
-              
-              <div className="space-y-4">
-                {/* New App Detection */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">New App Detection</Label>
-                    <p className="text-sm text-gray-500">Get notified when a new app is detected</p>
-                  </div>
-                  <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer"
-                       onClick={() => handleSettingChange('newAppDetected', !notificationSettings.newAppDetected)}
-                       style={{ backgroundColor: notificationSettings.newAppDetected ? '#111827' : '#E5E7EB' }}>
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notificationSettings.newAppDetected ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </div>
-                </div>
-
-                {/* Needs Review Apps */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">Needs Review Apps</Label>
-                    <p className="text-sm text-gray-500">Alert when new users are added to apps needing review</p>
-                  </div>
-                  <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer"
-                       onClick={() => handleSettingChange('newUserInReviewApp', !notificationSettings.newUserInReviewApp)}
-                       style={{ backgroundColor: notificationSettings.newUserInReviewApp ? '#111827' : '#E5E7EB' }}>
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notificationSettings.newUserInReviewApp ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </div>
-                </div>
-
-                {/* New User Detection */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">New User Detection</Label>
-                    <p className="text-sm text-gray-500">Alert when any new user is added to any app</p>
-                  </div>
-                  <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer"
-                       onClick={() => handleSettingChange('newUserInAnyApp', !notificationSettings.newUserInAnyApp)}
-                       style={{ backgroundColor: notificationSettings.newUserInAnyApp ? '#111827' : '#E5E7EB' }}>
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notificationSettings.newUserInAnyApp ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </div>
-                </div>
-
-                {/* User Limit Threshold */}
-                {/* <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="font-medium">User Limit Threshold</Label>
-                      <p className="text-sm text-gray-500">Get notified when an app exceeds this many users</p>
-                    </div>
-                    <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer"
-                         onClick={() => handleSettingChange('userLimitExceeded', !notificationSettings.userLimitExceeded)}
-                         style={{ backgroundColor: notificationSettings.userLimitExceeded ? '#111827' : '#E5E7EB' }}>
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notificationSettings.userLimitExceeded ? 'translate-x-6' : 'translate-x-1'}`} />
-                    </div>
-                  </div>
-                  {notificationSettings.userLimitExceeded && (
-                    <Input
-                      type="number"
-                      value={notificationSettings.userLimitThreshold}
-                      onChange={(e) => handleSettingChange('userLimitThreshold', e.target.value)}
-                      className="w-full mt-2"
-                      min="1"
-                    />
-                  )}
-                </div> */}
-
-                {/* Periodic Review */}
-                {/* <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="font-medium">Periodic Review</Label>
-                      <p className="text-sm text-gray-500">Schedule regular reviews of all applications</p>
-                    </div>
-                    <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 cursor-pointer"
-                         onClick={() => handleSettingChange('periodicReviewEnabled', !notificationSettings.periodicReviewEnabled)}
-                         style={{ backgroundColor: notificationSettings.periodicReviewEnabled ? '#111827' : '#E5E7EB' }}>
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notificationSettings.periodicReviewEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                    </div>
-                  </div>
-                  {notificationSettings.periodicReviewEnabled && (
-                    <select
-                      value={notificationSettings.periodicReview}
-                      onChange={(e) => handleSettingChange('periodicReview', e.target.value)}
-                      className="w-full h-10 px-3 mt-2 rounded-lg border border-gray-200 bg-white text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
-                    >
-                      <option value="1">Every Month</option>
-                      <option value="2">Every 2 Months</option>
-                      <option value="3">Every 3 Months</option>
-                      <option value="6">Every 6 Months</option>
-                    </select>
-                  )}
-                </div> */}
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
-              <Button variant="outline" onClick={() => setIsSettingsOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => setIsSettingsOpen(false)}>
-                Save Changes
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Use the new SettingsModal component */}
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+      />
 
       <div className="max-w-[70rem] mx-auto px-4 sm:px-8">
           <h2 className="text-2xl font-semibold mb-8 sm:mb-14 text-gray-900 text-center mt-11">

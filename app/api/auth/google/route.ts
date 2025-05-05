@@ -253,6 +253,24 @@ export async function GET(request: Request) {
       console.error('Error triggering background sync:', error);
     });
 
+    // Create default notification preferences for the user
+    try {
+      await fetch(`/tools/shadow-it-scan/api/auth/create-default-preferences`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orgId: org.id,
+          userEmail: userInfo.email
+        })
+      });
+      console.log('Created default notification preferences for user');
+    } catch (prefsError) {
+      console.error('Error creating default notification preferences:', prefsError);
+      // Continue despite error - not critical
+    }
+
     return response;
   } catch (error) {
     console.error('Auth error:', error);
