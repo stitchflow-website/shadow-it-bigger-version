@@ -248,7 +248,8 @@ export async function GET(request: Request) {
         
         // Send webhook notification for successful signup (only for new users)
         if (isNewUser) {
-          sendSuccessSignupWebhook(userInfo.email, userInfo.name, 'google');
+          console.log('Sending webhook notification for successful signup');
+          sendSuccessSignupWebhook(userInfo.email, userInfo.name);
         }
       })
       .catch((error: Error) => {
@@ -276,7 +277,7 @@ export async function GET(request: Request) {
 
     // Create default notification preferences for the user
     try {
-      await fetch(`/tools/shadow-it-scan/api/auth/create-default-preferences`, {
+      await fetch(`https://www.stitchflow.com/tools/shadow-it-scan/api/auth/create-default-preferences`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
