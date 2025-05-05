@@ -17,6 +17,7 @@ export function middleware(request: NextRequest) {
     '/tools/shadow-it-scan/api/background/sync/users',
     '/tools/shadow-it-scan/api/background/sync/relations',
     '/tools/shadow-it-scan/api/background/sync/categorize',
+    '/tools/shadow-it-scan/api/background/check-notifications',
     '/api/background/sync',
     '/api/background/sync/users',
     '/api/background/sync/tokens',

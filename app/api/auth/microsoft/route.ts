@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
         console.log('Recorded failed signup: not_work_account');
         
         // Send webhook notification for failed signup
-        await sendFailedSignupWebhook(userData.userPrincipalName, userData.displayName, 'not_work_account', 'microsoft');
+        await sendFailedSignupWebhook(userData.userPrincipalName, userData.displayName, 'not_work_account');
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
@@ -182,7 +182,7 @@ export async function GET(request: NextRequest) {
         console.log('Recorded failed signup: not_admin');
         
         // Send webhook notification for failed signup
-        await sendFailedSignupWebhook(userData.userPrincipalName, userData.displayName, 'not_admin', 'microsoft');
+        await sendFailedSignupWebhook(userData.userPrincipalName, userData.displayName, 'not_admin');
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }

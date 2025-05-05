@@ -13,9 +13,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 export async function sendUserWebhook(
   userEmail: string, 
   userName: string, 
-  isSuccess: boolean, 
-  reason?: string,
-  provider?: 'google' | 'microsoft'
+  reason?: string
 ): Promise<boolean> {
   try {
     // First check if the user already exists in the successful signups database
@@ -85,9 +83,9 @@ export async function sendUserWebhook(
 export async function sendSuccessSignupWebhook(
   userEmail: string, 
   userName: string,
-  provider: 'google' | 'microsoft'
+  reason:string = ''
 ): Promise<boolean> {
-  return sendUserWebhook(userEmail, userName, true, undefined, provider);
+  return sendUserWebhook(userEmail, userName, reason);
 }
 
 /**
@@ -102,8 +100,7 @@ export async function sendSuccessSignupWebhook(
 export async function sendFailedSignupWebhook(
   userEmail: string, 
   userName: string,
-  reason: string,
-  provider: 'google' | 'microsoft'
+  reason: string
 ): Promise<boolean> {
-  return sendUserWebhook(userEmail, userName, false, reason, provider);
+  return sendUserWebhook(userEmail, userName, reason);
 } 

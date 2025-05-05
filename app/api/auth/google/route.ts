@@ -109,7 +109,7 @@ export async function GET(request: Request) {
         console.log('Recorded failed signup: not_workspace_account');
         
         // Send webhook notification for failed signup
-        await sendFailedSignupWebhook(userInfo.email, userInfo.name, 'not_workspace_account', 'google');
+        await sendFailedSignupWebhook(userInfo.email, userInfo.name, 'not_workspace_account');
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
@@ -144,7 +144,7 @@ export async function GET(request: Request) {
         console.log('Recorded failed signup: not_admin');
         
         // Send webhook notification for failed signup
-        await sendFailedSignupWebhook(userInfo.email, userInfo.name, 'not_admin', 'google');
+        await sendFailedSignupWebhook(userInfo.email, userInfo.name, 'not_admin');
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
