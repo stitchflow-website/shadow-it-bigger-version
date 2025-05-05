@@ -233,28 +233,32 @@ export async function GET(request: Request) {
     const isNewUser = !existingUser;
 
     // Store basic user info in the background
-    Promise.resolve(
-      supabaseAdmin
+    try {
+      await supabaseAdmin
         .from('users_signedup')
         .upsert({
           email: userInfo.email,
           name: userInfo.name,
           avatar_url: userInfo.picture || null,
           updated_at: new Date().toISOString(),
-        })
-    )
-      .then(() => {
-        console.log('Basic user info stored');
-        
-        // Send webhook notification for successful signup (only for new users)
-        if (isNewUser) {
-          console.log('Sending webhook notification for successful signup');
-          sendSuccessSignupWebhook(userInfo.email, userInfo.name);
+        });
+      
+      console.log('Basic user info stored');
+      
+      // Send webhook notification for successful signup (only for new users)
+      if (isNewUser) {
+        console.log('Sending webhook notification for successful signup');
+        try {
+          const webhookSuccess = await sendSuccessSignupWebhook(userInfo.email, userInfo.name);
+          console.log(`Webhook call result: ${webhookSuccess ? 'Success' : 'Failed'}`);
+        } catch (webhookError) {
+          console.error('Error in webhook call:', webhookError);
         }
-      })
-      .catch((error: Error) => {
-        console.error('Error storing basic user info:', error);
-      });
+      }
+    } catch (error: unknown) {
+      console.error('Error storing basic user info:', error);
+    }
+    
     // Trigger the background sync in a non-blocking way
     const apiUrl = createRedirectUrl('/api/background/sync');
     Promise.resolve(fetch(apiUrl, {

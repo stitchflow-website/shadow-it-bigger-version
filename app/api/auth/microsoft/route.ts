@@ -112,7 +112,12 @@ export async function GET(request: NextRequest) {
         console.log('Recorded failed signup: not_work_account');
         
         // Send webhook notification for failed signup
-        await sendFailedSignupWebhook(userData.userPrincipalName, userData.displayName, 'not_work_account');
+        try {
+          const webhookResult = await sendFailedSignupWebhook(userData.userPrincipalName, userData.displayName, 'not_work_account');
+          console.log(`Failed signup webhook result: ${webhookResult ? 'Success' : 'Failed'}`);
+        } catch (webhookError) {
+          console.error('Error sending failed signup webhook:', webhookError);
+        }
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
@@ -182,7 +187,12 @@ export async function GET(request: NextRequest) {
         console.log('Recorded failed signup: not_admin');
         
         // Send webhook notification for failed signup
-        await sendFailedSignupWebhook(userData.userPrincipalName, userData.displayName, 'not_admin');
+        try {
+          const webhookResult = await sendFailedSignupWebhook(userData.userPrincipalName, userData.displayName, 'not_admin');
+          console.log(`Failed signup webhook result (not_admin): ${webhookResult ? 'Success' : 'Failed'}`);
+        } catch (webhookError) {
+          console.error('Error sending failed signup webhook (not_admin):', webhookError);
+        }
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
@@ -222,7 +232,12 @@ export async function GET(request: NextRequest) {
 
     // If this is a new user, send webhook notification
     if (isNewUser) {
-      await sendSuccessSignupWebhook(userData.userPrincipalName, userData.displayName, 'microsoft');
+      try {
+        const webhookResult = await sendSuccessSignupWebhook(userData.userPrincipalName, userData.displayName, 'microsoft');
+        console.log(`Success signup webhook result: ${webhookResult ? 'Success' : 'Failed'}`);
+      } catch (webhookError) {
+        console.error('Error sending success signup webhook:', webhookError);
+      }
     }
 
     // Create organization based on email domain
@@ -350,10 +365,9 @@ export async function GET(request: NextRequest) {
       console.error('Error triggering Microsoft sync:', error);
     });
     
-
     return response;
   } catch (error) {
     console.error('Auth error:', error);
     return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=unknown', request.url));
   }
-} 
+}
