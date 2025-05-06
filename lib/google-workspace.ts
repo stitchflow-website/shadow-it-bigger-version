@@ -55,9 +55,10 @@ export class GoogleWorkspaceService {
 
   /**
    * Refreshes the access token if it's expired or about to expire
+   * @param force If true, forces a token refresh regardless of expiry time
    * @returns Object with refreshed tokens or null if refresh wasn't needed
    */
-  async refreshAccessToken() {
+  async refreshAccessToken(force = false) {
     try {
       // Check if we have a refresh token and if the access token is expired or about to expire
       const credentials = this.oauth2Client.credentials;
@@ -72,7 +73,7 @@ export class GoogleWorkspaceService {
       const expiryDate = credentials.expiry_date as number;
       const fiveMinutesInMs = 5 * 60 * 1000;
       
-      if (!expiryDate || now >= expiryDate - fiveMinutesInMs) {
+      if (force || !expiryDate || now >= expiryDate - fiveMinutesInMs) {
         console.log('Access token expired or about to expire, refreshing...');
         
         // Request a new access token

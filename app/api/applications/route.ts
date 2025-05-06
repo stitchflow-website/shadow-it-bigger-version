@@ -144,6 +144,7 @@ export async function GET(request: Request) {
     // Transform the data to match the frontend structure
     const transformedApplications = (applications as ApplicationType[]).map(app => {
       // Get valid user applications (where user exists)
+      console.log(app.management_status);
       const validUserApplications = (app.user_applications || [])
         .filter(ua => ua.user != null && ua.scopes != null);
 
@@ -209,9 +210,9 @@ export async function GET(request: Request) {
 
 function transformManagementStatus(status: string): 'Managed' | 'Unmanaged' | 'Needs Review' {
   const map: Record<string, 'Managed' | 'Unmanaged' | 'Needs Review'> = {
-    'MANAGED': 'Managed',
-    'UNMANAGED': 'Unmanaged',
-    'PENDING': 'Needs Review'
+    'Managed': 'Managed',
+    'Unmanaged': 'Unmanaged',
+    'Needs Review': 'Needs Review'
   };
   return map[status] || 'Needs Review';
 }

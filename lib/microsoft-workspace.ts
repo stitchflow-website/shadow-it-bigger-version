@@ -107,13 +107,23 @@ export class MicrosoftWorkspaceService {
 
   /**
    * Refreshes the access token using the refresh token
+   * @param force If true, forces a token refresh regardless of expiry status
    * @returns Object with the new tokens or null if refresh wasn't needed/possible
    */
-  async refreshAccessToken() {
+  async refreshAccessToken(force = false) {
     try {
       // Check if we have a refresh token
       if (!this.currentTokens || !this.currentTokens.refresh_token) {
         console.log('No refresh token available for Microsoft, cannot refresh');
+        return null;
+      }
+
+      // Check if token is expired or we're forcing a refresh
+      const now = Date.now();
+      const isExpired = !this.currentTokens.expires_at || now >= this.currentTokens.expires_at;
+      
+      if (!force && !isExpired) {
+        console.log('Microsoft access token still valid, no refresh needed');
         return null;
       }
 

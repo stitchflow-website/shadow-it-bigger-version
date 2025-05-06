@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     // Get all organizations
     const { data: organizations, error: orgError } = await supabaseAdmin
       .from('organizations')
-      .select('id, name, domain, google_org_id');
+      .select('id, name, domain, google_org_id, auth_provider');
 
     if (orgError) {
       console.error('Error fetching organizations:', orgError);
@@ -54,10 +54,38 @@ export async function POST(request: Request) {
       console.log(`Processing organization: ${org.id} (${org.name})`);
       
       // Check for new Google apps and users
-      await processGoogleWorkspace(org);
+      if (org.auth_provider === 'google') {
+        await processGoogleWorkspace(org);
+      }
       
       // Check for Microsoft apps and users
-      await processMicrosoftEntra(org);
+      if (org.auth_provider === 'microsoft') {
+        await processMicrosoftEntra(org);
+      }
+    }
+
+    // Process other notification types that don't rely on direct API calls
+    console.log('Processing additional notification types...');
+    
+    try {
+      await processNewAppNotifications();
+    } catch (error) {
+      console.error('Error in processNewAppNotifications:', error);
+      // Continue with other notification types
+    }
+    
+    try {
+      await processNewUserNotifications();
+    } catch (error) {
+      console.error('Error in processNewUserNotifications:', error);
+      // Continue with other notification types
+    }
+    
+    try {
+      await processNewUserReviewNotifications();
+    } catch (error) {
+      console.error('Error in processNewUserReviewNotifications:', error);
+      // Continue with other notification types
     }
 
     return NextResponse.json({ 
@@ -523,9 +551,10 @@ async function processGoogleWorkspace(org: any) {
       expiry_date: latestSync.token_expiry || Date.now() + 3600 * 1000
     });
     
-    // Try to refresh the token before making any API calls
+    // Always try to refresh the token before making any API calls, regardless of expiry
     try {
-      const refreshedTokens = await googleService.refreshAccessToken();
+      console.log(`Forcing token refresh for org ${org.id}...`);
+      const refreshedTokens = await googleService.refreshAccessToken(true);
       
       // If tokens were refreshed, update them in the database
       if (refreshedTokens) {
@@ -544,10 +573,25 @@ async function processGoogleWorkspace(org: any) {
         if (updateError) {
           console.error(`Error updating refreshed tokens in database:`, updateError);
         }
+      } else {
+        console.log(`No refreshed tokens returned for org ${org.id}`);
       }
     } catch (refreshError) {
       console.error(`Error refreshing tokens for org ${org.id}:`, refreshError);
-      // Continue with the existing tokens, they might still work
+      
+      // Update sync status to indicate authentication failure
+      await supabaseAdmin
+        .from('sync_status')
+        .insert({
+          organization_id: org.id,
+          status: 'FAILED',
+          error_message: `Token refresh failed: ${refreshError instanceof Error ? refreshError.message : 'Unknown error'}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      
+      console.log(`Marked sync status as FAILED for org ${org.id} due to token refresh failure`);
+      return; // Exit early as we can't proceed without valid tokens
     }
     
     // Fetch current apps from Google Workspace
@@ -910,9 +954,10 @@ async function processMicrosoftEntra(org: any) {
       expires_at: latestSync.token_expiry || Date.now() + 3600 * 1000
     });
     
-    // Try to refresh the token before making any API calls
+    // Always try to refresh the token before making any API calls, regardless of expiry
     try {
-      const refreshedTokens = await microsoftService.refreshAccessToken();
+      console.log(`Forcing Microsoft token refresh for org ${org.id}...`);
+      const refreshedTokens = await microsoftService.refreshAccessToken(true);
       
       // If tokens were refreshed, update them in the database
       if (refreshedTokens) {
@@ -931,10 +976,25 @@ async function processMicrosoftEntra(org: any) {
         if (updateError) {
           console.error(`Error updating refreshed Microsoft tokens in database:`, updateError);
         }
+      } else {
+        console.log(`No refreshed Microsoft tokens returned for org ${org.id}`);
       }
     } catch (refreshError) {
       console.error(`Error refreshing Microsoft tokens for org ${org.id}:`, refreshError);
-      // Continue with the existing tokens, they might still work
+      
+      // Update sync status to indicate authentication failure
+      await supabaseAdmin
+        .from('sync_status')
+        .insert({
+          organization_id: org.id,
+          status: 'FAILED',
+          error_message: `Microsoft token refresh failed: ${refreshError instanceof Error ? refreshError.message : 'Unknown error'}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      
+      console.log(`Marked sync status as FAILED for org ${org.id} due to Microsoft token refresh failure`);
+      return; // Exit early as we can't proceed without valid tokens
     }
     
     // Fetch current apps from Microsoft Entra
