@@ -17,6 +17,51 @@ async function updateSyncStatus(syncId: string, progress: number, message: strin
     .eq('id', syncId);
 }
 
+// Helper function to wait for users with exponential backoff
+async function waitForUsers(organization_id: string, sync_id: string, maxAttempts = 5): Promise<any[]> {
+  let attempt = 1;
+  let delay = 2000; // Start with 2 seconds
+
+  while (attempt <= maxAttempts) {
+    console.log(`[Tokens ${sync_id}] Checking for users attempt ${attempt}/${maxAttempts}`);
+    
+    const { data: fetchedUsers, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, google_user_id, email')
+      .eq('organization_id', organization_id);
+
+    if (userError) {
+      console.error(`[Tokens ${sync_id}] Error fetching users:`, userError);
+      throw userError;
+    }
+
+    if (fetchedUsers && fetchedUsers.length > 0) {
+      console.log(`[Tokens ${sync_id}] Found ${fetchedUsers.length} users on attempt ${attempt}`);
+      return fetchedUsers;
+    }
+
+    // Check sync status to see if user sync failed
+    const { data: syncStatus } = await supabaseAdmin
+      .from('sync_status')
+      .select('status, message')
+      .eq('id', sync_id)
+      .single();
+
+    if (syncStatus?.status === 'FAILED') {
+      throw new Error(`User sync failed: ${syncStatus.message}`);
+    }
+
+    console.log(`[Tokens ${sync_id}] No users found yet, waiting ${delay/1000} seconds...`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    
+    // Exponential backoff with max of 10 seconds
+    delay = Math.min(delay * 2, 10000);
+    attempt++;
+  }
+
+  throw new Error('Timeout waiting for users to be processed');
+}
+
 // Helper function to extract scopes from a token
 function extractScopesFromToken(token: any): string[] {
   // If token is undefined or null, return empty array
@@ -129,7 +174,6 @@ async function processTokens(
       redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
     });
 
-    console.log(`[Tokens ${sync_id}] Setting credentials`);
     await googleService.setCredentials({ 
       access_token,
       refresh_token
@@ -138,57 +182,26 @@ async function processTokens(
     // Create a user map if one was not provided
     let userMap = new Map<string, string>();
     if (!users || users.length === 0) {
-      console.log(`[Tokens ${sync_id}] No user mapping provided, fetching from database`);
+      console.log(`[Tokens ${sync_id}] No user mapping provided, waiting for users in database`);
       
-      // Try multiple times to fetch users in case they're still being processed
-      let retryCount = 0;
-      const maxRetries = 3;
-      let dbUsers = null;
-      
-      while (retryCount < maxRetries) {
-        // First try to fetch users with their Google user IDs
-        const { data: fetchedUsers, error: userError } = await supabaseAdmin
-          .from('users')
-          .select('id, google_user_id, email')
-          .eq('organization_id', organization_id);
+      try {
+        const dbUsers = await waitForUsers(organization_id, sync_id);
         
-        if (userError) {
-          console.error(`[Tokens ${sync_id}] Error fetching users:`, userError);
-          break;
-        }
-          
-        if (fetchedUsers && fetchedUsers.length > 0) {
-          console.log(`[Tokens ${sync_id}] Found ${fetchedUsers.length} users in the database`);
-          dbUsers = fetchedUsers;
-          break;
-        } else {
-          retryCount++;
-          if (retryCount < maxRetries) {
-            console.log(`[Tokens ${sync_id}] No users found yet, waiting for users to be processed (attempt ${retryCount}/${maxRetries})...`);
-            await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds before retrying
-          } else {
-            console.warn(`[Tokens ${sync_id}] No users found after ${maxRetries} attempts`);
-          }
-        }
-      }
-      
-      if (dbUsers && dbUsers.length > 0) {
-        // Map users by Google ID
+        // Map users by Google ID and email
         dbUsers.forEach(user => {
           if (user.google_user_id) {
             userMap.set(user.google_user_id, user.id);
           }
-          // Also map by email as a fallback
           if (user.email) {
             userMap.set(user.email.toLowerCase(), user.id);
           }
         });
         
-        // Log first few entries for debugging
-        const mapEntries = Array.from(userMap.entries()).slice(0, 5);
-        console.log(`[Tokens ${sync_id}] Sample user map entries:`, mapEntries);
-      } else {
-        console.warn(`[Tokens ${sync_id}] No users found in the database for organization ${organization_id}`);
+        console.log(`[Tokens ${sync_id}] Successfully mapped ${userMap.size} users`);
+      } catch (error) {
+        console.error(`[Tokens ${sync_id}] Error waiting for users:`, error);
+        await updateSyncStatus(sync_id, -1, `Failed to get users: ${(error as Error).message}`, 'FAILED');
+        throw error;
       }
     } else {
       console.log(`[Tokens ${sync_id}] Using provided user mapping with ${users.length} entries`);
@@ -459,18 +472,17 @@ async function processTokens(
     console.log(`Triggering relations processing at: ${nextUrl}`);
     console.log(`Prepared ${userAppRelationsToProcess.length} user-app relations and ${appMap.length} app mappings`);
     
-    // If no relations were found, log the issue and complete
+    // Modified completion handling - don't mark as COMPLETED here
     if (userAppRelationsToProcess.length === 0) {
       console.warn(`[Tokens ${sync_id}] No user-application relations to process - check user mapping and token data`);
       await updateSyncStatus(
         sync_id, 
         90, 
-        `Completed with partial data. No user-application relations could be created - user IDs may not match.`,
-        'COMPLETED'
+        `Processing complete. No user-application relations could be created - user IDs may not match.`
       );
       return;
     }
-    
+
     try {
       const nextResponse = await fetch(nextUrl, {
         method: 'POST',
@@ -490,29 +502,28 @@ async function processTokens(
         console.error(`Failed to trigger relations processing: ${nextResponse.status} ${nextResponse.statusText}`);
         console.error(`Response details: ${errorText}`);
         
-        // Despite the error, mark as partially complete since we have user and app data
         await updateSyncStatus(
           sync_id, 
           90, 
-          `Completed with partial data. User and app information was saved, but relationships could not be processed.`,
-          'COMPLETED'
+          `Processing complete. User and app information was saved, but relationships could not be processed.`
         );
         return;
       }
       
       console.log(`[Tokens ${sync_id}] Token processing completed successfully`);
-    } catch (error: any) {
-      console.error(`[Tokens ${sync_id}] Error triggering relations processing:`, error);
-      
-      // Mark as partially complete
       await updateSyncStatus(
         sync_id, 
         90, 
-        `Completed with partial data. User and app information was saved, but relationships could not be processed: ${error.message}`,
-        'COMPLETED'
+        `Token processing complete, finalizing data...`
+      );
+    } catch (error) {
+      console.error(`[Tokens ${sync_id}] Error triggering relations processing:`, error);
+      await updateSyncStatus(
+        sync_id, 
+        90, 
+        `Processing complete with issues. Some relationships could not be processed: ${(error as Error).message}`
       );
     }
-    
   } catch (error: any) {
     console.error(`[Tokens ${sync_id}] Error in token processing:`, error);
     throw error;

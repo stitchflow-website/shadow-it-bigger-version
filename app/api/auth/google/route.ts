@@ -231,6 +231,7 @@ export async function GET(request: Request) {
         google_org_id: orgId,
         name: userInfo.hd,
         domain: userInfo.hd,
+        auth_provider: 'google',
         updated_at: new Date().toISOString(),
         first_admin: isNewUser ? userInfo.email : undefined,
       }, { onConflict: 'google_org_id' })
