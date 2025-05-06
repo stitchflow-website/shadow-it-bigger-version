@@ -175,7 +175,7 @@ export default function ShadowITDashboard() {
   // Helper function to redirect to Google consent screen
   const redirectToGoogleConsent = () => {
     const redirectURI = typeof window !== 'undefined' 
-      ? `${window.location.origin}/tools/shadow-it-scan/api/auth/google` 
+      ? `https://stitchflow.com/tools/shadow-it-scan/api/auth/google` 
       : '';
     
     const scopes = [
@@ -205,7 +205,7 @@ export default function ShadowITDashboard() {
   // Helper function to redirect to Microsoft consent screen
   const redirectToMicrosoftConsent = () => {
     const redirectURI = typeof window !== 'undefined' 
-      ? `${window.location.origin}/api/auth/microsoft` 
+      ? `https://stitchflow.com/tools/shadow-it-scan/api/auth/microsoft` 
       : '';
     
     const scopes = [
