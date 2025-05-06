@@ -208,20 +208,17 @@ export async function GET(request: Request) {
     // Create the response with redirect
     const response = NextResponse.redirect(redirectUrl);
 
-    // Set necessary cookies - using consistent naming convention
-    response.cookies.set('orgId', org.id, {
-      httpOnly: true,
+    // Set necessary cookies with environment-aware settings
+    const cookieOptions = {
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/'
-    });
+      sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
+      path: '/',
+      domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
+    };
+
+    response.cookies.set('orgId', org.id, cookieOptions);
     
-    response.cookies.set('userEmail', userInfo.email, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/'
-    });
+    response.cookies.set('userEmail', userInfo.email, cookieOptions);
 
     // Check if user already exists before storing info and sending webhook
     const { data: existingUser } = await supabaseAdmin
