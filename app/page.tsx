@@ -2161,7 +2161,7 @@ export default function ShadowITDashboard() {
                   <div className="flex items-center gap-2">
                     <span className="text-yellow-500">👋</span>
                     <p className="text-gray-200">
-                    This is a preview of the app. Sign in to begin the Shadow IT scan for your workspace.
+                    This is a preview of the app. Get started with the Shadow IT scan for your workspace
                     </p>
                   </div>
                   <Button
@@ -2171,7 +2171,7 @@ export default function ShadowITDashboard() {
                     variant="outline"
                     className="w-full sm:w-auto bg-white hover:bg-white/90 text-black border-white hover:text-black transition-colors"
                   >
-                    Get Started for Free
+                    Sign in
                   </Button>
                 </div>
               </div>
