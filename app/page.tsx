@@ -179,11 +179,12 @@ export default function ShadowITDashboard() {
       : '';
     
     const scopes = [
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile',
+      'openid',
+      'profile',
+      'email',
       'https://www.googleapis.com/auth/admin.directory.user.readonly',
-      'https://www.googleapis.com/auth/admin.directory.group.readonly',
-      'https://www.googleapis.com/auth/admin.directory.domain.readonly'
+      'https://www.googleapis.com/auth/admin.directory.domain.readonly',
+      'https://www.googleapis.com/auth/admin.directory.user.security',
     ];
     
     const state = Math.random().toString(36).substring(2, 15);
