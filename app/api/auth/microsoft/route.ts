@@ -73,13 +73,6 @@ export async function GET(request: NextRequest) {
     const { access_token, refresh_token, id_token } = tokenData;
     console.log('Tokens received successfully');
     
-    // If we don't have a refresh token, the user probably used prompt=none
-    // We need a refresh token for background syncs to work, so redirect to auth with prompt=consent
-    if (!refresh_token) {
-      console.error('No refresh token received - likely due to prompt=none. Forcing consent flow.');
-      return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
-    }
-
     // Get user info using the access token
     console.log('Fetching user data...');
     const userResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
@@ -96,6 +89,69 @@ export async function GET(request: NextRequest) {
     const userData = await userResponse.json();
     console.log('Microsoft user data:', userData);
     
+    // If we don't have a refresh token, the user probably used prompt=none
+    // We need a refresh token for background syncs to work, so redirect to auth with prompt=consent
+    if (!refresh_token) {
+      console.error('No refresh token received - likely due to prompt=none. Forcing consent flow.');
+      
+      // Check if the user already exists in our database
+      const { data: existingUser } = await supabaseAdmin
+        .from('users_signedup')
+        .select('id, email')
+        .eq('email', userData.userPrincipalName)
+        .single();
+      
+      console.log('Checking if user exists:', existingUser ? 'Yes' : 'No');
+      
+      if (existingUser) {
+        // First try to find organization by domain
+        const emailDomain = userData.userPrincipalName.split('@')[1];
+        let { data: userOrg } = await supabaseAdmin
+          .from('organizations')
+          .select('id')
+          .eq('domain', emailDomain)
+          .single();
+          
+        // If not found by domain, try finding by first_admin
+        if (!userOrg) {
+          const { data: orgByAdmin } = await supabaseAdmin
+            .from('organizations')
+            .select('id')
+            .eq('first_admin', userData.userPrincipalName)
+            .single();
+            
+          userOrg = orgByAdmin;
+        }
+        
+        if (userOrg) {
+          console.log('User already exists and has organization, redirecting to dashboard');
+          
+          // Create response with redirect directly to dashboard
+          const response = NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/');
+          
+          // Set necessary cookies
+          response.cookies.set('orgId', userOrg.id, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/'
+          });
+          
+          response.cookies.set('userEmail', userData.userPrincipalName, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/'
+          });
+          
+          return response;
+        }
+      }
+      
+      // If user doesn't exist or we couldn't find their organization, force consent flow
+      return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
+    }
+
     // Check if it's a work/school account by looking for onPremisesSamAccountName
     const isWorkAccount = userData.userPrincipalName?.includes('#EXT#') === false && 
                           userData.userPrincipalName?.toLowerCase().endsWith('@outlook.com') === false &&
@@ -281,7 +337,8 @@ export async function GET(request: NextRequest) {
         .insert({
           name: emailDomain,
           domain: emailDomain,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          first_admin: userData.userPrincipalName // Set first admin for new organizations
         })
         .select('id')
         .single();
@@ -397,7 +454,7 @@ export async function GET(request: NextRequest) {
     // Create the response with redirect
     const response = NextResponse.redirect(redirectUrl);
 
-    // Set necessary cookies - using consistent naming convention
+    // Set necessary cookies
     response.cookies.set('orgId', org.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

@@ -1714,80 +1714,81 @@ export default function ShadowITDashboard() {
     
     // Add useEffect to check URL for error parameters
     useEffect(() => {
-      const searchParams = new URLSearchParams(window.location.search);
-      const errorParam = searchParams.get('error');
+      const checkErrorParam = () => {
+        // Only run in browser environment
+        if (typeof window === 'undefined') return;
+        
+        const searchParams = new URLSearchParams(window.location.search);
+        const errorParam = searchParams.get('error');
+        
+        if (errorParam) {
+          // Handle interaction_required error by retrying with consent prompt
+          if (errorParam === 'interaction_required' || errorParam === 'login_required' || errorParam === 'consent_required') {
+            // Get the auth provider from localStorage
+            const provider = localStorage.getItem('auth_provider');
+            
+            // Set error message
+            setError('We need to refresh your permissions. Please grant access again.');
+            
+            // Show the login modal
+            setShowLoginModal(true);
+            
+            return;
+          }
+          
+          // Handle missing data errors - also need to force consent
+          if (errorParam === 'missing_data' || errorParam === 'data_refresh_required') {
+            // Get the auth provider from localStorage
+            const provider = localStorage.getItem('auth_provider');
+            
+            // Show explanation to user
+            setError('We need to refresh your data access. Please grant permission again.');
+            
+            // Show the login modal
+            setShowLoginModal(true);
+            
+            return;
+          }
+          
+          switch (errorParam) {
+            case 'no_code':
+              setError('No authorization code received. Please try again.');
+              break;
+            case 'auth_failed':
+              setError('Authentication failed. Please try again.');
+              break;
+            case 'not_workspace_account':
+              setError('Please sign in with a Google Workspace account. Personal Gmail accounts are not supported');
+              break;
+            case 'not_work_account':
+              setError('Please sign in with a Microsoft 365 workspace account. Personal accounts are not supported');
+              break;
+            case 'admin_required':
+              setError('Please sign in with an admin account that has appropriate permissions.');
+              break;
+            case 'config_missing':
+              setError('Authentication configuration is missing. Please contact support.');
+              break;
+            default:
+              setError('An error occurred during authentication. Please try again or contact support');
+          }
+          
+          // Show the login modal if there was an error
+          setShowLoginModal(true);
+        }
+      };
       
-      if (errorParam) {
-        // Handle interaction_required error by retrying with consent prompt
-        if (errorParam === 'interaction_required' || errorParam === 'login_required' || errorParam === 'consent_required') {
-          // Get the auth provider from localStorage
-          const provider = localStorage.getItem('auth_provider');
-          
-          // Remove error parameter from URL
-          const cleanUrl = new URL(window.location.href);
-          cleanUrl.searchParams.delete('error');
-          window.history.replaceState({}, typeof document !== 'undefined' ? document.title : '', cleanUrl.toString());
-          
-          // Set error message
-          setError('We need to refresh your permissions. Please grant access again.');
-          
-          // Show the login modal
-          setShowLoginModal(true);
-          
-          return;
-        }
-        
-        // Handle missing data errors - also need to force consent
-        if (errorParam === 'missing_data' || errorParam === 'data_refresh_required') {
-          // Get the auth provider from localStorage
-          const provider = localStorage.getItem('auth_provider');
-          
-          // Remove error parameter from URL
-          const cleanUrl = new URL(window.location.href);
-          cleanUrl.searchParams.delete('error');
-          window.history.replaceState({}, typeof document !== 'undefined' ? document.title : '', cleanUrl.toString());
-          
-          // Show explanation to user
-          setError('We need to refresh your data access. Please grant permission again.');
-          
-          // Show the login modal
-          setShowLoginModal(true);
-          
-          return;
-        }
-        
-        switch (errorParam) {
-          case 'no_code':
-            setError('No authorization code received. Please try again.');
-            break;
-          case 'auth_failed':
-            setError('Authentication failed. Please try again.');
-            break;
-          case 'not_workspace_account':
-            setError('Please sign in with a Google Workspace account. Personal Gmail accounts are not supported');
-            break;
-          case 'not_work_account':
-            setError('Please sign in with a Microsoft 365 workspace account. Personal accounts are not supported');
-            break;
-          case 'admin_required':
-            setError('Please sign in with an admin account that has appropriate permissions.');
-            break;
-          case 'config_missing':
-            setError('Authentication configuration is missing. Please contact support.');
-            break;
-          default:
-            setError('An error occurred during authentication. Please try again or contact support');
-        }
-        
-        // Show the login modal if there was an error
-        setShowLoginModal(true);
-        
-        // Clean up the URL by removing the error parameter
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete('error');
-        window.history.replaceState({}, typeof document !== 'undefined' ? document.title : '', cleanUrl.toString());
-      }
-    }, []);
+      // Run the check when component mounts
+      checkErrorParam();
+      
+      // Also set up an event listener for URL changes (in case of SPA navigation)
+      window.addEventListener('popstate', checkErrorParam);
+      
+      // Cleanup
+      return () => {
+        window.removeEventListener('popstate', checkErrorParam);
+      };
+    }, []); // Empty dependency array means this runs once on mount
 
     const handleGoogleLogin = () => {
       try {
@@ -1822,9 +1823,13 @@ export default function ShadowITDashboard() {
         // Check if we have an error that indicates we need fresh consent
         const searchParams = new URLSearchParams(window.location.search);
         const errorParam = searchParams.get('error');
+        
+        // Always use consent when data_refresh_required is present
+        // or if we're in the error modal
         const needsConsent = errorParam === 'data_refresh_required' || 
                              errorParam === 'missing_data' ||
-                             errorParam === 'interaction_required';
+                             errorParam === 'interaction_required' ||
+                             error !== null; // If there's any error, force consent
 
         const promptMode = needsConsent ? 'consent' : 'none';
         console.log(`Using prompt mode: ${promptMode} based on error: ${errorParam}`);
@@ -1839,6 +1844,13 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
 
         localStorage.setItem('auth_provider', 'google');
+
+        // Before redirecting, clean URL by removing error parameter
+        if (errorParam) {
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('error');
+          window.history.replaceState({}, document.title, cleanUrl.toString());
+        }
 
         window.location.href = authUrl.toString();
       } catch (err) {
@@ -1891,9 +1903,13 @@ export default function ShadowITDashboard() {
         // Check if we have an error that indicates we need fresh consent
         const searchParams = new URLSearchParams(window.location.search);
         const errorParam = searchParams.get('error');
+        
+        // Always use consent when data_refresh_required is present
+        // or if we're in the error modal
         const needsConsent = errorParam === 'data_refresh_required' || 
                              errorParam === 'missing_data' ||
-                             errorParam === 'interaction_required';
+                             errorParam === 'interaction_required' ||
+                             error !== null; // If there's any error, force consent
 
         const promptMode = needsConsent ? 'consent' : 'none';
         console.log(`Using prompt mode: ${promptMode} based on error: ${errorParam}`);
@@ -1908,115 +1924,14 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
 
         localStorage.setItem('auth_provider', 'microsoft');
-        window.location.href = authUrl.toString();
-      } catch (err) {
-        console.error('Microsoft login error:', err);
-        setError('Failed to initialize Microsoft login. Please try again.');
-        setIsLoading(false);
-        setLoginProvider(null);
-      }
-    };
-
-    // Add these consent-based login functions
-    const handleGoogleLoginWithConsent = () => {
-      try {
-        setIsLoading(true);
-        setLoginProvider('google');
-        setError(null);
-
-        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-        let redirectUri = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI;
-
-        if (!clientId || !redirectUri) {
-          setError("Missing Google OAuth configuration");
-          console.error('Missing env variables:', { clientId, redirectUri });
-          return;
-        }
-
-        // If we're on localhost, modify the redirect URI to match the main site's domain
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          const baseUrl = `${window.location.protocol}//${window.location.host}`;
-          redirectUri = window.location.origin + '/tools/shadow-it-scan/api/auth/google';
+        
+        // Before redirecting, clean URL by removing error parameter
+        if (errorParam) {
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('error');
+          window.history.replaceState({}, document.title, cleanUrl.toString());
         }
         
-        const scopes = [
-          'https://www.googleapis.com/auth/admin.directory.user.readonly',
-          'https://www.googleapis.com/auth/admin.directory.domain.readonly',
-          'https://www.googleapis.com/auth/admin.directory.user.security',
-          'openid',
-          'profile',
-          'email'
-        ].join(' ');
-
-        const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-        authUrl.searchParams.append('client_id', clientId);
-        authUrl.searchParams.append('redirect_uri', redirectUri);
-        authUrl.searchParams.append('response_type', 'code');
-        authUrl.searchParams.append('scope', scopes);
-        authUrl.searchParams.append('access_type', 'offline');
-        authUrl.searchParams.append('prompt', 'consent');
-        authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
-
-        localStorage.setItem('auth_provider', 'google');
-
-        window.location.href = authUrl.toString();
-      } catch (err) {
-        console.error('Login error:', err);
-        setError('Failed to initialize login. Please try again.');
-        setIsLoading(false);
-        setLoginProvider(null);
-      }
-    };
-
-    const handleMicrosoftLoginWithConsent = () => {
-      try {
-        setIsLoading(true);
-        setLoginProvider('microsoft');
-        setError(null);
-
-        const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
-        let redirectUri = process.env.NEXT_PUBLIC_MICROSOFT_REDIRECT_URI;
-
-        if (!clientId || !redirectUri) {
-          setError("Missing Microsoft OAuth configuration");
-          console.error('Missing env variables:', { 
-            clientId: clientId ? 'present' : 'missing',
-            redirectUri: redirectUri ? 'present' : 'missing'
-          });
-          setIsLoading(false);
-          setLoginProvider(null);
-          return;
-        }
-
-        // If we're on localhost, update the redirect URI
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          redirectUri = window.location.origin + '/api/auth/microsoft';
-        } else {
-          redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
-        }
-        
-        const scopes = [
-          'User.Read',
-          'Directory.Read.All',
-          'Application.Read.All',
-          'DelegatedPermissionGrant.ReadWrite.All',
-          'AppRoleAssignment.ReadWrite.All',
-          'offline_access',
-          'openid',
-          'profile',
-          'email'
-        ].join(' ');
-
-        const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
-        authUrl.searchParams.append('client_id', clientId);
-        authUrl.searchParams.append('redirect_uri', redirectUri);
-        authUrl.searchParams.append('response_type', 'code');
-        authUrl.searchParams.append('scope', scopes);
-        authUrl.searchParams.append('response_mode', 'query');
-        authUrl.searchParams.append('prompt', 'consent');
-        authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
-
-        localStorage.setItem('auth_provider', 'microsoft');
         window.location.href = authUrl.toString();
       } catch (err) {
         console.error('Microsoft login error:', err);

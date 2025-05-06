@@ -83,13 +83,6 @@ export async function GET(request: Request) {
       scope: oauthTokens.scope,
     });
     
-    // If we don't have a refresh token, the user probably used prompt=none
-    // We need a refresh token for background syncs to work, so redirect to auth with prompt=consent
-    if (!oauthTokens.refresh_token) {
-      console.error('No refresh token received - likely due to prompt=none. Forcing consent flow.');
-      return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
-    }
-    
     // Set credentials for subsequent API calls
     await googleService.setCredentials(oauthTokens);
 
@@ -97,6 +90,63 @@ export async function GET(request: Request) {
     console.log('Getting authenticated user info...');
     const userInfo = await googleService.getAuthenticatedUserInfo();
     console.log('Authenticated user:', userInfo);
+    
+    // If we don't have a refresh token, the user probably used prompt=none
+    if (!oauthTokens.refresh_token) {
+      console.error('No refresh token received - likely due to prompt=none.');
+      
+      // Check if the user already exists in our database
+      const { data: existingUser } = await supabaseAdmin
+        .from('users_signedup')
+        .select('id, email')
+        .eq('email', userInfo.email)
+        .single();
+      
+      console.log('Checking if user exists:', existingUser ? 'Yes' : 'No');
+      
+      if (existingUser) {
+        // First try to find organization by domain
+        let { data: userOrg } = await supabaseAdmin
+          .from('organizations')
+          .select('id')
+          .eq('domain', userInfo.hd)
+          .single();
+          
+        // If not found by domain, try finding by first_admin
+        if (!userOrg) {
+          const { data: orgByAdmin } = await supabaseAdmin
+            .from('organizations')
+            .select('id')
+            .eq('first_admin', userInfo.email)
+            .single();
+            
+          userOrg = orgByAdmin;
+        }
+        
+        if (userOrg) {
+          console.log('User already exists and has organization, redirecting to dashboard');
+          
+          // Create response with redirect directly to dashboard
+          const response = NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/');
+          
+          // Set necessary cookies with environment-aware settings
+          const cookieOptions = {
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
+            path: '/',
+            domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
+          };
+          
+          response.cookies.set('orgId', userOrg.id, cookieOptions);
+          response.cookies.set('userEmail', userInfo.email, cookieOptions);
+          
+          return response;
+        }
+      }
+      
+      // If user doesn't exist or we couldn't find their organization, force consent flow
+      return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
+    }
 
     if (!userInfo.hd) {
       console.error('Not a Google Workspace account - missing domain (hd field)');
@@ -162,6 +212,15 @@ export async function GET(request: Request) {
     // Create organization ID from domain
     const orgId = userInfo.hd.replace(/\./g, '-');
 
+    // Check if user already exists before storing info and sending webhook
+    const { data: existingUser } = await supabaseAdmin
+      .from('users_signedup')
+      .select('id')
+      .eq('email', userInfo.email)
+      .single();
+    
+    const isNewUser = !existingUser;
+
     // Do minimal database operations in the auth callback
     // Just create a new sync status and trigger the background job
     
@@ -173,6 +232,7 @@ export async function GET(request: Request) {
         name: userInfo.hd,
         domain: userInfo.hd,
         updated_at: new Date().toISOString(),
+        first_admin: isNewUser ? userInfo.email : undefined,
       }, { onConflict: 'google_org_id' })
       .select('id')
       .single();
@@ -203,16 +263,6 @@ export async function GET(request: Request) {
       console.error('Error creating sync status:', syncStatusError);
       return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
     }
-
-    
-    // Check if user already exists before storing info and sending webhook
-    const { data: existingUser } = await supabaseAdmin
-      .from('users_signedup')
-      .select('id')
-      .eq('email', userInfo.email)
-      .single();
-    
-    const isNewUser = !existingUser;
 
     // Check if this organization already has completed a successful sync
     const { data: existingCompletedSync } = await supabaseAdmin
