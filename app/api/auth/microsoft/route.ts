@@ -289,17 +289,108 @@ export async function GET(request: NextRequest) {
     // Check if this organization already has completed a successful sync
     const { data: existingCompletedSync } = await supabaseAdmin
       .from('sync_status')
-      .select('id')
+      .select('id, created_at')
       .eq('organization_id', org.id)
       .eq('status', 'COMPLETED')
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
-    // If the user and organization already exist with completed sync, 
+    // Check if there's a recent failed sync that might indicate missing data
+    const { data: recentFailedSync } = await supabaseAdmin
+      .from('sync_status')
+      .select('id, message')
+      .eq('organization_id', org.id)
+      .eq('status', 'FAILED')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    // Check if there are apps for this organization
+    const { count: appCount, error: appCountError } = await supabaseAdmin
+      .from('applications')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', org.id);
+
+    // Determine if we need a fresh sync even for returning users
+    // We need a fresh sync if:
+    // 1. There are no apps in the database but the user is returning
+    // 2. There was a recent failed sync with a critical error
+    const needsFreshSync = !isNewUser && (
+      appCount === 0 || 
+      (recentFailedSync && recentFailedSync.message && 
+       (recentFailedSync.message.includes('Missing required fields') || 
+        recentFailedSync.message.includes('failed')))
+    );
+
+    // If the user needs a fresh sync, we'll create a new sync status
+    if (needsFreshSync) {
+      console.log('Returning user with missing or corrupt data detected, starting fresh sync');
+      
+      // Create a new sync status record
+      const { data: newSyncStatus, error: newSyncStatusError } = await supabaseAdmin
+        .from('sync_status')
+        .insert({
+          organization_id: org.id,
+          user_email: userData.userPrincipalName,
+          status: 'IN_PROGRESS',
+          progress: 0,
+          message: 'Started fresh Microsoft Entra ID data sync after detecting missing data',
+          access_token: access_token,
+          refresh_token: refresh_token,
+        })
+        .select()
+        .single();
+
+      if (newSyncStatusError) {
+        console.error('Error creating new sync status:', newSyncStatusError);
+        return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
+      }
+
+      // Create URL for loading page with the new syncId parameter
+      const loadingUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/loading');
+      
+      if (newSyncStatus?.id) {
+        loadingUrl.searchParams.set('syncId', newSyncStatus.id);
+        loadingUrl.searchParams.set('refresh', 'true'); // Add a flag to indicate this is a refresh sync
+      }
+
+      // Create the response with redirect to the loading page
+      const response = NextResponse.redirect(loadingUrl);
+
+      // Set necessary cookies
+      response.cookies.set('orgId', org.id, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/'
+      });
+      
+      response.cookies.set('userEmail', userData.userPrincipalName, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/'
+      });
+      
+      // Trigger the Microsoft sync process in the background with force refresh flag
+      fetch(`https://www.stitchflow.com/tools/shadow-it-scan/api/background/sync/microsoft`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Force-Refresh': 'true'
+        },
+      }).catch(error => {
+        console.error('Error triggering Microsoft sync:', error);
+      });
+      
+      return response;
+    }
+
+    // If the user and organization already exist with completed sync and no data issues, 
     // redirect directly to the dashboard instead of the loading page
-    if (!isNewUser && existingCompletedSync) {
-      console.log('Returning user with completed sync detected, skipping loading page');
+    if (!isNewUser && existingCompletedSync && !needsFreshSync) {
+      console.log('Returning user with healthy completed sync detected, skipping loading page');
       const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
       
       // Create response with redirect directly to dashboard
