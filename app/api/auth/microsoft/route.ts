@@ -286,6 +286,43 @@ export async function GET(request: NextRequest) {
       org = newOrg;
     }
 
+    // Check if this organization already has completed a successful sync
+    const { data: existingCompletedSync } = await supabaseAdmin
+      .from('sync_status')
+      .select('id')
+      .eq('organization_id', org.id)
+      .eq('status', 'COMPLETED')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    // If the user and organization already exist with completed sync, 
+    // redirect directly to the dashboard instead of the loading page
+    if (!isNewUser && existingCompletedSync) {
+      console.log('Returning user with completed sync detected, skipping loading page');
+      const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
+      
+      // Create response with redirect directly to dashboard
+      const response = NextResponse.redirect(dashboardUrl);
+
+      // Set necessary cookies
+      response.cookies.set('orgId', org.id, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/'
+      });
+      
+      response.cookies.set('userEmail', userData.userPrincipalName, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/'
+      });
+      
+      return response;
+    }
+
     // Create a sync status record
     const { data: syncStatus, error: syncStatusError } = await supabaseAdmin
       .from('sync_status')

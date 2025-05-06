@@ -198,6 +198,48 @@ export async function GET(request: Request) {
     }
 
     
+    // Check if user already exists before storing info and sending webhook
+    const { data: existingUser } = await supabaseAdmin
+      .from('users_signedup')
+      .select('id')
+      .eq('email', userInfo.email)
+      .single();
+    
+    const isNewUser = !existingUser;
+
+    // Check if this organization already has completed a successful sync
+    const { data: existingCompletedSync } = await supabaseAdmin
+      .from('sync_status')
+      .select('id')
+      .eq('organization_id', org.id)
+      .eq('status', 'COMPLETED')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    // If the user and organization already exist with completed sync, 
+    // redirect directly to the dashboard instead of the loading page
+    if (!isNewUser && existingCompletedSync) {
+      console.log('Returning user with completed sync detected, skipping loading page');
+      const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
+      
+      // Create response with redirect directly to dashboard
+      const response = NextResponse.redirect(dashboardUrl);
+
+      // Set necessary cookies with environment-aware settings
+      const cookieOptions = {
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
+        path: '/',
+        domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
+      };
+
+      response.cookies.set('orgId', org.id, cookieOptions);
+      response.cookies.set('userEmail', userInfo.email, cookieOptions);
+      
+      return response;
+    }
+
     // Create URL for loading page with syncId parameter
     const redirectUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/loading');
     if (syncStatus?.id) {
@@ -220,15 +262,6 @@ export async function GET(request: Request) {
     response.cookies.set('orgId', org.id, cookieOptions);
     
     response.cookies.set('userEmail', userInfo.email, cookieOptions);
-
-    // Check if user already exists before storing info and sending webhook
-    const { data: existingUser } = await supabaseAdmin
-      .from('users_signedup')
-      .select('id')
-      .eq('email', userInfo.email)
-      .single();
-    
-    const isNewUser = !existingUser;
 
     // Store basic user info in the background
     try {
