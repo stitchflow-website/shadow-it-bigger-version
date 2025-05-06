@@ -174,9 +174,14 @@ export default function ShadowITDashboard() {
   
   // Helper function to redirect to Google consent screen
   const redirectToGoogleConsent = () => {
-    const redirectURI = typeof window !== 'undefined' 
-      ? `https://stitchflow.com/tools/shadow-it-scan/api/auth/google` 
-      : '';
+    let redirectURI;
+    
+    // Check if we're on localhost
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1'))) {
+      redirectURI = `${window.location.origin}/tools/shadow-it-scan/api/auth/google/callback`;
+    } else {
+      redirectURI = `https://stitchflow.com/tools/shadow-it-scan/api/auth/google`;
+    }
     
     const scopes = [
       'openid',
@@ -200,14 +205,20 @@ export default function ShadowITDashboard() {
     url.searchParams.append('state', state);
     url.searchParams.append('prompt', 'consent');
     
+    console.log("Redirecting to Google with URI:", redirectURI);
     window.location.href = url.toString();
   };
   
   // Helper function to redirect to Microsoft consent screen
   const redirectToMicrosoftConsent = () => {
-    const redirectURI = typeof window !== 'undefined' 
-      ? `https://stitchflow.com/tools/shadow-it-scan/api/auth/microsoft` 
-      : '';
+    let redirectURI;
+    
+    // Check if we're on localhost
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1'))) {
+      redirectURI = `${window.location.origin}/tools/shadow-it-scan/api/auth/microsoft/callback`;
+    } else {
+      redirectURI = `https://stitchflow.com/tools/shadow-it-scan/api/auth/microsoft`;
+    }
     
     const scopes = [
       'user.read',
@@ -227,6 +238,7 @@ export default function ShadowITDashboard() {
     url.searchParams.append('state', state);
     url.searchParams.append('prompt', 'consent');
     
+    console.log("Redirecting to Microsoft with URI:", redirectURI);
     window.location.href = url.toString();
   };
   
@@ -1864,19 +1876,23 @@ export default function ShadowITDashboard() {
         setLoginError('');
 
         const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-        let redirectUri = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI;
+        let redirectUri;
 
-        if (!clientId || !redirectUri) {
+        if (!clientId) {
           setLoginError("Missing Google OAuth configuration");
-          console.error('Missing env variables:', { clientId, redirectUri });
+          console.error('Missing client ID');
+          setIsLoading(false);
           return;
         }
 
-        // If we're on localhost, modify the redirect URI to match the main site's domain
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          const baseUrl = `${window.location.protocol}//${window.location.host}`;
-          redirectUri = window.location.origin + '/tools/shadow-it-scan/api/auth/google';
+        // If we're on localhost, use the current origin
+        if (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1')) {
+          redirectUri = `${window.location.origin}/tools/shadow-it-scan/api/auth/google/callback`;
+        } else {
+          redirectUri = 'https://stitchflow.com/tools/shadow-it-scan/api/auth/google';
         }
+        
+        console.log('Using redirectUri:', redirectUri);
         
         const scopes = [
           'https://www.googleapis.com/auth/admin.directory.user.readonly',
@@ -1935,25 +1951,24 @@ export default function ShadowITDashboard() {
         setLoginError('');
 
         const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
-        let redirectUri = process.env.NEXT_PUBLIC_MICROSOFT_REDIRECT_URI;
+        let redirectUri;
 
-        if (!clientId || !redirectUri) {
+        if (!clientId) {
           setLoginError("Missing Microsoft OAuth configuration");
-          console.error('Missing env variables:', { 
-            clientId: clientId ? 'present' : 'missing',
-            redirectUri: redirectUri ? 'present' : 'missing'
-          });
+          console.error('Missing client ID');
           setIsLoading(false);
           setLoginProvider(null);
           return;
         }
 
-        // If we're on localhost, update the redirect URI
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          redirectUri = window.location.origin + '/api/auth/microsoft';
+        // If we're on localhost, use the current origin
+        if (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1')) {
+          redirectUri = `${window.location.origin}/tools/shadow-it-scan/api/auth/microsoft/callback`;
         } else {
-          redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
+          redirectUri = 'https://stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
         }
+        
+        console.log('Using redirectUri:', redirectUri);
         
         const scopes = [
           'User.Read',

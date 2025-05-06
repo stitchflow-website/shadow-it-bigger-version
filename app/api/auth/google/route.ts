@@ -57,12 +57,12 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error('OAuth error received:', error);
-      return NextResponse.redirect(new URL(`/tools/shadow-it-scan/?error=${error}`, request.url));
+      return NextResponse.redirect(`https://stitchflow.com/tools/shadow-it-scan/?error=${error}`);
     }
 
     if (!code) {
       console.error('No authorization code received');
-      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=no_code', request.url));
+      return NextResponse.redirect(`https://stitchflow.com/tools/shadow-it-scan/?error=no_code`);
     }
 
     console.log('2. Initializing Google Workspace service...');
