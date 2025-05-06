@@ -175,7 +175,7 @@ export default function ShadowITDashboard() {
   // Helper function to redirect to Google consent screen
   const redirectToGoogleConsent = () => {
     const redirectURI = typeof window !== 'undefined' 
-      ? `${window.location.origin}/api/auth/google/callback` 
+      ? `${window.location.origin}/tools/shadow-it-scan/api/auth/google/callback` 
       : '';
     
     const scopes = [
