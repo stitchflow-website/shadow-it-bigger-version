@@ -1738,6 +1738,29 @@ export default function ShadowITDashboard() {
           }
         }
         
+        // Handle missing data errors - also need to force consent
+        if (errorParam === 'missing_data' || errorParam === 'data_refresh_required') {
+          // Get the auth provider from localStorage
+          const provider = localStorage.getItem('auth_provider');
+          
+          // Remove error parameter from URL
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('error');
+          window.history.replaceState({}, typeof document !== 'undefined' ? document.title : '', cleanUrl.toString());
+          
+          // Show explanation to user
+          setError('We need to refresh your data access. Please grant permission again.');
+          
+          // Force consent-based login
+          if (provider === 'google') {
+            handleGoogleLoginWithConsent();
+            return;
+          } else if (provider === 'microsoft') {
+            handleMicrosoftLoginWithConsent();
+            return;
+          }
+        }
+        
         switch (errorParam) {
           case 'no_code':
             setError('No authorization code received. Please try again.');

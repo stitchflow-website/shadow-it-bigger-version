@@ -244,74 +244,13 @@ export async function GET(request: Request) {
         recentFailedSync.message.includes('failed')))
     );
 
-    // If the user needs a fresh sync, we'll create a new sync status
+    // If the user needs a fresh sync, we now need to force fresh consent to ensure
+    // we have all the required permissions, especially if data was deleted
     if (needsFreshSync) {
-      console.log('Returning user with missing or corrupt data detected, starting fresh sync');
+      console.log('Returning user with missing or corrupt data detected, forcing fresh consent');
       
-      // Create a new sync status record
-      const { data: newSyncStatus, error: newSyncStatusError } = await supabaseAdmin
-        .from('sync_status')
-        .insert({
-          organization_id: org.id,
-          user_email: userInfo.email,
-          status: 'IN_PROGRESS',
-          progress: 0,
-          message: 'Started fresh Google Workspace data sync after detecting missing data',
-          access_token: oauthTokens.access_token,
-          refresh_token: oauthTokens.refresh_token,
-        })
-        .select()
-        .single();
-
-      if (newSyncStatusError) {
-        console.error('Error creating new sync status:', newSyncStatusError);
-        return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
-      }
-
-      // Create URL for loading page with the new syncId parameter
-      const loadingUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/loading');
-      
-      if (newSyncStatus?.id) {
-        loadingUrl.searchParams.set('syncId', newSyncStatus.id);
-        loadingUrl.searchParams.set('refresh', 'true'); // Add a flag to indicate this is a refresh sync
-      }
-
-      // Create the response with redirect to the loading page
-      const response = NextResponse.redirect(loadingUrl);
-
-      // Set necessary cookies with environment-aware settings
-      const cookieOptions = {
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
-        path: '/',
-        domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
-      };
-
-      response.cookies.set('orgId', org.id, cookieOptions);
-      response.cookies.set('userEmail', userInfo.email, cookieOptions);
-
-      // Trigger the background sync immediately for the fresh sync
-      const apiUrl = createRedirectUrl('/api/background/sync');
-      Promise.resolve(fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          organization_id: org.id,
-          sync_id: newSyncStatus.id,
-          access_token: oauthTokens.access_token,
-          refresh_token: oauthTokens.refresh_token,
-          user_email: userInfo.email,
-          user_hd: userInfo.hd,
-          provider: 'google',
-          force_refresh: true
-        }),
-      })).catch(error => {
-        console.error('Error triggering background sync:', error);
-      });
-      
-      return response;
+      // Return a special error code that will be handled in the frontend
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
     }
 
     // If the user and organization already exist with completed sync and no data issues, 
