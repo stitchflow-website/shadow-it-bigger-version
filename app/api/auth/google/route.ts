@@ -197,6 +197,7 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
     }
 
+    
     // Create URL for loading page with syncId parameter
     const redirectUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/loading');
     if (syncStatus?.id) {

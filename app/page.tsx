@@ -655,19 +655,20 @@ export default function ShadowITDashboard() {
   const handleSignOut = () => {
     // Only run in browser environment
     if (typeof window !== 'undefined') {
-      // Clear all cookies
+      // Clear all cookies by setting them to expire in the past
       document.cookie.split(';').forEach(cookie => {
-        document.cookie = cookie
-          .replace(/^ +/, '')
-          .replace(/=.*/, `=;expires=${new Date(0).toUTCString()};path=/`);
+        const [name] = cookie.split('=');
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${window.location.hostname}`;
+        // Also try without domain for localhost
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
       });
       
       // Clear local storage
       localStorage.clear();
+      
+      // Redirect and force refresh
+      window.location.href = '/tools/shadow-it-scan/';
     }
-    
-    // Redirect to login page
-    router.push('/tools/shadow-it-scan/');
   };
 
   
@@ -1717,6 +1718,26 @@ export default function ShadowITDashboard() {
       const errorParam = searchParams.get('error');
       
       if (errorParam) {
+        // Handle interaction_required error by retrying with consent prompt
+        if (errorParam === 'interaction_required' || errorParam === 'login_required' || errorParam === 'consent_required') {
+          // Get the auth provider from localStorage
+          const provider = localStorage.getItem('auth_provider');
+          
+          // Remove error parameter from URL
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('error');
+          window.history.replaceState({}, typeof document !== 'undefined' ? document.title : '', cleanUrl.toString());
+          
+          // Retry with consent prompt
+          if (provider === 'google') {
+            handleGoogleLoginWithConsent();
+            return;
+          } else if (provider === 'microsoft') {
+            handleMicrosoftLoginWithConsent();
+            return;
+          }
+        }
+        
         switch (errorParam) {
           case 'no_code':
             setError('No authorization code received. Please try again.');
@@ -1786,7 +1807,8 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('response_type', 'code');
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('access_type', 'offline');
-        authUrl.searchParams.append('prompt', 'consent');
+        authUrl.searchParams.append('prompt', 'none');
+        authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
 
         localStorage.setItem('auth_provider', 'google');
 
@@ -1844,7 +1866,117 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('response_type', 'code');
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('response_mode', 'query');
+        authUrl.searchParams.append('prompt', 'none');
+        authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
+
+        localStorage.setItem('auth_provider', 'microsoft');
+        window.location.href = authUrl.toString();
+      } catch (err) {
+        console.error('Microsoft login error:', err);
+        setError('Failed to initialize Microsoft login. Please try again.');
+        setIsLoading(false);
+        setLoginProvider(null);
+      }
+    };
+
+    // Add these consent-based login functions
+    const handleGoogleLoginWithConsent = () => {
+      try {
+        setIsLoading(true);
+        setLoginProvider('google');
+        setError(null);
+
+        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+        let redirectUri = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI;
+
+        if (!clientId || !redirectUri) {
+          setError("Missing Google OAuth configuration");
+          console.error('Missing env variables:', { clientId, redirectUri });
+          return;
+        }
+
+        // If we're on localhost, modify the redirect URI to match the main site's domain
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          const baseUrl = `${window.location.protocol}//${window.location.host}`;
+          redirectUri = window.location.origin + '/tools/shadow-it-scan/api/auth/google';
+        }
+        
+        const scopes = [
+          'https://www.googleapis.com/auth/admin.directory.user.readonly',
+          'https://www.googleapis.com/auth/admin.directory.domain.readonly',
+          'https://www.googleapis.com/auth/admin.directory.user.security',
+          'openid',
+          'profile',
+          'email'
+        ].join(' ');
+
+        const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+        authUrl.searchParams.append('client_id', clientId);
+        authUrl.searchParams.append('redirect_uri', redirectUri);
+        authUrl.searchParams.append('response_type', 'code');
+        authUrl.searchParams.append('scope', scopes);
+        authUrl.searchParams.append('access_type', 'offline');
         authUrl.searchParams.append('prompt', 'consent');
+        authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
+
+        localStorage.setItem('auth_provider', 'google');
+
+        window.location.href = authUrl.toString();
+      } catch (err) {
+        console.error('Login error:', err);
+        setError('Failed to initialize login. Please try again.');
+        setIsLoading(false);
+        setLoginProvider(null);
+      }
+    };
+
+    const handleMicrosoftLoginWithConsent = () => {
+      try {
+        setIsLoading(true);
+        setLoginProvider('microsoft');
+        setError(null);
+
+        const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
+        let redirectUri = process.env.NEXT_PUBLIC_MICROSOFT_REDIRECT_URI;
+
+        if (!clientId || !redirectUri) {
+          setError("Missing Microsoft OAuth configuration");
+          console.error('Missing env variables:', { 
+            clientId: clientId ? 'present' : 'missing',
+            redirectUri: redirectUri ? 'present' : 'missing'
+          });
+          setIsLoading(false);
+          setLoginProvider(null);
+          return;
+        }
+
+        // If we're on localhost, update the redirect URI
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          redirectUri = window.location.origin + '/api/auth/microsoft';
+        } else {
+          redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
+        }
+        
+        const scopes = [
+          'User.Read',
+          'Directory.Read.All',
+          'Application.Read.All',
+          'DelegatedPermissionGrant.ReadWrite.All',
+          'AppRoleAssignment.ReadWrite.All',
+          'offline_access',
+          'openid',
+          'profile',
+          'email'
+        ].join(' ');
+
+        const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+        authUrl.searchParams.append('client_id', clientId);
+        authUrl.searchParams.append('redirect_uri', redirectUri);
+        authUrl.searchParams.append('response_type', 'code');
+        authUrl.searchParams.append('scope', scopes);
+        authUrl.searchParams.append('response_mode', 'query');
+        authUrl.searchParams.append('prompt', 'consent');
+        authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
 
         localStorage.setItem('auth_provider', 'microsoft');
         window.location.href = authUrl.toString();

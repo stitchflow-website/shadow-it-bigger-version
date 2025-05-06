@@ -13,6 +13,12 @@ interface Token {
   [key: string]: any;
 }
 
+interface Credentials {
+  access_token?: string;
+  refresh_token?: string;
+  expiry_date?: number;
+}
+
 export class GoogleWorkspaceService {
   private oauth2Client: OAuth2Client;
   private admin: any;
@@ -71,7 +77,7 @@ export class GoogleWorkspaceService {
         
         // Request a new access token
         const response = await this.oauth2Client.getAccessToken();
-        const token = response.token || '';
+        const token = response.token as Credentials;
         
         if (typeof token !== 'string') {
           // If token is an object (which it should be)
