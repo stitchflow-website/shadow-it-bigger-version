@@ -857,7 +857,7 @@ export default function ShadowITDashboard() {
       console.log('Cookies after clearing:', document.cookie);
       
       // Redirect and force refresh (using a timestamp to prevent caching)
-      window.location.href = `/tools/shadow-it-scan/?t=${Date.now()}`;
+      window.location.href = `/tools/shadow-it-scan/`;
     }
   };
 
