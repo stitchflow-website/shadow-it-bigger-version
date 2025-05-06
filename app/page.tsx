@@ -170,6 +170,151 @@ export default function ShadowITDashboard() {
 
   // Add this state near your other useState declarations
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginError, setLoginError] = useState<string>('');
+  
+  // Helper function to redirect to Google consent screen
+  const redirectToGoogleConsent = () => {
+    const redirectURI = typeof window !== 'undefined' 
+      ? `${window.location.origin}/api/auth/google/callback` 
+      : '';
+    
+    const scopes = [
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/admin.directory.user.readonly',
+      'https://www.googleapis.com/auth/admin.directory.group.readonly',
+      'https://www.googleapis.com/auth/admin.directory.domain.readonly'
+    ];
+    
+    const state = Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('oauth_state', state);
+    localStorage.setItem('auth_provider', 'google');
+    
+    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    url.searchParams.append('client_id', process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '');
+    url.searchParams.append('redirect_uri', redirectURI);
+    url.searchParams.append('response_type', 'code');
+    url.searchParams.append('scope', scopes.join(' '));
+    url.searchParams.append('access_type', 'offline');
+    url.searchParams.append('state', state);
+    url.searchParams.append('prompt', 'consent');
+    
+    window.location.href = url.toString();
+  };
+  
+  // Helper function to redirect to Microsoft consent screen
+  const redirectToMicrosoftConsent = () => {
+    const redirectURI = typeof window !== 'undefined' 
+      ? `${window.location.origin}/api/auth/microsoft/callback` 
+      : '';
+    
+    const scopes = [
+      'user.read',
+      'User.ReadBasic.All',
+      'Directory.Read.All'
+    ];
+    
+    const state = Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('oauth_state', state);
+    localStorage.setItem('auth_provider', 'microsoft');
+    
+    const url = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+    url.searchParams.append('client_id', process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID || '');
+    url.searchParams.append('redirect_uri', redirectURI);
+    url.searchParams.append('response_type', 'code');
+    url.searchParams.append('scope', scopes.join(' '));
+    url.searchParams.append('state', state);
+    url.searchParams.append('prompt', 'consent');
+    
+    window.location.href = url.toString();
+  };
+  
+  // Add a useEffect to check for error parameters in the URL
+  useEffect(() => {
+    const checkErrorParams = () => {
+      // Only run in browser environment
+      if (typeof window === 'undefined') return;
+      
+      const searchParams = new URLSearchParams(window.location.search);
+      const errorParam = searchParams.get('error');
+      
+      if (errorParam) {
+        // Get the authentication provider from localStorage if available
+        const provider = localStorage.getItem('auth_provider') as 'google' | 'microsoft' | null;
+        
+        // For these specific errors, redirect directly to consent screen
+        const needsDirectConsent = 
+          errorParam === 'interaction_required' || 
+          errorParam === 'login_required' || 
+          errorParam === 'consent_required' ||
+          errorParam === 'missing_data' || 
+          errorParam === 'data_refresh_required';
+          
+        if (needsDirectConsent && provider) {
+          console.log(`Redirecting directly to ${provider} consent screen due to error: ${errorParam}`);
+          
+          // Clean up the URL before redirecting
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('error');
+          window.history.replaceState({}, document.title, cleanUrl.toString());
+          
+          // Redirect based on the provider
+          if (provider === 'google') {
+            redirectToGoogleConsent();
+            return;
+          } else if (provider === 'microsoft') {
+            redirectToMicrosoftConsent();
+            return;
+          }
+        }
+        
+        // For other errors, show the login modal with appropriate message
+        switch (errorParam) {
+          case 'no_code':
+            setLoginError('No authorization code received. Please try again.');
+            break;
+          case 'auth_failed':
+            setLoginError('Authentication failed. Please try again.');
+            break;
+          case 'not_workspace_account':
+            setLoginError('Please sign in with a Google Workspace account. Personal Gmail accounts are not supported');
+            break;
+          case 'not_work_account':
+            setLoginError('Please sign in with a Microsoft 365 workspace account. Personal accounts are not supported');
+            break;
+          case 'admin_required':
+            setLoginError('Please sign in with an admin account that has appropriate permissions.');
+            break;
+          case 'config_missing':
+            setLoginError('Authentication configuration is missing. Please contact support.');
+            break;
+          default:
+            // For unknown errors or if provider is not known, set generic error
+            if (needsDirectConsent) {
+              setLoginError('We need to refresh your data access. Please grant permission again.');
+            } else {
+              setLoginError('An error occurred during authentication. Please try again or contact support');
+            }
+        }
+        
+        // Show the login modal
+        setShowLoginModal(true);
+        
+        // Clean up the URL by removing the error parameter
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('error');
+        window.history.replaceState({}, document.title, cleanUrl.toString());
+      }
+    };
+    
+    // Run on mount and on URL changes
+    checkErrorParams();
+    
+    window.addEventListener('popstate', checkErrorParams);
+    return () => {
+      window.removeEventListener('popstate', checkErrorParams);
+    };
+  }, [redirectToGoogleConsent, redirectToMicrosoftConsent, setLoginError, setShowLoginModal]);
 
   // Add new function to check categories
   const checkCategories = async () => {
@@ -1708,99 +1853,20 @@ export default function ShadowITDashboard() {
 
   // Update the LoginModal component to fix both the top gap and maintain button spacing
   const LoginModal = () => {
-    const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [loginProvider, setLoginProvider] = useState<'google' | 'microsoft' | null>(null);
     
-    // Add useEffect to check URL for error parameters
-    useEffect(() => {
-      const checkErrorParam = () => {
-        // Only run in browser environment
-        if (typeof window === 'undefined') return;
-        
-        const searchParams = new URLSearchParams(window.location.search);
-        const errorParam = searchParams.get('error');
-        
-        if (errorParam) {
-          // Handle interaction_required error by retrying with consent prompt
-          if (errorParam === 'interaction_required' || errorParam === 'login_required' || errorParam === 'consent_required') {
-            // Get the auth provider from localStorage
-            const provider = localStorage.getItem('auth_provider');
-            
-            // Set error message
-            setError('We need to refresh your permissions. Please grant access again.');
-            
-            // Show the login modal
-            setShowLoginModal(true);
-            
-            return;
-          }
-          
-          // Handle missing data errors - also need to force consent
-          if (errorParam === 'missing_data' || errorParam === 'data_refresh_required') {
-            // Get the auth provider from localStorage
-            const provider = localStorage.getItem('auth_provider');
-            
-            // Show explanation to user
-            setError('We need to refresh your data access. Please grant permission again.');
-            
-            // Show the login modal
-            setShowLoginModal(true);
-            
-            return;
-          }
-          
-          switch (errorParam) {
-            case 'no_code':
-              setError('No authorization code received. Please try again.');
-              break;
-            case 'auth_failed':
-              setError('Authentication failed. Please try again.');
-              break;
-            case 'not_workspace_account':
-              setError('Please sign in with a Google Workspace account. Personal Gmail accounts are not supported');
-              break;
-            case 'not_work_account':
-              setError('Please sign in with a Microsoft 365 workspace account. Personal accounts are not supported');
-              break;
-            case 'admin_required':
-              setError('Please sign in with an admin account that has appropriate permissions.');
-              break;
-            case 'config_missing':
-              setError('Authentication configuration is missing. Please contact support.');
-              break;
-            default:
-              setError('An error occurred during authentication. Please try again or contact support');
-          }
-          
-          // Show the login modal if there was an error
-          setShowLoginModal(true);
-        }
-      };
-      
-      // Run the check when component mounts
-      checkErrorParam();
-      
-      // Also set up an event listener for URL changes (in case of SPA navigation)
-      window.addEventListener('popstate', checkErrorParam);
-      
-      // Cleanup
-      return () => {
-        window.removeEventListener('popstate', checkErrorParam);
-      };
-    }, []); // Empty dependency array means this runs once on mount
-
     const handleGoogleLogin = () => {
       try {
         setIsLoading(true);
         setLoginProvider('google');
-        setError(null);
+        setLoginError('');
 
         const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
         let redirectUri = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI;
 
         if (!clientId || !redirectUri) {
-          setError("Missing Google OAuth configuration");
+          setLoginError("Missing Google OAuth configuration");
           console.error('Missing env variables:', { clientId, redirectUri });
           return;
         }
@@ -1829,7 +1895,7 @@ export default function ShadowITDashboard() {
         const needsConsent = errorParam === 'data_refresh_required' || 
                              errorParam === 'missing_data' ||
                              errorParam === 'interaction_required' ||
-                             error !== null; // If there's any error, force consent
+                             loginError !== ''; // If there's any error, force consent
 
         const promptMode = needsConsent ? 'consent' : 'none';
         console.log(`Using prompt mode: ${promptMode} based on error: ${errorParam}`);
@@ -1855,7 +1921,7 @@ export default function ShadowITDashboard() {
         window.location.href = authUrl.toString();
       } catch (err) {
         console.error('Login error:', err);
-        setError('Failed to initialize login. Please try again.');
+        setLoginError('Failed to initialize login. Please try again.');
         setIsLoading(false);
         setLoginProvider(null);
       }
@@ -1865,13 +1931,13 @@ export default function ShadowITDashboard() {
       try {
         setIsLoading(true);
         setLoginProvider('microsoft');
-        setError(null);
+        setLoginError('');
 
         const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
         let redirectUri = process.env.NEXT_PUBLIC_MICROSOFT_REDIRECT_URI;
 
         if (!clientId || !redirectUri) {
-          setError("Missing Microsoft OAuth configuration");
+          setLoginError("Missing Microsoft OAuth configuration");
           console.error('Missing env variables:', { 
             clientId: clientId ? 'present' : 'missing',
             redirectUri: redirectUri ? 'present' : 'missing'
@@ -1909,7 +1975,7 @@ export default function ShadowITDashboard() {
         const needsConsent = errorParam === 'data_refresh_required' || 
                              errorParam === 'missing_data' ||
                              errorParam === 'interaction_required' ||
-                             error !== null; // If there's any error, force consent
+                             loginError !== ''; // If there's any error, force consent
 
         const promptMode = needsConsent ? 'consent' : 'none';
         console.log(`Using prompt mode: ${promptMode} based on error: ${errorParam}`);
@@ -1935,7 +2001,7 @@ export default function ShadowITDashboard() {
         window.location.href = authUrl.toString();
       } catch (err) {
         console.error('Microsoft login error:', err);
-        setError('Failed to initialize Microsoft login. Please try again.');
+        setLoginError('Failed to initialize Microsoft login. Please try again.');
         setIsLoading(false);
         setLoginProvider(null);
       }
@@ -1950,9 +2016,9 @@ export default function ShadowITDashboard() {
               Ensure you connect your admin org account to get started with the app
             </p>
             
-            {error && (
+            {loginError && (
               <div className="mb-4 p-4 text-sm text-red-800 bg-red-100 rounded-lg">
-                {error}
+                {loginError}
               </div>
             )}
             
