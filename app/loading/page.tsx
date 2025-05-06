@@ -134,6 +134,19 @@ function LoadingContent() {
           // If failed, show error
           if (data.status === 'FAILED') {
             console.error('Sync failed:', data.message);
+            
+            // Special handling for missing required fields error
+            if (data.message && data.message.includes('Missing required fields')) {
+              setError(`Authentication issue: We need additional permissions to access your data. Please re-authenticate.`);
+              
+              // Wait a moment before redirecting to login with error code
+              setTimeout(() => {
+                router.push('/tools/shadow-it-scan/?error=data_refresh_required');
+              }, 3000);
+              
+              return;
+            }
+            
             setError(`Sync failed: ${data.message}`);
             return;
           }

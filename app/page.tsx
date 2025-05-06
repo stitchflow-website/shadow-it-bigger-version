@@ -1728,14 +1728,13 @@ export default function ShadowITDashboard() {
           cleanUrl.searchParams.delete('error');
           window.history.replaceState({}, typeof document !== 'undefined' ? document.title : '', cleanUrl.toString());
           
-          // Retry with consent prompt
-          if (provider === 'google') {
-            handleGoogleLoginWithConsent();
-            return;
-          } else if (provider === 'microsoft') {
-            handleMicrosoftLoginWithConsent();
-            return;
-          }
+          // Set error message
+          setError('We need to refresh your permissions. Please grant access again.');
+          
+          // Show the login modal
+          setShowLoginModal(true);
+          
+          return;
         }
         
         // Handle missing data errors - also need to force consent
@@ -1751,14 +1750,10 @@ export default function ShadowITDashboard() {
           // Show explanation to user
           setError('We need to refresh your data access. Please grant permission again.');
           
-          // Force consent-based login
-          if (provider === 'google') {
-            handleGoogleLoginWithConsent();
-            return;
-          } else if (provider === 'microsoft') {
-            handleMicrosoftLoginWithConsent();
-            return;
-          }
+          // Show the login modal
+          setShowLoginModal(true);
+          
+          return;
         }
         
         switch (errorParam) {
@@ -1824,13 +1819,23 @@ export default function ShadowITDashboard() {
           'email'
         ].join(' ');
 
+        // Check if we have an error that indicates we need fresh consent
+        const searchParams = new URLSearchParams(window.location.search);
+        const errorParam = searchParams.get('error');
+        const needsConsent = errorParam === 'data_refresh_required' || 
+                             errorParam === 'missing_data' ||
+                             errorParam === 'interaction_required';
+
+        const promptMode = needsConsent ? 'consent' : 'none';
+        console.log(`Using prompt mode: ${promptMode} based on error: ${errorParam}`);
+
         const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
         authUrl.searchParams.append('response_type', 'code');
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('access_type', 'offline');
-        authUrl.searchParams.append('prompt', 'none');
+        authUrl.searchParams.append('prompt', promptMode);
         authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
 
         localStorage.setItem('auth_provider', 'google');
@@ -1883,13 +1888,23 @@ export default function ShadowITDashboard() {
           'email'
         ].join(' ');
 
+        // Check if we have an error that indicates we need fresh consent
+        const searchParams = new URLSearchParams(window.location.search);
+        const errorParam = searchParams.get('error');
+        const needsConsent = errorParam === 'data_refresh_required' || 
+                             errorParam === 'missing_data' ||
+                             errorParam === 'interaction_required';
+
+        const promptMode = needsConsent ? 'consent' : 'none';
+        console.log(`Using prompt mode: ${promptMode} based on error: ${errorParam}`);
+
         const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
         authUrl.searchParams.append('response_type', 'code');
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('response_mode', 'query');
-        authUrl.searchParams.append('prompt', 'none');
+        authUrl.searchParams.append('prompt', promptMode);
         authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
 
         localStorage.setItem('auth_provider', 'microsoft');

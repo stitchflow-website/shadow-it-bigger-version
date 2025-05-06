@@ -72,6 +72,13 @@ export async function GET(request: NextRequest) {
     const tokenData = await tokenResponse.json();
     const { access_token, refresh_token, id_token } = tokenData;
     console.log('Tokens received successfully');
+    
+    // If we don't have a refresh token, the user probably used prompt=none
+    // We need a refresh token for background syncs to work, so redirect to auth with prompt=consent
+    if (!refresh_token) {
+      console.error('No refresh token received - likely due to prompt=none. Forcing consent flow.');
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
+    }
 
     // Get user info using the access token
     console.log('Fetching user data...');
