@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     // We need a refresh token for background syncs to work, so redirect to auth with prompt=consent
     if (!refresh_token) {
       console.error('No refresh token received - likely due to prompt=none. Forcing consent flow.');
-      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
+      return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
     }
 
     // Get user info using the access token
