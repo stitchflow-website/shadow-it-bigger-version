@@ -814,18 +814,50 @@ export default function ShadowITDashboard() {
     // Only run in browser environment
     if (typeof window !== 'undefined') {
       // Clear all cookies by setting them to expire in the past
-      document.cookie.split(';').forEach(cookie => {
-        const [name] = cookie.split('=');
-        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${window.location.hostname}`;
-        // Also try without domain for localhost
-        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+      const allCookies = document.cookie.split(';');
+      console.log('Cookies before clearing:', allCookies);
+      
+      // Specifically clear the critical cookies with all path/domain combinations
+      const cookiesToClear = ['orgId', 'userEmail', 'accessToken', 'refreshToken'];
+      const domains = [window.location.hostname, '', null, 'stitchflow.com', `.${window.location.hostname}`];
+      const paths = ['/', '/tools/shadow-it-scan', '/tools/shadow-it-scan/', '', null];
+      
+      // Try all combinations to ensure cookies are cleared
+      for (const cookieName of cookiesToClear) {
+        for (const domain of domains) {
+          for (const path of paths) {
+            const domainStr = domain ? `; domain=${domain}` : '';
+            const pathStr = path ? `; path=${path}` : '';
+            document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT${pathStr}${domainStr}`;
+          }
+        }
+      }
+      
+      // Also try to clear all cookies generically
+      allCookies.forEach((cookie: string) => {
+        const [name] = cookie.trim().split('=');
+        if (name) {
+          // Try with different domain/path combinations
+          for (const domain of domains) {
+            for (const path of paths) {
+              const domainStr = domain ? `; domain=${domain}` : '';
+              const pathStr = path ? `; path=${path}` : '';
+              document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT${pathStr}${domainStr}`;
+            }
+          }
+        }
       });
       
       // Clear local storage
       localStorage.clear();
       
-      // Redirect and force refresh
-      window.location.href = '/tools/shadow-it-scan/';
+      // Clear session storage too
+      sessionStorage.clear();
+      
+      console.log('Cookies after clearing:', document.cookie);
+      
+      // Redirect and force refresh (using a timestamp to prevent caching)
+      window.location.href = `/tools/shadow-it-scan/?t=${Date.now()}`;
     }
   };
 
