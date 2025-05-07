@@ -25,7 +25,6 @@ export function formatDate(date: string): string {
   });
 }
 
-
 /**
  * Generates a cryptographically secure random string
  * @param length Length of the string to generate (default: 32)

@@ -1901,7 +1901,24 @@ export default function ShadowITDashboard() {
     const [isLoading, setIsLoading] = useState(false);
     const [loginProvider, setLoginProvider] = useState<'google' | 'microsoft' | null>(null);
     
-    const handleGoogleLogin = () => {
+    // Function to check if user has a valid session
+    const checkSession = async () => {
+      try {
+        const response = await fetch('/tools/shadow-it-scan/api/auth/session/validate', {
+          credentials: 'include' // Ensure cookies are sent
+        });
+        
+        if (!response.ok) return false;
+        
+        const data = await response.json();
+        return data.authenticated === true;
+      } catch (error) {
+        console.error('Error checking session:', error);
+        return false;
+      }
+    };
+    
+    const handleGoogleLogin = async () => {
       try {
         setIsLoading(true);
         setLoginProvider('google');
@@ -1919,7 +1936,7 @@ export default function ShadowITDashboard() {
 
         // If we're on localhost, use the current origin
         if (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1')) {
-          redirectUri = `${window.location.origin}/api/auth/google`;
+          redirectUri = `${window.location.origin}/tools/shadow-it-scan/api/auth/google/callback`;
         } else {
           redirectUri = 'https://stitchflow.com/tools/shadow-it-scan/api/auth/google';
         }
@@ -1939,15 +1956,21 @@ export default function ShadowITDashboard() {
         const searchParams = new URLSearchParams(window.location.search);
         const errorParam = searchParams.get('error');
         
-        // Always use consent when data_refresh_required is present
-        // or if we're in the error modal
-        const needsConsent = errorParam === 'data_refresh_required' || 
+        // Check if user has an active session
+        const hasValidSession = await checkSession();
+        console.log('Has valid session:', hasValidSession);
+        
+        // Determine prompt mode
+        // Use 'none' if user has valid session and no error requires consent
+        // Use 'consent' if no valid session or specific errors require it
+        const needsConsent = !hasValidSession || 
+                             errorParam === 'data_refresh_required' || 
                              errorParam === 'missing_data' ||
                              errorParam === 'interaction_required' ||
                              loginError !== ''; // If there's any error, force consent
 
         const promptMode = needsConsent ? 'consent' : 'none';
-        console.log(`Using prompt mode: ${promptMode} based on error: ${errorParam}`);
+        console.log(`Using prompt mode: ${promptMode} based on session validity and error: ${errorParam}`);
 
         const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         authUrl.searchParams.append('client_id', clientId);
@@ -1976,7 +1999,7 @@ export default function ShadowITDashboard() {
       }
     };
 
-    const handleMicrosoftLogin = () => {
+    const handleMicrosoftLogin = async () => {
       try {
         setIsLoading(true);
         setLoginProvider('microsoft');
@@ -1995,7 +2018,7 @@ export default function ShadowITDashboard() {
 
         // If we're on localhost, use the current origin
         if (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1')) {
-          redirectUri = `${window.location.origin}/api/auth/microsoft`;
+          redirectUri = `${window.location.origin}/tools/shadow-it-scan/api/auth/microsoft/callback`;
         } else {
           redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
         }
@@ -2018,10 +2041,21 @@ export default function ShadowITDashboard() {
         const searchParams = new URLSearchParams(window.location.search);
         const errorParam = searchParams.get('error');
         
-        // Always use consent instead of none - this ensures the Microsoft login will always work
-        // Setting to 'none' causes errors for new users or when consent is required
-        const promptMode = 'consent';
-        console.log(`Using prompt mode: ${promptMode}`);
+        // Check if user has an active session
+        const hasValidSession = await checkSession();
+        console.log('Has valid session:', hasValidSession);
+        
+        // Determine prompt mode based on session validity and errors
+        // Microsoft is more sensitive to prompt=none failures, so we're more careful here
+        // Only use 'none' if user has valid session and no errors requiring consent
+        const needsConsent = !hasValidSession || 
+                            errorParam === 'data_refresh_required' || 
+                            errorParam === 'missing_data' ||
+                            errorParam === 'interaction_required' ||
+                            loginError !== '';
+
+        const promptMode = needsConsent ? 'consent' : 'none';
+        console.log(`Using prompt mode: ${promptMode} based on session validity and error: ${errorParam}`);
 
         const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
         authUrl.searchParams.append('client_id', clientId);

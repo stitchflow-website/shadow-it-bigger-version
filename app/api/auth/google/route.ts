@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
 import { sendSuccessSignupWebhook, sendFailedSignupWebhook } from '@/lib/webhook';
+import crypto from 'crypto';
 
 // Helper function to safely format date
 function formatDate(dateValue: any): string {
@@ -34,6 +35,30 @@ function formatDate(dateValue: any): string {
   } catch (error) {
     console.warn('Invalid date value:', dateValue);
     return new Date().toISOString();
+  }
+}
+
+/**
+ * Helper function to check if session is valid
+ * @param sessionId The session ID from cookie
+ * @returns Boolean indicating if session is valid
+ */
+async function isValidSession(sessionId: string | undefined): Promise<boolean> {
+  if (!sessionId) return false;
+  
+  try {
+    // Check if session exists and is not expired
+    const { data: session, error } = await supabaseAdmin
+      .from('user_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .gte('expires_at', new Date().toISOString())
+      .single();
+    
+    return !!session && !error;
+  } catch (error) {
+    console.error('Error validating session:', error);
+    return false;
   }
 }
 
@@ -95,47 +120,73 @@ export async function GET(request: Request) {
     if (!oauthTokens.refresh_token) {
       console.error('No refresh token received - likely due to prompt=none.');
       
-      // Check if the user already exists in our database
-      const { data: existingUser } = await supabaseAdmin
-        .from('users_signedup')
-        .select('id, email')
-        .eq('email', userInfo.email)
-        .single();
+      // Check for an existing valid session
+      // For a Request object, we need to extract cookies manually
+      const cookies = request.headers.get('cookie') || '';
+      const sessionIdMatch = cookies.match(/shadow_session_id=([^;]+)/);
+      const sessionId = sessionIdMatch ? sessionIdMatch[1] : undefined;
       
-      console.log('Checking if user exists:', existingUser ? 'Yes' : 'No');
+      // Check if we have a valid session
+      const hasValidSession = await isValidSession(sessionId);
       
-      if (existingUser) {
-        // First try to find organization by domain
-        let { data: userOrg } = await supabaseAdmin
-          .from('organizations')
-          .select('id')
-          .eq('domain', userInfo.hd)
+      if (hasValidSession) {
+        console.log('Found valid session, proceeding without refresh token');
+        // Continue with the flow using existing session
+      } else {
+        console.log('No valid session found, checking for existing user');
+        
+        // Check if the user already exists in our database
+        const { data: existingUser } = await supabaseAdmin
+          .from('users_signedup')
+          .select('id, email')
+          .eq('email', userInfo.email)
           .single();
-          
-        // If not found by domain, try finding by first_admin
-        if (!userOrg) {
-          const { data: orgByAdmin } = await supabaseAdmin
+        
+        console.log('Checking if user exists:', existingUser ? 'Yes' : 'No');
+        
+        if (existingUser) {
+          // First try to find organization by domain
+          let { data: userOrg } = await supabaseAdmin
             .from('organizations')
             .select('id')
-            .eq('first_admin', userInfo.email)
+            .eq('domain', userInfo.hd)
             .single();
             
-          userOrg = orgByAdmin;
+          // If not found by domain, try finding by first_admin
+          if (!userOrg) {
+            const { data: orgByAdmin } = await supabaseAdmin
+              .from('organizations')
+              .select('id')
+              .eq('first_admin', userInfo.email)
+              .single();
+              
+            userOrg = orgByAdmin;
+          }
+          
+          if (userOrg) {
+            console.log('User already exists and has organization, redirecting to dashboard');
+            
+            // Create response with redirect directly to dashboard
+            const dashboardResponse = NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/');
+            
+            // Set necessary cookies with environment-aware settings
+            const cookieOptions = {
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: process.env.NODE_ENV === 'production' ? ('strict' as const) : ('lax' as const),
+              path: '/',
+              domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
+            };
+            
+            dashboardResponse.cookies.set('orgId', userOrg.id, cookieOptions);
+            dashboardResponse.cookies.set('userEmail', userInfo.email, cookieOptions);
+            
+            return dashboardResponse;
+          }
         }
         
-        if (userOrg) {
-          console.log('User already exists and has organization, redirecting to dashboard');
-          
-          // Create response with redirect directly to dashboard
-          const response = NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/');
-          
-          // We'll set cookies below through the session management system
-          return response;
-        }
+        // If user doesn't exist or we couldn't find their organization, force consent flow
+        return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
       }
-      
-      // If user doesn't exist or we couldn't find their organization, force consent flow
-      return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
     }
 
     if (!userInfo.hd) {
@@ -164,6 +215,35 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/?error=not_workspace_account', request.url));
     }
     
+    // Check if user already exists before storing info and sending webhook
+    const { data: existingUser } = await supabaseAdmin
+      .from('users_signedup')
+      .select('id')
+      .eq('email', userInfo.email)
+      .single();
+    
+    const isNewUser = !existingUser;
+    
+    // Store basic user info
+    const { data: userData, error: userError } = await supabaseAdmin
+      .from('users_signedup')
+      .upsert({
+        id: existingUser?.id, // Include ID if exists
+        email: userInfo.email,
+        name: userInfo.name,
+        avatar_url: userInfo.picture || null,
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+        
+    if (userError) {
+      console.error('Error upserting user:', userError);
+    }
+    
+    // Get the user ID from the query or existing user
+    const userId = userData?.id || existingUser?.id;
+
     // Check if user is an admin
     let isAdmin = false;
     try {
@@ -201,32 +281,6 @@ export async function GET(request: Request) {
 
     // Create organization ID from domain
     const orgId = userInfo.hd.replace(/\./g, '-');
-
-    // Check if user already exists before storing info and sending webhook
-    const { data: existingUser } = await supabaseAdmin
-      .from('users_signedup')
-      .select('id')
-      .eq('email', userInfo.email)
-      .single();
-    
-    const isNewUser = !existingUser;
-
-    // Create or get user record
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users_signedup')
-      .upsert({
-        email: userInfo.email,
-        name: userInfo.name,
-        avatar_url: userInfo.picture || null,
-        updated_at: new Date().toISOString(),
-      })
-      .select('id')
-      .single();
-
-    if (userError) {
-      console.error('Error upserting user:', userError);
-      throw userError;
-    }
 
     // Do minimal database operations in the auth callback
     // Just create a new sync status and trigger the background job
@@ -270,47 +324,6 @@ export async function GET(request: Request) {
     if (syncStatusError) {
       console.error('Error creating sync status:', syncStatusError);
       return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
-    }
-
-    // Calculate token expiry time (typically 1 hour for Google tokens)
-    const expiresAt = new Date();
-    if (oauthTokens.expiry_date) {
-      expiresAt.setTime(oauthTokens.expiry_date);
-    } else {
-      // Default expiry is 1 hour from now
-      expiresAt.setHours(expiresAt.getHours() + 1);
-    }
-
-    // Create a session in the user_sessions table
-    try {
-      const sessionResponse = await fetch(`${request.headers.get('origin')}/api/auth/session/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          userEmail: userInfo.email,
-          authProvider: 'google',
-          accessToken: oauthTokens.access_token,
-          refreshToken: oauthTokens.refresh_token,
-          idToken: oauthTokens.id_token,
-          expiresAt: expiresAt.toISOString(),
-          userAgent: request.headers.get('user-agent'),
-          ipAddress: request.headers.get('x-forwarded-for')?.split(',')[0] || 
-                    request.headers.get('x-real-ip')
-        }),
-      });
-
-      if (!sessionResponse.ok) {
-        console.error('Failed to create session:', await sessionResponse.text());
-        throw new Error('Session creation failed');
-      }
-
-      console.log('Session created successfully');
-    } catch (sessionError) {
-      console.error('Error creating session:', sessionError);
-      // Continue despite session error - the cookie will be set in the response
     }
 
     // Check if this organization already has completed a successful sync
@@ -366,7 +379,62 @@ export async function GET(request: Request) {
       const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
       
       // Create response with redirect directly to dashboard
-      return NextResponse.redirect(dashboardUrl);
+      const response = NextResponse.redirect(dashboardUrl);
+
+      // Set necessary cookies with environment-aware settings
+      const cookieOptions = {
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? ('strict' as const) : ('lax' as const),
+        path: '/',
+        domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
+      };
+
+      response.cookies.set('orgId', org.id, cookieOptions);
+      response.cookies.set('userEmail', userInfo.email, cookieOptions);
+      
+      // Create a session in user_sessions table
+      try {
+        // Generate a unique session ID
+        const sessionId = crypto.randomUUID();
+        
+        // Set session expiry (30 days from now)
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 30);
+        
+        // Create the session record
+        const { data: sessionData, error: sessionError } = await supabaseAdmin
+          .from('user_sessions')
+          .insert({
+            id: sessionId,
+            user_id: userId,
+            user_email: userInfo.email,
+            auth_provider: 'google',
+            expires_at: expiresAt.toISOString(),
+            refresh_token: oauthTokens.refresh_token,
+            access_token: oauthTokens.access_token,
+            user_agent: request.headers.get('user-agent') || '',
+            ip_address: request.headers.get('x-forwarded-for') || ''
+          })
+          .select()
+          .single();
+        
+        if (sessionError) {
+          console.error('Error creating session:', sessionError);
+        } else {
+          console.log('Session created successfully:', sessionId);
+          
+          // Set the session ID cookie
+          response.cookies.set('shadow_session_id', sessionId, {
+            ...cookieOptions,
+            httpOnly: true, // Make sure it's not accessible via JavaScript
+            expires: expiresAt // Set the expiry date
+          });
+        }
+      } catch (error) {
+        console.error('Error creating session:', error);
+      }
+      
+      return response;
     }
 
     // Default case: new user or no completed sync yet - create URL for loading page with syncId parameter
@@ -375,17 +443,75 @@ export async function GET(request: Request) {
       redirectUrl.searchParams.set('syncId', syncStatus.id);
     }
 
-    console.log('Redirecting to:', redirectUrl.toString());
+    console.log('Setting cookies and redirecting to:', redirectUrl.toString());
     
     // Create the response with redirect
     const response = NextResponse.redirect(redirectUrl);
 
-    // We no longer need to set cookies here as they're set by the session/create endpoint
+    // Set necessary cookies with environment-aware settings
+    const cookieOptions = {
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? ('strict' as const) : ('lax' as const),
+      path: '/',
+      domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
+    };
+
+    response.cookies.set('orgId', org.id, cookieOptions);
+    response.cookies.set('userEmail', userInfo.email, cookieOptions);
+    
+    // Create a session in user_sessions table
+    try {
+      // Generate a unique session ID
+      const sessionId = crypto.randomUUID();
+      
+      // Set session expiry (30 days from now)
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+      
+      // Create the session record
+      const { data: sessionData, error: sessionError } = await supabaseAdmin
+        .from('user_sessions')
+        .insert({
+          id: sessionId,
+          user_id: userId,
+          user_email: userInfo.email,
+          auth_provider: 'google',
+          expires_at: expiresAt.toISOString(),
+          refresh_token: oauthTokens.refresh_token,
+          access_token: oauthTokens.access_token,
+          user_agent: request.headers.get('user-agent') || '',
+          ip_address: request.headers.get('x-forwarded-for') || ''
+        })
+        .select()
+        .single();
+      
+      if (sessionError) {
+        console.error('Error creating session:', sessionError);
+      } else {
+        console.log('Session created successfully:', sessionId);
+        
+        // Set the session ID cookie
+        response.cookies.set('shadow_session_id', sessionId, {
+          ...cookieOptions,
+          httpOnly: true, // Make sure it's not accessible via JavaScript
+          expires: expiresAt // Set the expiry date
+        });
+      }
+    } catch (error) {
+      console.error('Error creating session:', error);
+    }
 
     // Store basic user info in the background
     try {
-      // User is already upserted above
-
+      await supabaseAdmin
+        .from('users_signedup')
+        .upsert({
+          email: userInfo.email,
+          name: userInfo.name,
+          avatar_url: userInfo.picture || null,
+          updated_at: new Date().toISOString(),
+        });
+      
       console.log('Basic user info stored');
       
       // Send webhook notification for successful signup (only for new users)
