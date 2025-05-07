@@ -161,21 +161,44 @@ export async function GET(request: NextRequest) {
           if (userOrg) {
             console.log('User already exists and has organization, redirecting to dashboard');
             
-            // Create response with redirect directly to dashboard
-            const response = NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/');
+            // Create HTML response with localStorage setting and redirect
+            const dashboardHtmlResponse = `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>Redirecting...</title>
+                <script>
+                  // Store email in localStorage for cross-browser session awareness
+                  localStorage.setItem('userEmail', "${userData.userPrincipalName}");
+                  localStorage.setItem('lastLogin', "${new Date().getTime()}");
+                  window.location.href = "https://www.stitchflow.com/tools/shadow-it-scan/";
+                </script>
+              </head>
+              <body>
+                <p>Redirecting to dashboard...</p>
+              </body>
+              </html>
+            `;
+            
+            const dashboardResponse = new NextResponse(dashboardHtmlResponse, {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/html',
+              },
+            });
             
             // Set necessary cookies
-            const cookieOptions = {
+            const dashboardCookieOptions = {
               httpOnly: true,
               secure: process.env.NODE_ENV === 'production',
               sameSite: 'lax' as const,
               path: '/'
             };
             
-            response.cookies.set('orgId', userOrg.id, cookieOptions);
-            response.cookies.set('userEmail', userData.userPrincipalName, cookieOptions);
+            dashboardResponse.cookies.set('orgId', userOrg.id, dashboardCookieOptions);
+            dashboardResponse.cookies.set('userEmail', userData.userPrincipalName, dashboardCookieOptions);
             
-            return response;
+            return dashboardResponse;
           }
         }
         
@@ -434,19 +457,42 @@ export async function GET(request: NextRequest) {
       console.log('Returning user with healthy completed sync detected, skipping loading page');
       const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
       
-      // Create response with redirect directly to dashboard
-      const response = NextResponse.redirect(dashboardUrl);
+      // Create HTML response with localStorage setting and redirect
+      const existingUserHtmlResponse = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Redirecting...</title>
+          <script>
+            // Store email in localStorage for cross-browser session awareness
+            localStorage.setItem('userEmail', "${userData.userPrincipalName}");
+            localStorage.setItem('lastLogin', "${new Date().getTime()}");
+            window.location.href = "${dashboardUrl.toString()}";
+          </script>
+        </head>
+        <body>
+          <p>Redirecting to dashboard...</p>
+        </body>
+        </html>
+      `;
+      
+      const existingUserResponse = new NextResponse(existingUserHtmlResponse, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html',
+        },
+      });
 
       // Set necessary cookies
-      const cookieOptions = {
+      const existingUserCookieOptions = {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax' as const,
         path: '/'
       };
       
-      response.cookies.set('orgId', org.id, cookieOptions);
-      response.cookies.set('userEmail', userData.userPrincipalName, cookieOptions);
+      existingUserResponse.cookies.set('orgId', org.id, existingUserCookieOptions);
+      existingUserResponse.cookies.set('userEmail', userData.userPrincipalName, existingUserCookieOptions);
       
       // Create a session in user_sessions table
       try {
@@ -480,8 +526,8 @@ export async function GET(request: NextRequest) {
           console.log('Session created successfully:', sessionId);
           
           // Set the session ID cookie with the same cookie options
-          response.cookies.set('shadow_session_id', sessionId, {
-            ...cookieOptions,
+          existingUserResponse.cookies.set('shadow_session_id', sessionId, {
+            ...existingUserCookieOptions,
             expires: expiresAt // Set the expiry date
           });
         }
@@ -489,7 +535,7 @@ export async function GET(request: NextRequest) {
         console.error('Error creating session:', error);
       }
       
-      return response;
+      return existingUserResponse;
     }
 
     // Create a sync status record
@@ -520,19 +566,42 @@ export async function GET(request: NextRequest) {
 
     console.log('Setting cookies and redirecting to:', redirectUrl.toString());
     
-    // Create the response with redirect
-    const response = NextResponse.redirect(redirectUrl);
+    // Create HTML response with localStorage setting and redirect
+    const loadingHtmlResponse = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Redirecting...</title>
+        <script>
+          // Store email in localStorage for cross-browser session awareness
+          localStorage.setItem('userEmail', "${userData.userPrincipalName}");
+          localStorage.setItem('lastLogin', "${new Date().getTime()}");
+          window.location.href = "${redirectUrl.toString()}";
+        </script>
+      </head>
+      <body>
+        <p>Redirecting to dashboard...</p>
+      </body>
+      </html>
+    `;
+    
+    const loadingResponse = new NextResponse(loadingHtmlResponse, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html',
+      },
+    });
 
     // Set necessary cookies
-    const cookieOptions = {
+    const loadingCookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax' as const,
       path: '/'
     };
     
-    response.cookies.set('orgId', org.id, cookieOptions);
-    response.cookies.set('userEmail', userData.userPrincipalName, cookieOptions);
+    loadingResponse.cookies.set('orgId', org.id, loadingCookieOptions);
+    loadingResponse.cookies.set('userEmail', userData.userPrincipalName, loadingCookieOptions);
     
     // Create a session in user_sessions table
     try {
@@ -566,8 +635,8 @@ export async function GET(request: NextRequest) {
         console.log('Session created successfully:', sessionId);
         
         // Set the session ID cookie with the same cookie options
-        response.cookies.set('shadow_session_id', sessionId, {
-          ...cookieOptions,
+        loadingResponse.cookies.set('shadow_session_id', sessionId, {
+          ...loadingCookieOptions,
           expires: expiresAt // Set the expiry date
         });
       }
@@ -608,7 +677,7 @@ export async function GET(request: NextRequest) {
       console.error('Error triggering Microsoft sync:', error);
     });
     
-    return response;
+    return loadingResponse;
   } catch (error) {
     console.error('Auth error:', error);
     return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=unknown', request.url));

@@ -166,8 +166,31 @@ export async function GET(request: Request) {
           if (userOrg) {
             console.log('User already exists and has organization, redirecting to dashboard');
             
-            // Create response with redirect directly to dashboard
-            const dashboardResponse = NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/');
+            // Create HTML response with localStorage setting and redirect
+            const htmlResponse = `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>Redirecting...</title>
+                <script>
+                  // Store email in localStorage for cross-browser session awareness
+                  localStorage.setItem('userEmail', "${userInfo.email}");
+                  localStorage.setItem('lastLogin', "${new Date().getTime()}");
+                  window.location.href = "https://www.stitchflow.com/tools/shadow-it-scan/";
+                </script>
+              </head>
+              <body>
+                <p>Redirecting to dashboard...</p>
+              </body>
+              </html>
+            `;
+            
+            const dashboardResponse = new NextResponse(htmlResponse, {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/html',
+              },
+            });
             
             // Set necessary cookies with environment-aware settings
             const cookieOptions = {
@@ -446,7 +469,31 @@ export async function GET(request: Request) {
     console.log('Setting cookies and redirecting to:', redirectUrl.toString());
     
     // Create the response with redirect
-    const response = NextResponse.redirect(redirectUrl);
+    // Use HTML response to set localStorage before redirecting
+    const htmlResponse = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Redirecting...</title>
+        <script>
+          // Store email in localStorage for cross-browser session awareness
+          localStorage.setItem('userEmail', "${userInfo.email}");
+          localStorage.setItem('lastLogin', "${new Date().getTime()}");
+          window.location.href = "${redirectUrl.toString()}";
+        </script>
+      </head>
+      <body>
+        <p>Redirecting to dashboard...</p>
+      </body>
+      </html>
+    `;
+    
+    const response = new NextResponse(htmlResponse, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html',
+      },
+    });
 
     // Set necessary cookies with environment-aware settings
     const cookieOptions = {

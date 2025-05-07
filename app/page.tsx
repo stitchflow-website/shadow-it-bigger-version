@@ -1904,16 +1904,64 @@ export default function ShadowITDashboard() {
     // Function to check if user has a valid session
     const checkSession = async () => {
       try {
+        // First try to validate session through our API
         const response = await fetch('/tools/shadow-it-scan/api/auth/session/validate', {
-          credentials: 'include' // Ensure cookies are sent
+          credentials: 'include', // Ensure cookies are sent
+          cache: 'no-store', // Prevent caching to ensure fresh response
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
         });
         
-        if (!response.ok) return false;
+        if (response.ok) {
+          const data = await response.json();
+          return data.authenticated === true;
+        }
         
-        const data = await response.json();
-        return data.authenticated === true;
+        // Fallback check - look for the cookies directly
+        // This helps in browsers like Brave with stricter cookie policies
+        const hasCookies = document.cookie.includes('shadow_session_id') || 
+                          document.cookie.includes('orgId') || 
+                          document.cookie.includes('userEmail');
+        
+        // If we have some cookies, do a secondary check against localStorage
+        if (hasCookies) {
+          const lastLogin = localStorage.getItem('lastLogin');
+          if (lastLogin) {
+            // Check if login was within last 30 days
+            const loginTime = parseInt(lastLogin, 10);
+            const now = Date.now();
+            const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+            
+            if (now - loginTime < thirtyDaysMs) {
+              console.log('Found recent login record in localStorage');
+              return true;
+            }
+          }
+        }
+        
+        return false;
       } catch (error) {
         console.error('Error checking session:', error);
+        return false;
+      }
+    };
+    
+    // Function to check if a user email already exists in the system
+    const checkUserExists = async (email: string): Promise<boolean> => {
+      if (!email) return false;
+      
+      try {
+        // Just a simple GET request to an API endpoint that checks if user exists
+        const response = await fetch(`/tools/shadow-it-scan/api/auth/user-exists?email=${encodeURIComponent(email)}`);
+        if (response.ok) {
+          const data = await response.json();
+          return data.exists === true;
+        }
+        return false;
+      } catch (error) {
+        console.error('Error checking if user exists:', error);
         return false;
       }
     };
@@ -1960,17 +2008,50 @@ export default function ShadowITDashboard() {
         const hasValidSession = await checkSession();
         console.log('Has valid session:', hasValidSession);
         
-        // Determine prompt mode
-        // Use 'none' if user has valid session and no error requires consent
-        // Use 'consent' if no valid session or specific errors require it
-        const needsConsent = !hasValidSession || 
-                             errorParam === 'data_refresh_required' || 
-                             errorParam === 'missing_data' ||
-                             errorParam === 'interaction_required' ||
-                             loginError !== ''; // If there's any error, force consent
-
-        const promptMode = needsConsent ? 'consent' : 'none';
-        console.log(`Using prompt mode: ${promptMode} based on session validity and error: ${errorParam}`);
+        // Check for stored email and check if user exists already
+        let userExists = false;
+        const storedEmail = localStorage.getItem('userEmail');
+        if (storedEmail) {
+          userExists = await checkUserExists(storedEmail);
+          console.log('Checked if user exists:', userExists);
+        }
+        
+        // Get browser info for better debugging
+        const isBrave = navigator.userAgent.includes('Brave') || 
+                       (navigator.userAgent.includes('Chrome') && 
+                        !navigator.userAgent.includes('Edg') && 
+                        document.hasStorageAccess !== undefined &&
+                        /Chrome\/[0-9]+/.test(navigator.userAgent));
+        
+        console.log('Browser features:', {
+          hasStorageAccess: document.hasStorageAccess !== undefined,
+          isChrome: navigator.userAgent.includes('Chrome'),
+          isEdge: navigator.userAgent.includes('Edg'),
+          isBraveLike: isBrave
+        });
+        
+        // Determine if we need consent
+        // 1. If user has valid session, don't need consent
+        // 2. If user exists in database but no valid session, don't need consent (use prompt=select_account)
+        // 3. If error requires consent, use consent
+        // 4. If login error occurred, use consent
+        
+        let promptMode = 'none'; // Default when session is valid
+        
+        if (!hasValidSession) {
+          // No valid session, but if user exists we can use select_account instead of full consent
+          promptMode = userExists ? 'select_account' : 'consent';
+        }
+        
+        // Override with consent if specific errors require it
+        if (errorParam === 'data_refresh_required' || 
+            errorParam === 'missing_data' ||
+            errorParam === 'interaction_required' ||
+            loginError !== '') {
+          promptMode = 'consent';
+        }
+        
+        console.log(`Using prompt mode: ${promptMode} based on session validity, user existence, and error: ${errorParam}`);
 
         const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         authUrl.searchParams.append('client_id', clientId);
@@ -1982,6 +2063,7 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
 
         localStorage.setItem('auth_provider', 'google');
+        localStorage.setItem('lastLogin', Date.now().toString());
 
         // Before redirecting, clean URL by removing error parameter
         if (errorParam) {
@@ -2045,17 +2127,46 @@ export default function ShadowITDashboard() {
         const hasValidSession = await checkSession();
         console.log('Has valid session:', hasValidSession);
         
-        // Determine prompt mode based on session validity and errors
-        // Microsoft is more sensitive to prompt=none failures, so we're more careful here
-        // Only use 'none' if user has valid session and no errors requiring consent
-        const needsConsent = !hasValidSession || 
-                            errorParam === 'data_refresh_required' || 
-                            errorParam === 'missing_data' ||
-                            errorParam === 'interaction_required' ||
-                            loginError !== '';
-
-        const promptMode = needsConsent ? 'consent' : 'none';
-        console.log(`Using prompt mode: ${promptMode} based on session validity and error: ${errorParam}`);
+        // Check for stored email and check if user exists already
+        let userExists = false;
+        const storedEmail = localStorage.getItem('userEmail');
+        if (storedEmail) {
+          userExists = await checkUserExists(storedEmail);
+          console.log('Checked if user exists:', userExists);
+        }
+        
+        // Get browser info for better debugging
+        const isBrave = navigator.userAgent.includes('Brave') || 
+                       (navigator.userAgent.includes('Chrome') && 
+                        !navigator.userAgent.includes('Edg') && 
+                        document.hasStorageAccess !== undefined &&
+                        /Chrome\/[0-9]+/.test(navigator.userAgent));
+        
+        console.log('Browser features:', {
+          hasStorageAccess: document.hasStorageAccess !== undefined,
+          isChrome: navigator.userAgent.includes('Chrome'),
+          isEdge: navigator.userAgent.includes('Edg'),
+          isBraveLike: isBrave
+        });
+        
+        // Determine if we need consent
+        // Microsoft is more sensitive to prompt=none, so we're more careful
+        let promptMode = 'none'; // Default when session is valid
+        
+        if (!hasValidSession) {
+          // No valid session, but if user exists we can use select_account instead of full consent
+          promptMode = userExists ? 'select_account' : 'consent';
+        }
+        
+        // Override with consent if specific errors require it
+        if (errorParam === 'data_refresh_required' || 
+            errorParam === 'missing_data' ||
+            errorParam === 'interaction_required' ||
+            loginError !== '') {
+          promptMode = 'consent';
+        }
+        
+        console.log(`Using prompt mode: ${promptMode} based on session validity, user existence, and error: ${errorParam}`);
 
         const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
         authUrl.searchParams.append('client_id', clientId);
@@ -2067,6 +2178,7 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
 
         localStorage.setItem('auth_provider', 'microsoft');
+        localStorage.setItem('lastLogin', Date.now().toString());
         
         // Before redirecting, clean URL by removing error parameter
         if (errorParam) {
