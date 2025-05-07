@@ -70,9 +70,9 @@ export class MicrosoftWorkspaceService {
   private currentTokens: any = null;
 
   constructor(credentials: any) {
-    this.clientId = credentials.client_id;
-    this.clientSecret = credentials.client_secret;
-    this.tenantId = credentials.tenant_id;
+    this.clientId = credentials.clientId;
+    this.clientSecret = credentials.clientSecret;
+    this.tenantId = credentials.tenantId;
     
     this.credential = new ClientSecretCredential(
       this.tenantId,
@@ -103,6 +103,56 @@ export class MicrosoftWorkspaceService {
 
   getCredentials() {
     return this.currentTokens;
+  }
+
+  /**
+   * Refreshes a token using a refresh token
+   * @param refreshToken The refresh token to use
+   * @returns Object with the new tokens
+   */
+  async refreshToken(refreshToken: string) {
+    try {
+      console.log('Refreshing Microsoft token with refresh token');
+      
+      // Prepare the token endpoint request
+      const tokenEndpoint = `https://login.microsoftonline.com/common/oauth2/v2.0/token`;
+      const params = new URLSearchParams({
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+        scope: 'https://graph.microsoft.com/.default offline_access'
+      });
+
+      // Make the refresh token request
+      const response = await fetch(tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString(),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Failed to refresh Microsoft token:', errorData);
+        throw new Error(`Failed to refresh token: ${response.status} ${response.statusText} - ${errorData}`);
+      }
+
+      // Parse the new tokens
+      const newTokens = await response.json();
+      
+      // Return the token response with properly named fields
+      return {
+        access_token: newTokens.access_token,
+        refresh_token: newTokens.refresh_token || refreshToken, // Keep original if not returned
+        id_token: newTokens.id_token,
+        expires_in: newTokens.expires_in || 3600 // Default to 1 hour
+      };
+    } catch (error) {
+      console.error('Error refreshing Microsoft token:', error);
+      throw error;
+    }
   }
 
   /**

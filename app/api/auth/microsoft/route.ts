@@ -129,21 +129,7 @@ export async function GET(request: NextRequest) {
           // Create response with redirect directly to dashboard
           const response = NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/');
           
-          // Set necessary cookies
-          response.cookies.set('orgId', userOrg.id, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/'
-          });
-          
-          response.cookies.set('userEmail', userData.userPrincipalName, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/'
-          });
-          
+          // We'll set session cookies through the session/create API instead
           return response;
         }
       }
@@ -396,33 +382,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
     }
 
-    // If the user and organization already exist with completed sync and no data issues, 
-    // redirect directly to the dashboard instead of the loading page
-    if (!isNewUser && existingCompletedSync && !needsFreshSync) {
-      console.log('Returning user with healthy completed sync detected, skipping loading page');
-      const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
-      
-      // Create response with redirect directly to dashboard
-      const response = NextResponse.redirect(dashboardUrl);
-
-      // Set necessary cookies
-      response.cookies.set('orgId', org.id, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/'
-      });
-      
-      response.cookies.set('userEmail', userData.userPrincipalName, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/'
-      });
-      
-      return response;
-    }
-
     // Create a sync status record
     const { data: syncStatus, error: syncStatusError } = await supabaseAdmin
       .from('sync_status')
@@ -443,35 +402,74 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
     }
 
+    // Calculate token expiry time (typically 1 hour for Microsoft tokens)
+    const expiresAt = new Date();
+    if (tokenData.expires_in) {
+      // expires_in is usually in seconds
+      expiresAt.setSeconds(expiresAt.getSeconds() + tokenData.expires_in);
+    } else {
+      // Default expiry is 1 hour from now
+      expiresAt.setHours(expiresAt.getHours() + 1);
+    }
+
+    // Create a session in the user_sessions table
+    try {
+      const sessionResponse = await fetch(`${request.nextUrl.origin}/api/auth/session/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          userEmail: userData.userPrincipalName,
+          authProvider: 'microsoft',
+          accessToken: access_token,
+          refreshToken: refresh_token,
+          idToken: id_token,
+          expiresAt: expiresAt.toISOString(),
+          userAgent: request.headers.get('user-agent'),
+          ipAddress: request.headers.get('x-forwarded-for')?.split(',')[0] || 
+                   request.headers.get('x-real-ip')
+        }),
+      });
+
+      if (!sessionResponse.ok) {
+        console.error('Failed to create session:', await sessionResponse.text());
+        throw new Error('Session creation failed');
+      }
+
+      console.log('Session created successfully');
+    } catch (sessionError) {
+      console.error('Error creating session:', sessionError);
+      // Continue despite session error - we'll try to continue without it
+    }
+
+    // If the user and organization already exist with completed sync and no data issues, 
+    // redirect directly to the dashboard instead of the loading page
+    if (!isNewUser && existingCompletedSync && !needsFreshSync) {
+      console.log('Returning user with healthy completed sync detected, skipping loading page');
+      const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
+      
+      // Create response with redirect directly to dashboard
+      return NextResponse.redirect(dashboardUrl);
+    }
+
     // Create URL for loading page with syncId parameter
     const redirectUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/loading');
     if (syncStatus?.id) {
       redirectUrl.searchParams.set('syncId', syncStatus.id);
     }
 
-    console.log('Setting cookies and redirecting to:', redirectUrl.toString());
+    console.log('Redirecting to:', redirectUrl.toString());
     
     // Create the response with redirect
     const response = NextResponse.redirect(redirectUrl);
 
-    // Set necessary cookies
-    response.cookies.set('orgId', org.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/'
-    });
-    
-    response.cookies.set('userEmail', userData.userPrincipalName, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/'
-    });
+    // We no longer need to set cookies here as they're set by the session/create endpoint
 
     // Create default notification preferences for the user
     try {
-      await fetch(`/tools/shadow-it-scan/api/auth/create-default-preferences`, {
+      await fetch(`https://www.stitchflow.com/tools/shadow-it-scan/api/auth/create-default-preferences`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -487,36 +485,7 @@ export async function GET(request: NextRequest) {
       // Continue despite error - not critical
     }
     
-    // After successful OAuth and user verification, before redirecting
-    // Around line 377, after organization creation
-    if (org) {
-      // Create Supabase session
-      const response = await fetch(new URL('/api/auth/create-session', request.url).toString(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: userData.userPrincipalName,
-          name: userData.displayName,
-          provider: 'microsoft',
-          accessToken: access_token,
-          refreshToken: refresh_token
-        })
-      });
-
-      if (!response.ok) {
-        console.error('Failed to create Supabase session:', await response.text());
-        // Continue with redirect anyway as the main auth flow succeeded
-      }
-    }
-    
-    // // Trigger the Microsoft sync process in the background
-    // // This will run after we've already redirected the user
-    // const host = request.headers.get('host') || process.env.VERCEL_URL || 'localhost:3000';
-    // const protocol = host.includes('localhost') ? 'http://' : 'https://';
-    // const baseUrl = `${protocol}${host}`;
-    
+    // Trigger the Microsoft sync process in the background
     fetch(`https://www.stitchflow.com/tools/shadow-it-scan/api/background/sync/microsoft`, {
       method: 'GET',
       headers: {

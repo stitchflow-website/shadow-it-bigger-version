@@ -17,6 +17,8 @@ interface Credentials {
   access_token?: string;
   refresh_token?: string;
   expiry_date?: number;
+  id_token?: string;
+  scope?: string;
 }
 
 export class GoogleWorkspaceService {
@@ -51,6 +53,58 @@ export class GoogleWorkspaceService {
   // New method to get current credentials
   getCredentials() {
     return this.oauth2Client.credentials;
+  }
+
+  /**
+   * Refreshes a token using a refresh token
+   * @param refreshToken The refresh token to use
+   * @returns Object with the new tokens
+   */
+  async refreshToken(refreshToken: string) {
+    try {
+      // Set up the oauth client with just the refresh token
+      this.oauth2Client.setCredentials({
+        refresh_token: refreshToken
+      });
+      
+      // Request a new access token
+      const response = await this.oauth2Client.getAccessToken();
+      
+      // Handle the response based on its type
+      if (response.token && typeof response.token === 'string') {
+        // Simple string token
+        return {
+          access_token: response.token,
+          refresh_token: refreshToken, // Keep the original refresh token
+          expires_in: 3600 // Default to 1 hour
+        };
+      } else if (response.token && typeof response.token === 'object') {
+        // Token is an object
+        const tokenObj = response.token as Credentials;
+        return {
+          access_token: tokenObj.access_token,
+          refresh_token: tokenObj.refresh_token || refreshToken, // Use new refresh token if provided
+          id_token: tokenObj.id_token,
+          expires_in: tokenObj.expiry_date 
+            ? Math.floor((tokenObj.expiry_date - Date.now()) / 1000) 
+            : 3600
+        };
+      } else {
+        // Fallback to credentials
+        const credentials = this.oauth2Client.credentials;
+        return {
+          access_token: credentials.access_token,
+          refresh_token: credentials.refresh_token || refreshToken,
+          id_token: credentials.id_token,
+          expires_in: credentials.expiry_date 
+            ? Math.floor((credentials.expiry_date - Date.now()) / 1000) 
+            : 3600
+        };
+      }
+    } catch (error) {
+      console.error('Error refreshing Google token:', error);
+      throw error;
+    }
   }
 
   /**
