@@ -8,6 +8,7 @@ export async function middleware(request: NextRequest) {
   
   // Skip auth check for public routes and internal API calls
   const publicRoutes = [
+    '/tools/shadow-it-scan',
     '/tools/shadow-it-scan/login',
     '/tools/shadow-it-scan/api/auth/google',
     '/tools/shadow-it-scan/api/auth/microsoft',
@@ -37,18 +38,24 @@ export async function middleware(request: NextRequest) {
     '/tools/shadow-it-scan/.*\\.(?:jpg|jpeg|gif|png|svg|ico|css|js)$'
   ];
   
-  // Check if current URL is a public route
+  // Check if current URL is a public route or the main page
   const isPublicRoute = publicRoutes.some(route => 
     request.nextUrl.pathname === route || request.nextUrl.pathname.startsWith(route)
   );
   
+  // Also check for the root shadow-it-scan path with query params
+  const isMainPageWithParams = request.nextUrl.pathname === '/tools/shadow-it-scan/' || 
+                               request.nextUrl.pathname === '/tools/shadow-it-scan';
+  
   // Check for internal API calls with service role key
   const isInternalApiCall = request.headers.get('Authorization')?.includes(process.env.SUPABASE_SERVICE_ROLE_KEY || '');
   
-  // If it's a public route or an internal API call, proceed without authentication check
-  if (isPublicRoute || isInternalApiCall) {
+  // If it's a public route, the main page, or an internal API call, proceed without auth check
+  if (isPublicRoute || isMainPageWithParams || isInternalApiCall) {
     return NextResponse.next();
   }
+  
+  // For other routes, perform authentication checks
   
   // Check for Supabase session cookies
   const sbAccessToken = request.cookies.get('sb-access-token')?.value;
@@ -116,6 +123,15 @@ export async function middleware(request: NextRequest) {
   }
   
   // If neither Supabase session nor legacy cookies are valid, redirect to login page
+  // But add a console log to help debug the issue
+  console.log('Authentication failed, redirecting to login_required page', {
+    path: request.nextUrl.pathname,
+    hasSbAccessToken: !!sbAccessToken,
+    hasSbRefreshToken: !!sbRefreshToken,
+    hasOrgId: !!orgId,
+    hasUserEmail: !!userEmail
+  });
+  
   const redirectUrl = new URL('/tools/shadow-it-scan/?error=login_required', request.url);
   return NextResponse.redirect(redirectUrl);
 }

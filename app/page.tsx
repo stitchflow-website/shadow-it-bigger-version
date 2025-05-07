@@ -283,6 +283,9 @@ export default function ShadowITDashboard() {
         
         // For other errors, show the login modal with appropriate message
         switch (errorParam) {
+          case 'login_required':
+            setLoginError('Please sign in to continue');
+            break;
           case 'no_code':
             setLoginError('No authorization code received. Please try again.');
             break;
@@ -1921,6 +1924,21 @@ export default function ShadowITDashboard() {
     const [isLoading, setIsLoading] = useState(false);
     const [loginProvider, setLoginProvider] = useState<'google' | 'microsoft' | null>(null);
     
+    // Check if we're being redirected from middleware due to an expired session
+    useEffect(() => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const errorParam = searchParams.get('error');
+      
+      if (errorParam === 'login_required') {
+        setLoginError('Your session has expired. Please sign in again.');
+        
+        // Clean URL
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('error');
+        window.history.replaceState({}, document.title, cleanUrl.toString());
+      }
+    }, []);
+    
     const handleGoogleLogin = () => {
       try {
         setIsLoading(true);
@@ -1964,6 +1982,7 @@ export default function ShadowITDashboard() {
         const needsConsent = errorParam === 'data_refresh_required' || 
                              errorParam === 'missing_data' ||
                              errorParam === 'interaction_required' ||
+                             errorParam === 'login_required' ||  
                              loginError !== ''; // If there's any error, force consent
 
         const promptMode = needsConsent ? 'consent' : 'none';
@@ -2038,8 +2057,15 @@ export default function ShadowITDashboard() {
         const searchParams = new URLSearchParams(window.location.search);
         const errorParam = searchParams.get('error');
         
-        // Always use consent instead of none - this ensures the Microsoft login will always work
-        // Setting to 'none' causes errors for new users or when consent is required
+        // Always use consent when needed
+        // We include login_required here too to ensure re-authentication works
+        const needsConsent = errorParam === 'login_required' || 
+                            errorParam === 'data_refresh_required' || 
+                            errorParam === 'missing_data' ||
+                            errorParam === 'interaction_required' ||
+                            loginError !== '';
+                            
+        // For Microsoft, we always use consent to ensure the login works properly
         const promptMode = 'consent';
         console.log(`Using prompt mode: ${promptMode}`);
 
