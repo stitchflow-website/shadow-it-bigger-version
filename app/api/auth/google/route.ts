@@ -105,46 +105,99 @@ export async function GET(request: Request) {
       console.log('Checking if user exists:', existingUser ? 'Yes' : 'No');
       
       if (existingUser) {
-        // First try to find organization by domain
-        let { data: userOrg } = await supabaseAdmin
-          .from('organizations')
-          .select('id')
-          .eq('domain', userInfo.hd)
-          .single();
-          
-        // If not found by domain, try finding by first_admin
-        if (!userOrg) {
-          const { data: orgByAdmin } = await supabaseAdmin
+        try {
+          // Look for organization by domain
+          let { data: userOrg } = await supabaseAdmin
             .from('organizations')
             .select('id')
-            .eq('first_admin', userInfo.email)
+            .eq('domain', userInfo.hd)
             .single();
             
-          userOrg = orgByAdmin;
-        }
-        
-        if (userOrg) {
-          console.log('User already exists and has organization, redirecting to dashboard');
+          // If not found by domain, try finding by email
+          if (!userOrg) {
+            const { data: orgByAdmin } = await supabaseAdmin
+              .from('organizations')
+              .select('id')
+              .eq('first_admin', userInfo.email)
+              .single();
+              
+            userOrg = orgByAdmin;
+          }
           
-          // Create response with redirect directly to dashboard
-          const response = NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/');
-          
-          // Set necessary cookies with environment-aware settings
-          const cookieOptions = {
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
-            path: '/',
-            domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
-          };
-          
-          response.cookies.set('orgId', userOrg.id, cookieOptions);
-          response.cookies.set('userEmail', userInfo.email, cookieOptions);
-          
-          return response;
+          if (userOrg) {
+            console.log('User already exists and has organization, redirecting to dashboard');
+            
+            // Create response with redirect directly to dashboard
+            const response = NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/');
+            
+            // Set necessary cookies with environment-aware settings
+            const cookieOptions = {
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: (process.env.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
+              path: '/',
+              domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
+            };
+            
+            response.cookies.set('orgId', userOrg.id, cookieOptions);
+            response.cookies.set('userEmail', userInfo.email, cookieOptions);
+            
+            try {
+              // Try to refresh the Supabase session for this existing user
+              const protocol = request.url.startsWith('https') ? 'https' : 'http';
+              const host = request.headers.get('host') || 'localhost:3000';
+              const sessionUrl = `${protocol}://${host}/api/auth/create-session`;
+              
+              console.log('Refreshing Supabase session for existing user with URL:', sessionUrl);
+              
+              const sessionResponse = await fetch(sessionUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  email: userInfo.email,
+                  name: userInfo.name,
+                  provider: 'google',
+                  accessToken: oauthTokens.access_token,
+                  forceRefresh: true,
+                  existingUser: true
+                })
+              });
+              
+              if (sessionResponse.ok) {
+                console.log('Successfully refreshed Supabase session for existing user');
+                const sessionData = await sessionResponse.json();
+                
+                // Set the Supabase auth cookies
+                if (sessionData && sessionData.session) {
+                  response.cookies.set('sb-access-token', sessionData.session.access_token, {
+                    ...cookieOptions,
+                    maxAge: 60 * 60 * 24 * 7 // 1 week
+                  });
+                  
+                  response.cookies.set('sb-refresh-token', sessionData.session.refresh_token, {
+                    ...cookieOptions,
+                    maxAge: 60 * 60 * 24 * 30 // 30 days
+                  });
+                }
+              } else {
+                console.error('Failed to refresh Supabase session:', await sessionResponse.text());
+                // Continue anyway - the redirect will still work with the orgId and userEmail cookies
+              }
+            } catch (sessionError) {
+              console.error('Error refreshing Supabase session:', sessionError);
+              // Continue with redirect anyway as the main auth flow can still work
+            }
+            
+            return response;
+          }
+        } catch (error) {
+          console.error('Error finding organization:', error);
         }
       }
       
-      // If user doesn't exist or we couldn't find their organization, force consent flow
+      // If no refresh token and not an existing user with organization,
+      // or if there was an error, redirect to force consent
       return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
     }
 

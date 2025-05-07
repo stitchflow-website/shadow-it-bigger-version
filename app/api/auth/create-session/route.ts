@@ -17,108 +17,143 @@ const supabase = createClient(
 
 export async function POST(request: Request) {
   try {
-    const { email, name, provider, accessToken, refreshToken } = await request.json();
+    const { email, name, provider, accessToken, refreshToken, forceRefresh, existingUser } = await request.json();
 
     if (!email || !name || !provider) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
+
+    console.log(`Creating/refreshing session for user: ${email}, existing user: ${!!existingUser}`);
 
     // Create user metadata
     const metadata = {
       name,
       provider,
       oauth_access_token: accessToken,
-      oauth_refresh_token: refreshToken
+      oauth_refresh_token: refreshToken,
+      updated_at: new Date().toISOString()
     };
 
-    // First try to sign in the user with the custom OAuth tokens
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      // Use a deterministic password based on email+provider to ensure consistency across browsers
-      password: `${email}-${provider}-${process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 8) || 'fallback'}`
+    // Check if the user already exists in Supabase
+    const { data: existingUserData, error: userLookupError } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1,
     });
 
-    // If sign-in fails (likely because user doesn't exist), create the user
-    if (signInError) {
-      console.log('Sign in failed, creating user:', signInError.message);
-      
-      // Create the user
-      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        email_confirm: true,
-        user_metadata: metadata,
-        password: `${email}-${provider}-${process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 8) || 'fallback'}`
-      });
-      
-      if (createError) {
-        console.error('Error creating user:', createError);
-        return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
-      }
-      
-      // Sign in with the newly created user
-      const { data: newSignInData, error: newSignInError } = await supabase.auth.signInWithPassword({
-        email,
-        password: `${email}-${provider}-${process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 8) || 'fallback'}`
-      });
-      
-      if (newSignInError) {
-        console.error('Error signing in after user creation:', newSignInError);
-        return NextResponse.json({ error: 'Failed to sign in new user' }, { status: 500 });
-      }
-      
-      // Use the new sign-in data
-      const session = newSignInData.session;
-      
-      // Create response with session data
-      const response = NextResponse.json({
-        success: true,
-        user: {
-          id: newUser.user.id,
-          email,
-          name,
-          provider
-        }
-      });
+    // Filter for the matching email since we can't directly query by email
+    const userExists = existingUserData?.users && 
+      existingUserData.users.some(user => user.email === email);
+    console.log(`User lookup result: exists=${userExists}, error=${!!userLookupError}`);
 
-      // Set cookies in the response headers with long expiry and proper domains
-      const isProduction = process.env.NODE_ENV === 'production';
-      const domain = isProduction ? '.stitchflow.com' : undefined;
-
-      response.cookies.set('sb-access-token', session?.access_token || '', {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: 'lax',
-        path: '/',
-        domain,
-        maxAge: 60 * 60 * 24 * 7 // 1 week
-      });
-
-      response.cookies.set('sb-refresh-token', session?.refresh_token || '', {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: 'lax',
-        path: '/',
-        domain,
-        maxAge: 60 * 60 * 24 * 30 // 30 days
-      });
-
-      return response;
+    if (userLookupError) {
+      console.error('Error looking up user:', userLookupError);
     }
-    
-    // User exists and sign in succeeded
-    const session = signInData.session;
-    
-    // Update user metadata
-    await supabaseAdmin.auth.admin.updateUserById(
-      session!.user.id,
-      { user_metadata: metadata }
-    );
+
+    let session;
+
+    if (userExists) {
+      // User exists in Supabase
+      console.log('User exists in Supabase, updating metadata and signing in');
+      // Find the user with matching email
+      const userId = existingUserData.users.find(user => user.email === email)!.id;
+
+      try {
+        // Update user metadata first
+        await supabaseAdmin.auth.admin.updateUserById(userId, { 
+          user_metadata: metadata 
+        });
+        
+        // Then try to sign in the user with the ID token
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithIdToken({
+          provider,
+          token: accessToken,
+        });
+
+        if (signInError) {
+          console.error('Error signing in with ID token:', signInError);
+          return NextResponse.json({ 
+            error: 'Failed to authenticate user, please try again',
+            needsRetry: true
+          }, { status: 401 });
+        } else {
+          session = signInData.session;
+        }
+      } catch (updateError) {
+        console.error('Error updating existing user:', updateError);
+        return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
+      }
+    } else {
+      // User doesn't exist in Supabase, create them
+      console.log('User does not exist in Supabase, creating new user');
+      try {
+        // Create the user with admin API
+        const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          email_confirm: true,
+          user_metadata: metadata,
+          password: `${email}-${provider}-${process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 8) || 'fallback'}`
+        });
+        
+        if (createError) {
+          console.error('Error creating user:', createError);
+          
+          // If the error is that the user already exists, try to sign in with ID token
+          if (createError.message === 'A user with this email address has already been registered') {
+            console.log('User already exists despite lookup failure, trying to sign in with ID token');
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithIdToken({
+              provider,
+              token: accessToken,
+            });
+            
+            if (signInError) {
+              console.error('Error signing in with ID token after creation failure:', signInError);
+              return NextResponse.json({ 
+                error: 'Failed to authenticate existing user',
+                needsRetry: true
+              }, { status: 401 });
+            }
+            
+            session = signInData.session;
+          } else {
+            return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
+          }
+        } else {
+          // Sign in with the newly created user using ID token
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithIdToken({
+            provider,
+            token: accessToken,
+          });
+          
+          if (signInError) {
+            console.error('Error signing in with ID token after user creation:', signInError);
+            return NextResponse.json({ 
+              error: 'Failed to sign in new user',
+              needsRetry: true
+            }, { status: 401 });
+          }
+          
+          session = signInData.session;
+        }
+      } catch (createError) {
+        console.error('Unexpected error creating user:', createError);
+        return NextResponse.json({ error: 'Internal error creating user' }, { status: 500 });
+      }
+    }
+
+    if (!session) {
+      console.error('Failed to obtain a valid session after multiple attempts');
+      return NextResponse.json({ 
+        error: 'Could not establish session',
+        needsRetry: true 
+      }, { status: 401 });
+    }
     
     // Create response with session data
     const response = NextResponse.json({
       success: true,
+      session,
       user: {
-        id: session!.user.id,
+        id: session.user.id,
         email,
         name,
         provider
@@ -129,7 +164,7 @@ export async function POST(request: Request) {
     const isProduction = process.env.NODE_ENV === 'production';
     const domain = isProduction ? '.stitchflow.com' : undefined;
 
-    response.cookies.set('sb-access-token', session!.access_token, {
+    response.cookies.set('sb-access-token', session.access_token, {
       httpOnly: true,
       secure: isProduction,
       sameSite: 'lax',
@@ -138,7 +173,7 @@ export async function POST(request: Request) {
       maxAge: 60 * 60 * 24 * 7 // 1 week
     });
 
-    response.cookies.set('sb-refresh-token', session!.refresh_token, {
+    response.cookies.set('sb-refresh-token', session.refresh_token, {
       httpOnly: true,
       secure: isProduction,
       sameSite: 'lax',
@@ -148,7 +183,6 @@ export async function POST(request: Request) {
     });
 
     return response;
-
   } catch (error) {
     console.error('Error in create-session:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
