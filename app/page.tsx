@@ -2184,25 +2184,37 @@ export default function ShadowITDashboard() {
       setLoginError('');
       setIsLoading(true);
       
+      // Get the URL based on the environment
+      let retryUrl = '/tools/shadow-it-scan/api/auth/retry-session';
+      
+      // If on localhost, adjust the URL to work with the local dev server
+      if (typeof window !== 'undefined' && 
+          (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1'))) {
+        retryUrl = '/api/auth/retry-session';
+      }
+      
+      console.log('Using retry session URL:', retryUrl);
+      
       // Call our retry-session API endpoint
-      const response = await fetch('/tools/shadow-it-scan/api/auth/retry-session', {
+      const response = await fetch(retryUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        credentials: 'include' // Important: include cookies in the request
       });
       
       const data = await response.json();
       
       if (!response.ok) {
-        console.error('Error refreshing session:', data.error);
-        setLoginError('Unable to refresh your session. Please sign in again.');
+        console.error('Error refreshing session:', data.error, data.message);
+        setLoginError(data.message || 'Unable to refresh your session. Please sign in again.');
         setShowLoginModal(true);
         setIsLoading(false);
         return;
       }
       
-      console.log('Session refreshed successfully');
+      console.log('Session refreshed successfully:', data);
       setSessionValidated(true);
       setShowLoginModal(false);
       setIsLoading(false);

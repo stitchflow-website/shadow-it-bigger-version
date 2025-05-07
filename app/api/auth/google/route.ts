@@ -424,23 +424,37 @@ export async function GET(request: Request) {
     // After successful OAuth and user verification, before redirecting
     // Around line 239, after organization creation
     if (org) {
-      // Create Supabase session
-      const response = await fetch(new URL('/api/auth/create-session', request.url).toString(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: userInfo.email,
-          name: userInfo.name,
-          provider: 'google',
-          accessToken: oauthTokens.access_token,
-          refreshToken: oauthTokens.refresh_token
-        })
-      });
+      try {
+        // Create Supabase session
+        // Use the same protocol as the request
+        const protocol = request.url.startsWith('https') ? 'https' : 'http';
+        const host = request.headers.get('host') || 'localhost:3000';
+        const sessionUrl = `${protocol}://${host}/api/auth/create-session`;
+        
+        console.log('Creating Supabase session with URL:', sessionUrl);
+        
+        const response = await fetch(sessionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: userInfo.email,
+            name: userInfo.name,
+            provider: 'google',
+            accessToken: oauthTokens.access_token,
+            refreshToken: oauthTokens.refresh_token
+          })
+        });
 
-      if (!response.ok) {
-        console.error('Failed to create Supabase session:', await response.text());
+        if (!response.ok) {
+          console.error('Failed to create Supabase session:', await response.text());
+          // Continue with redirect anyway as the main auth flow succeeded
+        } else {
+          console.log('Successfully created Supabase session');
+        }
+      } catch (sessionError) {
+        console.error('Error creating Supabase session:', sessionError);
         // Continue with redirect anyway as the main auth flow succeeded
       }
     }
