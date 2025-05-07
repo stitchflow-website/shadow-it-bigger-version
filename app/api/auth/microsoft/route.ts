@@ -487,6 +487,30 @@ export async function GET(request: NextRequest) {
       // Continue despite error - not critical
     }
     
+    // After successful OAuth and user verification, before redirecting
+    // Around line 377, after organization creation
+    if (org) {
+      // Create Supabase session
+      const response = await fetch(new URL('/api/auth/create-session', request.url).toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: userData.userPrincipalName,
+          name: userData.displayName,
+          provider: 'microsoft',
+          accessToken: access_token,
+          refreshToken: refresh_token
+        })
+      });
+
+      if (!response.ok) {
+        console.error('Failed to create Supabase session:', await response.text());
+        // Continue with redirect anyway as the main auth flow succeeded
+      }
+    }
+    
     // // Trigger the Microsoft sync process in the background
     // // This will run after we've already redirected the user
     // const host = request.headers.get('host') || process.env.VERCEL_URL || 'localhost:3000';

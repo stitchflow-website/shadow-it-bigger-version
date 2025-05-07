@@ -64,8 +64,8 @@ export class GoogleWorkspaceService {
       const credentials = this.oauth2Client.credentials;
       
       if (!credentials.refresh_token) {
-        console.log('No refresh token available, cannot refresh access token');
-        return null;
+        console.error('No refresh token available, cannot refresh access token');
+        throw new Error('Missing refresh token - unable to refresh access token');
       }
       
       // If expiry_date doesn't exist or is within 5 minutes of expiring, refresh the token
@@ -74,44 +74,75 @@ export class GoogleWorkspaceService {
       const fiveMinutesInMs = 5 * 60 * 1000;
       
       if (force || !expiryDate || now >= expiryDate - fiveMinutesInMs) {
-        console.log('Access token expired or about to expire, refreshing...');
+        if (force) {
+          console.log('Forcing token refresh as requested');
+        } else {
+          console.log('Access token expired or about to expire, refreshing...');
+        }
         
         // Request a new access token
-        const response = await this.oauth2Client.getAccessToken();
-        const token = response.token as Credentials;
-        
-        if (typeof token !== 'string') {
-          // If token is an object (which it should be)
-          const newCredentials = {
-            access_token: token.access_token || credentials.access_token,
-            refresh_token: token.refresh_token || credentials.refresh_token,
-            expiry_date: token.expiry_date || credentials.expiry_date
-          };
+        try {
+          const response = await this.oauth2Client.getAccessToken();
+          const token = response.token as Credentials;
           
-          // Update the client with new tokens
-          this.oauth2Client.setCredentials(newCredentials);
+          if (typeof token !== 'string') {
+            // If token is an object (which it should be)
+            const newCredentials = {
+              access_token: token.access_token || credentials.access_token,
+              refresh_token: token.refresh_token || credentials.refresh_token,
+              expiry_date: token.expiry_date || (Date.now() + 3600 * 1000) // Default to 1 hour expiry
+            };
+            
+            // Update the client with new tokens
+            this.oauth2Client.setCredentials(newCredentials);
+            
+            console.log('Successfully refreshed access token');
+            return newCredentials;
+          } else {
+            // If token is just a string (access token)
+            const newCredentials = {
+              ...credentials,
+              access_token: token,
+              // Update expiry time to 1 hour from now if not provided
+              expiry_date: credentials.expiry_date || (Date.now() + 3600 * 1000)
+            };
+            
+            this.oauth2Client.setCredentials(newCredentials);
+            
+            console.log('Successfully refreshed access token (string format)');
+            return newCredentials;
+          }
+        } catch (refreshError) {
+          console.error('Failed to refresh access token:', refreshError);
           
-          console.log('Successfully refreshed access token');
-          return newCredentials;
-        } else {
-          // If token is just a string (access token)
-          this.oauth2Client.setCredentials({
-            ...credentials,
-            access_token: token
-          });
+          // Add more context to the error
+          if (refreshError instanceof Error) {
+            // Check for common OAuth errors and provide better messages
+            if (refreshError.message.includes('invalid_grant')) {
+              throw new Error(`Invalid refresh token. OAuth grant has expired or been revoked: ${refreshError.message}`);
+            } else {
+              throw new Error(`Token refresh failed: ${refreshError.message}`);
+            }
+          }
           
-          console.log('Successfully refreshed access token (string format)');
-          return {
-            ...credentials,
-            access_token: token
-          };
+          throw refreshError; // Re-throw any other errors
         }
       }
       
-      console.log('Access token still valid, no refresh needed');
-      return null;
+      if (!force) {
+        console.log('Access token still valid, no refresh needed');
+        return null;
+      } else {
+        // If force=true but the token isn't expired, still return the current tokens
+        console.log('Force refresh requested but token still valid - returning current credentials');
+        return {
+          access_token: credentials.access_token,
+          refresh_token: credentials.refresh_token,
+          expiry_date: credentials.expiry_date
+        };
+      }
     } catch (error) {
-      console.error('Error refreshing access token:', error);
+      console.error('Error in refreshAccessToken:', error);
       throw error;
     }
   }

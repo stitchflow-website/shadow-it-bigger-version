@@ -1,23 +1,142 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase';
 import { EmailService } from '@/app/lib/services/email-service';
 import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { MicrosoftWorkspaceService } from '@/lib/microsoft-workspace';
 
-// Use service role for database operations
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    },
-    db: {
-      schema: 'shadow_it'
+// Helper function to safely refresh OAuth tokens with retry logic
+async function safelyRefreshTokens(
+  service: GoogleWorkspaceService | MicrosoftWorkspaceService, 
+  syncId: string, 
+  orgId: string,
+  provider: string
+) {
+  const maxRetries = 3;
+  let attemptCount = 0;
+  
+  while (attemptCount < maxRetries) {
+    try {
+      attemptCount++;
+      console.log(`[${provider}] Attempting token refresh (attempt ${attemptCount}/${maxRetries}) for org ${orgId}...`);
+      
+      // Force token refresh
+      const refreshedTokens = await service.refreshAccessToken(true);
+      
+      if (!refreshedTokens) {
+        throw new Error(`No ${provider} tokens returned from refresh`);
+      }
+      
+      console.log(`[${provider}] Successfully refreshed tokens for org ${orgId}`);
+      return refreshedTokens;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[${provider}] Error refreshing tokens (attempt ${attemptCount}/${maxRetries}):`, errorMessage);
+      
+      if (attemptCount >= maxRetries) {
+        console.error(`[${provider}] Max retry attempts reached, giving up token refresh for org ${orgId}`);
+        
+        // Record the failure in the database
+        try {
+          await supabaseAdmin
+            .from('sync_status')
+            .insert({
+              organization_id: orgId,
+              status: 'FAILED',
+              error_message: `${provider} token refresh failed after ${maxRetries} attempts: ${errorMessage}`,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+        } catch (dbError) {
+          console.error(`[${provider}] Failed to record token refresh failure in database:`, dbError);
+        }
+        
+        throw error; // Re-throw the original error
+      }
+      
+      // Wait before retrying (exponential backoff)
+      const delay = Math.pow(2, attemptCount) * 1000; // 2s, 4s, 8s
+      console.log(`[${provider}] Waiting ${delay}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
-);
+  
+  throw new Error(`Failed to refresh ${provider} tokens after ${maxRetries} attempts`);
+}
+
+/**
+ * Helper function that safely checks if a notification has already been sent
+ * and only sends a new notification if one hasn't been sent before
+ */
+async function safelySendNotification({
+  organizationId,
+  userEmail,
+  applicationId,
+  notificationType,
+  sendFunction
+}: {
+  organizationId: string;
+  userEmail: string;
+  applicationId: string;
+  notificationType: 'new_app' | 'new_user' | 'new_user_review';
+  sendFunction: () => Promise<boolean>;
+}) {
+  try {
+    console.log(`Checking if notification type=${notificationType} for app=${applicationId} to user=${userEmail} has already been sent...`);
+    
+    // First check if notification has already been sent using a transaction
+    const { data: notificationExists, error: checkError } = await supabaseAdmin
+      .from('notification_tracking')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('user_email', userEmail)
+      .eq('application_id', applicationId)
+      .eq('notification_type', notificationType)
+      .single();
+    
+    if (checkError && !checkError.message.includes('No rows found')) {
+      // Only report errors that aren't "no rows found"
+      console.error(`Error checking notification tracking:`, checkError);
+    }
+    
+    // If notification already exists, don't send again
+    if (notificationExists) {
+      console.log(`Notification already sent to ${userEmail} for app ${applicationId} (type: ${notificationType})`);
+      return false;
+    }
+    
+    console.log(`No existing notification found, proceeding to send...`);
+    
+    // Create a record BEFORE sending the notification to prevent race conditions
+    const { error: insertError } = await supabaseAdmin
+      .from('notification_tracking')
+      .insert({
+        organization_id: organizationId,
+        user_email: userEmail,
+        application_id: applicationId,
+        notification_type: notificationType,
+        sent_at: new Date().toISOString()
+      });
+    
+    if (insertError) {
+      console.error('Error inserting notification tracking record:', insertError);
+      return false;
+    }
+    
+    // Now send the actual notification
+    const success = await sendFunction();
+    
+    if (success) {
+      console.log(`Successfully sent ${notificationType} notification to ${userEmail}`);
+      return true;
+    } else {
+      console.log(`Failed to send ${notificationType} notification to ${userEmail}`);
+      return false;
+    }
+  } catch (error) {
+    console.error(`Error in safelySendNotification:`, error);
+    return false;
+  }
+}
 
 // Removed edge runtime for Render compatibility
 // export const runtime = 'edge';
@@ -49,7 +168,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'No organizations to process' });
     }
 
-    // For each organization, check for new apps and users
+    // For each organization, check for new apps and users from connected providers
     for (const org of organizations) {
       console.log(`Processing organization: ${org.id} (${org.name})`);
       
@@ -64,29 +183,33 @@ export async function POST(request: Request) {
       }
     }
 
-    // Process other notification types that don't rely on direct API calls
-    console.log('Processing additional notification types...');
+    // Set a flag to track whether we're running in notification-only mode
+    // This would happen if we're not processing a cron job but instead responding
+    // to a direct API call for notification processing
+    const isNotificationOnlyMode = request.headers.get('X-Notification-Only') === 'true';
     
-    try {
-      await processNewAppNotifications();
-    } catch (error) {
-      console.error('Error in processNewAppNotifications:', error);
-      // Continue with other notification types
-    }
-    
-    try {
-      await processNewUserNotifications();
-    } catch (error) {
-      console.error('Error in processNewUserNotifications:', error);
-      // Continue with other notification types
-    }
-    
-    try {
-      await processNewUserReviewNotifications();
-    } catch (error) {
-      console.error('Error in processNewUserReviewNotifications:', error);
-      // Continue with other notification types
-    }
+    // if (isNotificationOnlyMode) {
+    //   console.log('Running in notification-only mode - processing notifications for already discovered apps/users');
+      
+    //   // Process notifications for apps/users that were already discovered
+    //   try {
+    //     await processNewAppNotifications();
+    //   } catch (error) {
+    //     console.error('Error in processNewAppNotifications:', error);
+    //   }
+      
+    //   try {
+    //     await processNewUserNotifications();
+    //   } catch (error) {
+    //     console.error('Error in processNewUserNotifications:', error);
+    //   }
+      
+    //   try {
+    //     await processNewUserReviewNotifications();
+    //   } catch (error) {
+    //     console.error('Error in processNewUserReviewNotifications:', error);
+    //   }
+    // }
 
     return NextResponse.json({ 
       success: true, 
@@ -158,61 +281,38 @@ async function processNewAppNotifications() {
       
       // For each new app, send notifications to eligible users
       for (const app of newApps) {
-        // Check if we've already sent notifications for this app
+        // Process each user who has notifications enabled
         for (const pref of notificationPrefs) {
-          const { data: existingNotifications, error: trackingError } = await supabaseAdmin
-            .from('notification_tracking')
-            .select('*')
-            .eq('organization_id', org.id)
-            .eq('user_email', pref.user_email)
-            .eq('application_id', app.id)
-            .eq('notification_type', 'new_app');
+          console.log(`Processing notification for ${pref.user_email} for new app ${app.name}`);
           
-          if (trackingError) {
-            console.error(`Error checking notification tracking:`, trackingError);
-            continue;
-          }
-          
-          // Skip if notification was already sent
-          if (existingNotifications && existingNotifications.length > 0) {
-            console.log(`Notification already sent to ${pref.user_email} for app ${app.id}`);
-            continue;
-          }
-          
-          console.log(`Sending notification to ${pref.user_email} for new app ${app.name}`);
-          
-          try {
-            // Record that we're sending a notification
-            const { error: insertError } = await supabaseAdmin
-              .from('notification_tracking')
-              .insert({
-                organization_id: org.id,
-                user_email: pref.user_email,
-                application_id: app.id,
-                notification_type: 'new_app'
-              });
-            
-            if (insertError) {
-              console.error('Error inserting notification tracking record:', insertError);
-              continue;
+          // Use the new helper function to safely send notification
+          await safelySendNotification({
+            organizationId: org.id,
+            userEmail: pref.user_email,
+            applicationId: app.id,
+            notificationType: 'new_app',
+            sendFunction: async () => {
+              try {
+                // Send the email notification
+                await EmailService.sendNewAppNotification({
+                  to: pref.user_email,
+                  appName: app.name,
+                  organizationName: org.name,
+                  detectionTime: app.created_at,
+                  riskLevel: app.risk_level,
+                  category: app.category || 'Uncategorized',
+                  userCount: app.user_count,
+                  totalPermissions: app.total_permissions
+                });
+                
+                console.log(`Successfully sent new app notification to ${pref.user_email} for ${app.name}`);
+                return true; // Indicate success
+              } catch (error) {
+                console.error(`Error sending notification to ${pref.user_email}:`, error);
+                return false; // Indicate failure
+              }
             }
-            
-            // Send the email notification
-            await EmailService.sendNewAppNotification({
-              to: pref.user_email,
-              appName: app.name,
-              organizationName: org.name,
-              detectionTime: app.created_at,
-              riskLevel: app.risk_level,
-              category: app.category,
-              userCount: app.user_count,
-              totalPermissions: app.total_permissions
-            });
-            
-            console.log(`Successfully sent new app notification to ${pref.user_email} for ${app.name}`);
-          } catch (error) {
-            console.error(`Error sending notification to ${pref.user_email}:`, error);
-          }
+          });
         }
       }
     }
@@ -292,63 +392,37 @@ async function processNewUserNotifications() {
       
       // For each new user-app relationship, send notifications to eligible users
       for (const userApp of orgUserApps) {
-        // Check if we've already sent notifications for this user-app relationship
+        // Process notifications for each eligible user
         for (const pref of notificationPrefs) {
-          // Create a unique key for this notification (app ID + user ID combination)
-          const notificationKey = `${userApp.application.id}-${userApp.user.id}`;
+          console.log(`Processing notification to ${pref.user_email} for user ${userApp.user.email} in app ${userApp.application.name}`);
           
-          const { data: existingNotifications, error: trackingError } = await supabaseAdmin
-            .from('notification_tracking')
-            .select('*')
-            .eq('organization_id', org.id)
-            .eq('user_email', pref.user_email)
-            .eq('application_id', userApp.application.id)
-            .eq('notification_type', 'new_user');
-          
-          if (trackingError) {
-            console.error(`Error checking notification tracking:`, trackingError);
-            continue;
-          }
-          
-          // Skip if notification was already sent
-          if (existingNotifications && existingNotifications.length > 0) {
-            console.log(`Notification already sent to ${pref.user_email} for user ${userApp.user.email} in app ${userApp.application.name}`);
-            continue;
-          }
-          
-          console.log(`Sending notification to ${pref.user_email} for new user ${userApp.user.email} in app ${userApp.application.name}`);
-          
-          try {
-            // Record that we're sending a notification
-            const { error: insertError } = await supabaseAdmin
-              .from('notification_tracking')
-              .insert({
-                organization_id: org.id,
-                user_email: pref.user_email,
-                application_id: userApp.application.id,
-                notification_type: 'new_user'
-              });
-            
-            if (insertError) {
-              console.error('Error inserting notification tracking record:', insertError);
-              continue;
+          // Use the safe notification helper
+          await safelySendNotification({
+            organizationId: org.id,
+            userEmail: pref.user_email,
+            applicationId: userApp.application.id,
+            notificationType: 'new_user',
+            sendFunction: async () => {
+              try {
+                // Send the email notification
+                await EmailService.sendNewUserNotification({
+                  to: pref.user_email,
+                  appName: userApp.application.name,
+                  userName: userApp.user.name || userApp.user.email,
+                  organizationName: org.name,
+                  riskLevel: userApp.application.risk_level,
+                  category: userApp.application.category || 'Uncategorized',
+                  totalPermissions: userApp.application.total_permissions
+                });
+                
+                console.log(`Successfully sent new user notification to ${pref.user_email}`);
+                return true;
+              } catch (error) {
+                console.error(`Error sending notification to ${pref.user_email}:`, error);
+                return false;
+              }
             }
-            
-            // Send the email notification
-            await EmailService.sendNewUserNotification({
-              to: pref.user_email,
-              appName: userApp.application.name,
-              userName: userApp.user.name || userApp.user.email,
-              organizationName: org.name,
-              riskLevel: userApp.application.risk_level,
-              category: userApp.application.category,
-              totalPermissions: userApp.application.total_permissions
-            });
-            
-            console.log(`Successfully sent new user notification to ${pref.user_email}`);
-          } catch (error) {
-            console.error(`Error sending notification to ${pref.user_email}:`, error);
-          }
+          });
         }
       }
     }
@@ -429,60 +503,37 @@ async function processNewUserReviewNotifications() {
       
       // For each new user-review app relationship, send notifications to eligible users
       for (const userApp of orgUserReviewApps) {
-        // Check if we've already sent notifications for this user-app relationship
+        // Process notifications for each eligible user
         for (const pref of notificationPrefs) {
-          const { data: existingNotifications, error: trackingError } = await supabaseAdmin
-            .from('notification_tracking')
-            .select('*')
-            .eq('organization_id', org.id)
-            .eq('user_email', pref.user_email)
-            .eq('application_id', userApp.application.id)
-            .eq('notification_type', 'new_user_review');
+          console.log(`Processing review notification to ${pref.user_email} for user ${userApp.user.email} in app ${userApp.application.name}`);
           
-          if (trackingError) {
-            console.error(`Error checking notification tracking:`, trackingError);
-            continue;
-          }
-          
-          // Skip if notification was already sent
-          if (existingNotifications && existingNotifications.length > 0) {
-            console.log(`Review notification already sent to ${pref.user_email} for user ${userApp.user.email} in app ${userApp.application.name}`);
-            continue;
-          }
-          
-          console.log(`Sending review notification to ${pref.user_email} for new user ${userApp.user.email} in review app ${userApp.application.name}`);
-          
-          try {
-            // Record that we're sending a notification
-            const { error: insertError } = await supabaseAdmin
-              .from('notification_tracking')
-              .insert({
-                organization_id: org.id,
-                user_email: pref.user_email,
-                application_id: userApp.application.id,
-                notification_type: 'new_user_review'
-              });
-            
-            if (insertError) {
-              console.error('Error inserting notification tracking record:', insertError);
-              continue;
+          // Use the safe notification helper
+          await safelySendNotification({
+            organizationId: org.id,
+            userEmail: pref.user_email,
+            applicationId: userApp.application.id,
+            notificationType: 'new_user_review',
+            sendFunction: async () => {
+              try {
+                // Send the email notification
+                await EmailService.sendNewUserReviewNotification({
+                  to: pref.user_email,
+                  appName: userApp.application.name,
+                  userName: userApp.user.name || userApp.user.email,
+                  organizationName: org.name,
+                  riskLevel: userApp.application.risk_level,
+                  category: userApp.application.category || 'Uncategorized',
+                  totalPermissions: userApp.application.total_permissions
+                });
+                
+                console.log(`Successfully sent review notification to ${pref.user_email}`);
+                return true;
+              } catch (error) {
+                console.error(`Error sending review notification to ${pref.user_email}:`, error);
+                return false;
+              }
             }
-            
-            // Send the email notification
-            await EmailService.sendNewUserReviewNotification({
-              to: pref.user_email,
-              appName: userApp.application.name,
-              userName: userApp.user.name || userApp.user.email,
-              organizationName: org.name,
-              riskLevel: userApp.application.risk_level,
-              category: userApp.application.category,
-              totalPermissions: userApp.application.total_permissions
-            });
-            
-            console.log(`Successfully sent review notification to ${pref.user_email}`);
-          } catch (error) {
-            console.error(`Error sending review notification to ${pref.user_email}:`, error);
-          }
+          });
         }
       }
     }
@@ -551,31 +602,39 @@ async function processGoogleWorkspace(org: any) {
       expiry_date: latestSync.token_expiry || Date.now() + 3600 * 1000
     });
     
-    // Always try to refresh the token before making any API calls, regardless of expiry
+    // Always force token refresh before making any API calls
     try {
       console.log(`Forcing token refresh for org ${org.id}...`);
-      const refreshedTokens = await googleService.refreshAccessToken(true);
+      const refreshedTokens = await safelyRefreshTokens(googleService, latestSync.id, org.id, 'Google');
       
-      // If tokens were refreshed, update them in the database
-      if (refreshedTokens) {
-        console.log(`Tokens refreshed for org ${org.id}, updating in database...`);
-        
-        const { error: updateError } = await supabaseAdmin
-          .from('sync_status')
-          .update({
-            access_token: refreshedTokens.access_token,
-            refresh_token: refreshedTokens.refresh_token || latestSync.refresh_token,
-            token_expiry: refreshedTokens.expiry_date,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', latestSync.id);
-        
-        if (updateError) {
-          console.error(`Error updating refreshed tokens in database:`, updateError);
-        }
-      } else {
-        console.log(`No refreshed tokens returned for org ${org.id}`);
+      if (!refreshedTokens) {
+        throw new Error('Failed to refresh tokens - no tokens returned');
       }
+      
+      console.log(`Tokens refreshed for org ${org.id}, updating in database...`);
+      
+      // Create a new sync_status record with updated tokens
+      const { data: newSyncStatus, error: createError } = await supabaseAdmin
+        .from('sync_status')
+        .insert({
+          organization_id: org.id,
+          status: 'COMPLETED',
+          message: 'Tokens refreshed successfully',
+          access_token: refreshedTokens.access_token,
+          refresh_token: refreshedTokens.refresh_token || latestSync.refresh_token,
+          token_expiry: refreshedTokens.expiry_date,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select('id')
+        .single();
+      
+      if (createError) {
+        console.error(`Error creating new sync status record:`, createError);
+        throw createError;
+      }
+      
+      console.log(`Created new sync status record with ID: ${newSyncStatus.id}`);
     } catch (refreshError) {
       console.error(`Error refreshing tokens for org ${org.id}:`, refreshError);
       
@@ -645,8 +704,9 @@ async function processGoogleWorkspace(org: any) {
       // Get existing apps from our database
       const { data: existingApps, error: appError } = await supabaseAdmin
         .from('applications')
-        .select('id, name, google_app_id, category, risk_level, total_permissions, management_status, created_at')
-        .eq('organization_id', org.id);
+        .select('id, name, google_app_id, category, risk_level, total_permissions, management_status, created_at, user_count')
+        .eq('organization_id', org.id)
+        .not('google_app_id', 'is', null);  // Only get Google apps
       
       if (appError) {
         console.error(`Error fetching existing apps for org ${org.id}:`, appError);
@@ -664,84 +724,110 @@ async function processGoogleWorkspace(org: any) {
         }
       });
       
-      // Check for new apps
-      const newApps = [];
+      // Track all Google client IDs we've seen in this sync
+      const seenClientIds = new Set<string>();
+      
+      // Process each app from Google Workspace
       for (const [clientId, appInfo] of appMap.entries()) {
-        if (!existingAppMap.has(clientId)) {
-          // This is a new app
-          newApps.push({
-            clientId,
-            name: appInfo.name,
-            scopes: Array.from(appInfo.scopes),
-            userCount: appInfo.users.size,
-            riskLevel: appInfo.riskLevel,
-          });
-        }
-      }
-      
-      console.log(`Found ${newApps.length} new apps from Google Workspace for org ${org.id}`);
-      
-      // Add new apps to the database and send notifications
-      for (const newApp of newApps) {
-        try {
-          // Add app to database
-          const { data: insertedApp, error: insertError } = await supabaseAdmin
-            .from('applications')
-            .insert({
-              organization_id: org.id,
-              name: newApp.name,
-              google_app_id: newApp.clientId,
-              risk_level: newApp.riskLevel,
-              total_permissions: newApp.scopes.length,
-              all_scopes: newApp.scopes,
-              user_count: newApp.userCount,
-              management_status: 'NEEDS_REVIEW',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .select()
-            .single();
+        seenClientIds.add(clientId);
+        
+        if (existingAppMap.has(clientId)) {
+          // This is an existing app - update it with the latest info
+          const existingApp = existingAppMap.get(clientId);
+          const updatedValues: any = {};
+          let needsUpdate = false;
           
-          if (insertError) {
-            console.error(`Error inserting new app ${newApp.name}:`, insertError);
-            continue;
+          // Check if any values need to be updated
+          if (appInfo.name !== existingApp.name) {
+            updatedValues.name = appInfo.name;
+            needsUpdate = true;
           }
           
-          console.log(`Added new app to database: ${newApp.name} (${insertedApp.id})`);
+          if (appInfo.riskLevel !== existingApp.risk_level) {
+            updatedValues.risk_level = appInfo.riskLevel;
+            needsUpdate = true;
+          }
           
-          // Send notifications to users who have enabled them
-          await sendNewAppNotifications(org, insertedApp);
+          if (appInfo.scopes.size !== existingApp.total_permissions) {
+            updatedValues.total_permissions = appInfo.scopes.size;
+            updatedValues.all_scopes = Array.from(appInfo.scopes);
+            needsUpdate = true;
+          }
           
-        } catch (error) {
-          console.error(`Error processing new app ${newApp.name}:`, error);
+          if (appInfo.users.size !== existingApp.user_count) {
+            updatedValues.user_count = appInfo.users.size;
+            needsUpdate = true;
+          }
+          
+          if (needsUpdate) {
+            console.log(`Updating existing app ${existingApp.name} (${existingApp.id}) with new info`);
+            updatedValues.updated_at = new Date().toISOString();
+            
+            const { error: updateError } = await supabaseAdmin
+              .from('applications')
+              .update(updatedValues)
+              .eq('id', existingApp.id);
+            
+            if (updateError) {
+              console.error(`Error updating app ${existingApp.id}:`, updateError);
+            } else {
+              console.log(`Successfully updated app ${existingApp.name} (${existingApp.id})`);
+            }
+          } else {
+            console.log(`No changes needed for existing app ${existingApp.name} (${existingApp.id})`);
+          }
+        } else {
+          // This is a new app - add it to our database
+          console.log(`Found new app ${appInfo.name} from Google Workspace`);
+          
+          try {
+            // Add app to database
+            const { data: insertedApp, error: insertError } = await supabaseAdmin
+              .from('applications')
+              .insert({
+                organization_id: org.id,
+                name: appInfo.name,
+                google_app_id: appInfo.clientId,
+                risk_level: appInfo.riskLevel,
+                total_permissions: appInfo.scopes.size,
+                all_scopes: Array.from(appInfo.scopes),
+                user_count: appInfo.users.size,
+                management_status: 'NEEDS_REVIEW',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+            
+            if (insertError) {
+              console.error(`Error inserting new app ${appInfo.name}:`, insertError);
+              continue;
+            }
+            
+            console.log(`Added new app to database: ${appInfo.name} (${insertedApp.id})`);
+            
+            // Send notifications to users who have enabled them
+            await sendNewAppNotifications(org, insertedApp);
+            
+          } catch (error) {
+            console.error(`Error processing new app ${appInfo.name}:`, error);
+          }
         }
       }
       
-      // Now check for new users in existing apps
-      console.log(`Checking for new users in existing apps for org ${org.id}...`);
-      
-      // Get all existing user-app relationships for Google
-      const { data: existingUserApps, error: userAppError } = await supabaseAdmin
-        .from('user_applications')
-        .select(`
-          id, 
-          application_id, 
-          user:users (email)
-        `)
-        .eq('organization_id', org.id);
-      
-      if (userAppError) {
-        console.error(`Error fetching existing user-app relationships for org ${org.id}:`, userAppError);
-        return;
+      // Check for apps in our database that no longer exist in Google Workspace
+      console.log(`Checking for apps that no longer exist in Google Workspace...`);
+      for (const [clientId, app] of existingAppMap.entries()) {
+        if (!seenClientIds.has(clientId)) {
+          console.log(`App ${app.name} (${app.id}) with client ID ${clientId} no longer exists in Google Workspace`);
+          
+          // You could mark these as inactive or remove them, depending on your requirements
+          // For now, we'll just log them
+        }
       }
       
-      // Create a set of existing user-app combinations
-      const existingUserAppSet = new Set<string>();
-      existingUserApps?.forEach(userApp => {
-        // Access the email correctly from the nested user object
-        const key = `${userApp.application_id}-${userApp.user?.[0]?.email}`;
-        existingUserAppSet.add(key);
-      });
+      // Now reconcile users for each app
+      console.log(`Reconciling users for Google Workspace apps...`);
       
       // Get all users from the database
       const { data: dbUsers, error: usersError } = await supabaseAdmin
@@ -760,86 +846,124 @@ async function processGoogleWorkspace(org: any) {
         userEmailMap.set(user.email, { id: user.id, name: user.name || user.email });
       });
       
-      // Check for new user-app relationships
-      const newUserApps = [];
-      
+      // Process each app from Google Workspace that exists in our database
       for (const [clientId, appInfo] of appMap.entries()) {
         // Skip if app doesn't exist in our database
         if (!existingAppMap.has(clientId)) continue;
         
         const dbApp = existingAppMap.get(clientId);
-        const isReviewApp = dbApp.management_status === 'NEEDS_REVIEW';
         
-        // Check each user for this app
+        // Get all existing user-app relationships for this app
+        const { data: existingUserApps, error: userAppError } = await supabaseAdmin
+          .from('user_applications')
+          .select(`
+            id, 
+            user_id,
+            user:users!inner (email)
+          `)
+          .eq('application_id', dbApp.id);
+        
+        if (userAppError) {
+          console.error(`Error fetching existing user-app relationships for app ${dbApp.id}:`, userAppError);
+          continue;
+        }
+        
+        // Create a set of existing user emails for this app
+        const existingUserEmailSet = new Set<string>();
+        const userIdsByEmail = new Map<string, string>(); // email -> user_application.id
+        
+        existingUserApps?.forEach(userApp => {
+          const email = userApp.user?.[0]?.email;
+          if (email) {
+            existingUserEmailSet.add(email);
+            userIdsByEmail.set(email, userApp.id);
+          }
+        });
+        
+        // Track emails we've seen in this sync
+        const seenUserEmails = new Set<string>();
+        
+        // Check for new users for this app
         for (const userEmail of appInfo.users) {
+          seenUserEmails.add(userEmail);
+          
           // Skip if user doesn't exist in our database
-          if (!userEmailMap.has(userEmail)) continue;
+          if (!userEmailMap.has(userEmail)) {
+            console.log(`User ${userEmail} not found in database, skipping`);
+            continue;
+          }
           
           const userId = userEmailMap.get(userEmail)!.id;
           const userName = userEmailMap.get(userEmail)!.name;
           
           // Check if this user-app relationship already exists
-          const userAppKey = `${dbApp.id}-${userEmail}`;
-          if (!existingUserAppSet.has(userAppKey)) {
+          if (!existingUserEmailSet.has(userEmail)) {
             // This is a new user-app relationship
-            newUserApps.push({
-              appId: dbApp.id,
-              appName: dbApp.name,
-              userEmail,
-              userId,
-              userName,
-              isReviewApp
-            });
+            console.log(`New user ${userEmail} for app ${dbApp.name}`);
+            
+            try {
+              // Create user-app relationship in database
+              const { error: insertError } = await supabaseAdmin
+                .from('user_applications')
+                .insert({
+                  application_id: dbApp.id,
+                  user_id: userId,
+                  organization_id: org.id,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                });
+              
+              if (insertError) {
+                console.error(`Error inserting user-app relationship:`, insertError);
+                continue;
+              }
+              
+              console.log(`Added new user-app relationship: ${userEmail} - ${dbApp.name}`);
+              
+              // Send notification for this new user-app relationship
+              const isReviewApp = dbApp.management_status === 'NEEDS_REVIEW';
+              await sendNewUserNotifications(
+                org, 
+                dbApp, 
+                userEmail, 
+                userName, 
+                isReviewApp
+              );
+              
+            } catch (error) {
+              console.error(`Error processing new user-app relationship:`, error);
+            }
+          } else {
+            console.log(`User ${userEmail} already exists for app ${dbApp.name}`);
           }
         }
-      }
-      
-      console.log(`Found ${newUserApps.length} new user-app relationships for org ${org.id}`);
-      
-      // Process new user-app relationships
-      for (const newUserApp of newUserApps) {
-        try {
-          // Create user-app relationship in database
-          const { error: insertError } = await supabaseAdmin
-            .from('user_applications')
-            .insert({
-              application_id: newUserApp.appId,
-              user_id: newUserApp.userId,
-              organization_id: org.id,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-          
-          if (insertError) {
-            console.error(`Error inserting user-app relationship:`, insertError);
-            continue;
+        
+        // Check for users who no longer have access to this app
+        console.log(`Checking for removed users for app ${dbApp.name}...`);
+        for (const userEmail of existingUserEmailSet) {
+          if (!seenUserEmails.has(userEmail)) {
+            console.log(`User ${userEmail} no longer has access to app ${dbApp.name}`);
+            
+            // Get the user_application.id for this relationship
+            const userAppId = userIdsByEmail.get(userEmail);
+            if (userAppId) {
+              // Mark user-app relationship as removed or delete it
+              // For now, we'll keep the record but update status
+              const { error: updateError } = await supabaseAdmin
+                .from('user_applications')
+                .update({
+                  status: 'REMOVED',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', userAppId);
+              
+              if (updateError) {
+                console.error(`Error updating user-app relationship:`, updateError);
+              } else {
+                console.log(`Marked user-app relationship as REMOVED: ${userEmail} - ${dbApp.name}`);
+              }
+            }
           }
-          
-          console.log(`Added new user-app relationship: ${newUserApp.userEmail} - ${newUserApp.appName}`);
-          
-          // Get full app details for notification
-          const { data: app } = await supabaseAdmin
-            .from('applications')
-            .select('*')
-            .eq('id', newUserApp.appId)
-            .single();
-          
-          if (!app) {
-            console.error(`Could not find app with ID ${newUserApp.appId}`);
-            continue;
-          }
-          
-          // Send notifications
-          await sendNewUserNotifications(
-            org, 
-            app, 
-            newUserApp.userEmail, 
-            newUserApp.userName, 
-            newUserApp.isReviewApp
-          );
-          
-        } catch (error) {
-          console.error(`Error processing new user-app relationship:`, error);
         }
       }
       
@@ -942,45 +1066,53 @@ async function processMicrosoftEntra(org: any) {
     // Initialize Microsoft Entra service
     console.log(`Initializing Microsoft Entra service for org ${org.id}...`);
     const microsoftService = new MicrosoftWorkspaceService({
-      client_id: process.env.MICROSOFT_CLIENT_ID!,
-      client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-      tenant_id: process.env.MICROSOFT_TENANT_ID!
+      client_id: process.env.MICROSOFT_CLIENT_ID,
+      client_secret: process.env.MICROSOFT_CLIENT_SECRET,
+      redirect_uri: process.env.MICROSOFT_REDIRECT_URI,
     });
     
     // Set the credentials from the latest sync
     await microsoftService.setCredentials({
       access_token: latestSync.access_token,
       refresh_token: latestSync.refresh_token,
-      expires_at: latestSync.token_expiry || Date.now() + 3600 * 1000
+      expiry_date: latestSync.token_expiry || Date.now() + 3600 * 1000
     });
     
-    // Always try to refresh the token before making any API calls, regardless of expiry
+    // Always force token refresh before making any API calls
     try {
-      console.log(`Forcing Microsoft token refresh for org ${org.id}...`);
-      const refreshedTokens = await microsoftService.refreshAccessToken(true);
+      console.log(`Forcing token refresh for org ${org.id}...`);
+      const refreshedTokens = await safelyRefreshTokens(microsoftService, latestSync.id, org.id, 'Microsoft');
       
-      // If tokens were refreshed, update them in the database
-      if (refreshedTokens) {
-        console.log(`Microsoft tokens refreshed for org ${org.id}, updating in database...`);
-        
-        const { error: updateError } = await supabaseAdmin
-          .from('sync_status')
-          .update({
-            access_token: refreshedTokens.access_token,
-            refresh_token: refreshedTokens.refresh_token || latestSync.refresh_token,
-            token_expiry: refreshedTokens.expires_at,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', latestSync.id);
-        
-        if (updateError) {
-          console.error(`Error updating refreshed Microsoft tokens in database:`, updateError);
-        }
-      } else {
-        console.log(`No refreshed Microsoft tokens returned for org ${org.id}`);
+      if (!refreshedTokens) {
+        throw new Error('Failed to refresh tokens - no tokens returned');
       }
+      
+      console.log(`Tokens refreshed for org ${org.id}, updating in database...`);
+      
+      // Create a new sync_status record with updated tokens
+      const { data: newSyncStatus, error: createError } = await supabaseAdmin
+        .from('sync_status')
+        .insert({
+          organization_id: org.id,
+          status: 'COMPLETED',
+          message: 'Tokens refreshed successfully',
+          access_token: refreshedTokens.access_token,
+          refresh_token: refreshedTokens.refresh_token || latestSync.refresh_token,
+          token_expiry: refreshedTokens.expiry_date,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select('id')
+        .single();
+      
+      if (createError) {
+        console.error(`Error creating new sync status record:`, createError);
+        throw createError;
+      }
+      
+      console.log(`Created new sync status record with ID: ${newSyncStatus.id}`);
     } catch (refreshError) {
-      console.error(`Error refreshing Microsoft tokens for org ${org.id}:`, refreshError);
+      console.error(`Error refreshing tokens for org ${org.id}:`, refreshError);
       
       // Update sync status to indicate authentication failure
       await supabaseAdmin
@@ -988,12 +1120,12 @@ async function processMicrosoftEntra(org: any) {
         .insert({
           organization_id: org.id,
           status: 'FAILED',
-          error_message: `Microsoft token refresh failed: ${refreshError instanceof Error ? refreshError.message : 'Unknown error'}`,
+          error_message: `Token refresh failed: ${refreshError instanceof Error ? refreshError.message : 'Unknown error'}`,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
       
-      console.log(`Marked sync status as FAILED for org ${org.id} due to Microsoft token refresh failure`);
+      console.log(`Marked sync status as FAILED for org ${org.id} due to token refresh failure`);
       return; // Exit early as we can't proceed without valid tokens
     }
     
@@ -1021,7 +1153,7 @@ async function processMicrosoftEntra(org: any) {
             name: token.displayText,
             scopes: allScopes,
             users: new Set(),
-            riskLevel: determineMicrosoftRiskLevel(token.scopes),
+            riskLevel: determineRiskLevel(token.scopes),
           });
         } else {
           // Update existing app entry
@@ -1031,7 +1163,7 @@ async function processMicrosoftEntra(org: any) {
           }
           
           // Update risk level if needed
-          const tokenRisk = determineMicrosoftRiskLevel(token.scopes);
+          const tokenRisk = determineRiskLevel(token.scopes);
           if (tokenRisk === 'HIGH' || (tokenRisk === 'MEDIUM' && app.riskLevel !== 'HIGH')) {
             app.riskLevel = tokenRisk;
           }
@@ -1060,7 +1192,10 @@ async function processMicrosoftEntra(org: any) {
       const existingAppMap = new Map<string, any>();
       existingApps?.forEach(app => {
         if (app.microsoft_app_id) {
-          existingAppMap.set(app.microsoft_app_id, app);
+          // Handle multiple client IDs separated by commas
+          app.microsoft_app_id.split(',').forEach((clientId: string) => {
+            existingAppMap.set(clientId.trim(), app);
+          });
         }
       });
       
@@ -1263,46 +1398,6 @@ async function processMicrosoftEntra(org: any) {
   }
 }
 
-// Helper function to determine risk level for Microsoft permissions
-function determineMicrosoftRiskLevel(scopes: string[] | null | undefined): 'HIGH' | 'MEDIUM' | 'LOW' {
-  // If no scopes provided, default to LOW
-  if (!scopes || !Array.isArray(scopes) || scopes.length === 0) {
-    return 'LOW';
-  }
-
-  const highRiskScopes = [
-    'Directory.ReadWrite.All',
-    'User.ReadWrite.All',
-    'Group.ReadWrite.All',
-    'Mail.ReadWrite',
-    'Files.ReadWrite.All',
-    'Sites.ReadWrite.All',
-  ];
-
-  const mediumRiskScopes = [
-    'Directory.Read.All',
-    'User.Read.All',
-    'Group.Read.All',
-    'Mail.Read',
-    'Files.Read.All',
-    'Sites.Read.All',
-  ];
-
-  if (scopes.some(scope => {
-    return highRiskScopes.some(highRiskScope => scope.includes(highRiskScope));
-  })) {
-    return 'HIGH';
-  }
-
-  if (scopes.some(scope => {
-    return mediumRiskScopes.some(mediumRiskScope => scope.includes(mediumRiskScope));
-  })) {
-    return 'MEDIUM';
-  }
-
-  return 'LOW';
-}
-
 // Helper function to send notifications for a new app
 async function sendNewAppNotifications(org: any, app: any) {
   try {
@@ -1329,60 +1424,33 @@ async function sendNewAppNotifications(org: any, app: any) {
     
     // For each user with notifications enabled, send an email
     for (const pref of notificationPrefs) {
-      try {
-        // Check if we've already sent a notification for this app to this user
-        const { data: existingNotifications, error: trackingError } = await supabaseAdmin
-          .from('notification_tracking')
-          .select('*')
-          .eq('organization_id', org.id)
-          .eq('user_email', pref.user_email)
-          .eq('application_id', app.id)
-          .eq('notification_type', 'new_app');
-        
-        if (trackingError) {
-          console.error(`Error checking notification tracking:`, trackingError);
-          continue;
+      await safelySendNotification({
+        organizationId: org.id,
+        userEmail: pref.user_email,
+        applicationId: app.id,
+        notificationType: 'new_app',
+        sendFunction: async () => {
+          try {
+            // Send the email notification
+            await EmailService.sendNewAppNotification({
+              to: pref.user_email,
+              appName: app.name,
+              organizationName: org.name,
+              detectionTime: app.created_at,
+              riskLevel: app.risk_level,
+              category: app.category || 'Uncategorized',
+              userCount: app.user_count,
+              totalPermissions: app.total_permissions
+            });
+            
+            console.log(`Successfully sent new app notification to ${pref.user_email} for ${app.name}`);
+            return true;
+          } catch (error) {
+            console.error(`Error sending notification to ${pref.user_email}:`, error);
+            return false;
+          }
         }
-        
-        // Skip if notification was already sent
-        if (existingNotifications && existingNotifications.length > 0) {
-          console.log(`Notification already sent to ${pref.user_email} for app ${app.id}`);
-          continue;
-        }
-        
-        console.log(`Sending notification to ${pref.user_email} for new app ${app.name}`);
-        
-        // Record that we're sending a notification
-        const { error: insertError } = await supabaseAdmin
-          .from('notification_tracking')
-          .insert({
-            organization_id: org.id,
-            user_email: pref.user_email,
-            application_id: app.id,
-            notification_type: 'new_app'
-          });
-        
-        if (insertError) {
-          console.error('Error inserting notification tracking record:', insertError);
-          continue;
-        }
-        
-        // Send the email notification
-        await EmailService.sendNewAppNotification({
-          to: pref.user_email,
-          appName: app.name,
-          organizationName: org.name,
-          detectionTime: app.created_at,
-          riskLevel: app.risk_level,
-          category: app.category || 'Uncategorized',
-          userCount: app.user_count,
-          totalPermissions: app.total_permissions
-        });
-        
-        console.log(`Successfully sent new app notification to ${pref.user_email} for ${app.name}`);
-      } catch (error) {
-        console.error(`Error sending notification to ${pref.user_email}:`, error);
-      }
+      });
     }
   } catch (error) {
     console.error(`Error sending notifications for app ${app.name}:`, error);
@@ -1419,76 +1487,46 @@ async function sendNewUserNotifications(org: any, app: any, userEmail: string, u
     
     // For each user with notifications enabled, send an email
     for (const pref of notificationPrefs) {
-      try {
-        // Create a unique identifier for this notification (combines app ID and user email)
-        const notificationIdentifier = `${app.id}-${userEmail}`;
-        
-        // Check if we've already sent a notification for this app+user combination to this recipient
-        const { data: existingNotifications, error: trackingError } = await supabaseAdmin
-          .from('notification_tracking')
-          .select('*')
-          .eq('organization_id', org.id)
-          .eq('user_email', pref.user_email)
-          .eq('application_id', app.id)
-          .eq('notification_type', notificationType);
-        
-        if (trackingError) {
-          console.error(`Error checking notification tracking:`, trackingError);
-          continue;
+      await safelySendNotification({
+        organizationId: org.id,
+        userEmail: pref.user_email,
+        applicationId: app.id,
+        notificationType: notificationType,
+        sendFunction: async () => {
+          try {
+            // Send the email notification based on notification type
+            if (isReviewApp) {
+              await EmailService.sendNewUserReviewNotification({
+                to: pref.user_email,
+                appName: app.name,
+                userName: userName || userEmail,
+                organizationName: org.name,
+                riskLevel: app.risk_level,
+                category: app.category || 'Uncategorized',
+                totalPermissions: app.total_permissions
+              });
+            } else {
+              await EmailService.sendNewUserNotification({
+                to: pref.user_email,
+                appName: app.name,
+                userName: userName || userEmail,
+                organizationName: org.name,
+                riskLevel: app.risk_level,
+                category: app.category || 'Uncategorized',
+                totalPermissions: app.total_permissions
+              });
+            }
+            
+            console.log(`Successfully sent ${notificationType} notification to ${pref.user_email}`);
+            return true;
+          } catch (error) {
+            console.error(`Error sending notification to ${pref.user_email}:`, error);
+            return false;
+          }
         }
-        
-        // Skip if notification was already sent
-        if (existingNotifications && existingNotifications.length > 0) {
-          console.log(`Notification already sent to ${pref.user_email} for user ${userEmail} in app ${app.name}`);
-          continue;
-        }
-        
-        console.log(`Sending ${notificationType} notification to ${pref.user_email} for new user ${userEmail} in app ${app.name}`);
-        
-        // Record that we're sending a notification
-        const { error: insertError } = await supabaseAdmin
-          .from('notification_tracking')
-          .insert({
-            organization_id: org.id,
-            user_email: pref.user_email,
-            application_id: app.id,
-            notification_type: notificationType
-          });
-        
-        if (insertError) {
-          console.error('Error inserting notification tracking record:', insertError);
-          continue;
-        }
-        
-        // Send the email notification based on notification type
-        if (isReviewApp) {
-          await EmailService.sendNewUserReviewNotification({
-            to: pref.user_email,
-            appName: app.name,
-            userName: userName || userEmail,
-            organizationName: org.name,
-            riskLevel: app.risk_level,
-            category: app.category || 'Uncategorized',
-            totalPermissions: app.total_permissions
-          });
-        } else {
-          await EmailService.sendNewUserNotification({
-            to: pref.user_email,
-            appName: app.name,
-            userName: userName || userEmail,
-            organizationName: org.name,
-            riskLevel: app.risk_level,
-            category: app.category || 'Uncategorized',
-            totalPermissions: app.total_permissions
-          });
-        }
-        
-        console.log(`Successfully sent ${notificationType} notification to ${pref.user_email}`);
-      } catch (error) {
-        console.error(`Error sending notification to ${pref.user_email}:`, error);
-      }
+      });
     }
   } catch (error) {
     console.error(`Error sending notifications for user ${userEmail} in app ${app.name}:`, error);
   }
-} 
+}

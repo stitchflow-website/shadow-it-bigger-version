@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 // This function runs on every request
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   console.log('Middleware path:', request.nextUrl.pathname);
   
   // Skip auth check for public routes and internal API calls
@@ -10,6 +11,7 @@ export function middleware(request: NextRequest) {
     '/tools/shadow-it-scan/login',
     '/tools/shadow-it-scan/api/auth/google',
     '/tools/shadow-it-scan/api/auth/microsoft',
+    '/tools/shadow-it-scan/api/auth/create-session',
     '/tools/shadow-it-scan/api/background/sync',
     '/tools/shadow-it-scan/api/background/sync/google',
     '/tools/shadow-it-scan/api/background/sync/microsoft',
@@ -43,64 +45,79 @@ export function middleware(request: NextRequest) {
   // Check for internal API calls with service role key
   const isInternalApiCall = request.headers.get('Authorization')?.includes(process.env.SUPABASE_SERVICE_ROLE_KEY || '');
   
-  // Just check for the presence of user_info cookie for now
-  const userInfo = request.cookies.get('orgId')?.value;
-  const isAuthenticated = !!userInfo || isInternalApiCall;
-  
-  console.log('isAuthenticated:', isAuthenticated, 'isPublicRoute:', isPublicRoute, 'isInternalApiCall:', isInternalApiCall);
-  
-  // // // Redirect logic
-  // if (!isAuthenticated && !isPublicRoute) {
-  //   // Redirect to login page if not authenticated and trying to access protected route
-  //   return NextResponse.redirect(new URL('/tools/shadow-it-scan/login', request.url));
-  // }
-  
-  if (isAuthenticated && request.nextUrl.pathname === '/tools/shadow-it-scan/login' && !isInternalApiCall) {
-    // Redirect to home page if already authenticated and trying to access login page
-    return NextResponse.redirect(new URL(`/tools/shadow-it-scan/?orgId=${request.cookies.get('orgId')?.value}`, request.url));
+  // If it's a public route or an internal API call, proceed without authentication check
+  if (isPublicRoute || isInternalApiCall) {
+    return NextResponse.next();
   }
   
-  // Check if the request is for the shadow-it-scan API
-  const pathname = request.nextUrl.pathname;
+  // Check for Supabase session cookies
+  const sbAccessToken = request.cookies.get('sb-access-token')?.value;
+  const sbRefreshToken = request.cookies.get('sb-refresh-token')?.value;
   
-  if (pathname.startsWith('/tools/shadow-it-scan/api/categorization/status')) {
-    // Create a new URL for the rewritten endpoint
-    const url = new URL(request.url);
-    // Change the pathname to the actual API endpoint
-    url.pathname = `/api/categorization/status`;
-    // Keep the query parameters
-    
-    return NextResponse.rewrite(url);
-  }
+  // Check traditional cookies as fallback
+  const orgId = request.cookies.get('orgId')?.value;
+  const userEmail = request.cookies.get('userEmail')?.value;
   
-  // Add rewrite for session-info endpoint
-  if (pathname.startsWith('/tools/shadow-it-scan/api/session-info')) {
-    const url = new URL(request.url);
-    url.pathname = `/api/session-info`;
-    
-    // Forward cookies in the request
-    const response = NextResponse.rewrite(url);
-    return response;
-  }
-  
-  // Check if user is authenticated for protected routes
-  if (pathname.startsWith('/tools/shadow-it-scan') &&
-      !pathname.startsWith('/tools/shadow-it-scan/login') &&
-      !pathname.startsWith('/tools/shadow-it-scan/api/')) {
-    
-    // No cookies or missing orgId means user is not authenticated
-    if (!request.cookies.has('user_info') || !request.cookies.has('orgId')) {
-      return NextResponse.redirect(new URL('/tools/shadow-it-scan/login', request.url));
+  // If Supabase cookies are present, validate the session
+  if (sbAccessToken && sbRefreshToken) {
+    try {
+      // Create Supabase client with the session cookies
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          auth: {
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: false,
+          },
+          global: {
+            headers: {
+              Authorization: `Bearer ${sbAccessToken}`
+            }
+          }
+        }
+      );
+      
+      // Try to get the session
+      const { data, error } = await supabase.auth.getSession();
+      
+      if (!error && data?.session) {
+        // Session is valid, allow the request
+        const response = NextResponse.next();
+        
+        // Make sure traditional cookies are also set for backward compatibility
+        if (!orgId && data.session.user.user_metadata?.organization_id) {
+          response.cookies.set('orgId', data.session.user.user_metadata.organization_id, {
+            path: '/',
+            sameSite: 'lax',
+            secure: process.env.NODE_ENV === 'production'
+          });
+        }
+        
+        if (!userEmail && data.session.user.email) {
+          response.cookies.set('userEmail', data.session.user.email, {
+            path: '/',
+            sameSite: 'lax',
+            secure: process.env.NODE_ENV === 'production'
+          });
+        }
+        
+        return response;
+      }
+    } catch (error) {
+      console.error('Error validating Supabase session:', error);
     }
-    
-    // If there's no orgId parameter in the URL, redirect to the main page with the orgId
-    if (!request.nextUrl.searchParams.has('orgId') && pathname === '/tools/shadow-it-scan') {
-      return NextResponse.redirect(new URL(`/tools/shadow-it-scan/?orgId=${request.cookies.get('orgId')?.value}`, request.url));
-    }
   }
   
-  // Continue with the request
-  return NextResponse.next();
+  // Check legacy cookies as fallback
+  if (orgId && userEmail) {
+    return NextResponse.next();
+  }
+  
+  // If neither Supabase session nor legacy cookies are valid, redirect to login page
+  const redirectUrl = new URL('/tools/shadow-it-scan/?error=login_required', request.url);
+  return NextResponse.redirect(redirectUrl);
 }
 
 // Configure which routes use this middleware

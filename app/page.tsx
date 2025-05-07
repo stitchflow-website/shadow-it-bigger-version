@@ -818,7 +818,7 @@ export default function ShadowITDashboard() {
       console.log('Cookies before clearing:', allCookies);
       
       // Specifically clear the critical cookies with all path/domain combinations
-      const cookiesToClear = ['orgId', 'userEmail', 'accessToken', 'refreshToken'];
+      const cookiesToClear = ['orgId', 'userEmail', 'accessToken', 'refreshToken', 'sb-access-token', 'sb-refresh-token'];
       const domains = [window.location.hostname, '', null, 'stitchflow.com', `.${window.location.hostname}`];
       const paths = ['/', '/tools/shadow-it-scan', '/tools/shadow-it-scan/', '', null];
       
@@ -847,6 +847,26 @@ export default function ShadowITDashboard() {
           }
         }
       });
+      
+      // Also try to directly clear Supabase auth cookies
+      try {
+        // Import dynamically to avoid server issues
+        import('@supabase/supabase-js').then(({ createClient }) => {
+          const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+          );
+          
+          // Sign out from Supabase
+          supabase.auth.signOut()
+            .then(() => console.log('Successfully signed out from Supabase'))
+            .catch(err => console.error('Error signing out from Supabase:', err));
+        }).catch(err => {
+          console.error('Error importing Supabase client:', err);
+        });
+      } catch (e) {
+        console.error('Error clearing Supabase session:', e);
+      }
       
       // Clear local storage
       localStorage.clear();
@@ -1997,7 +2017,7 @@ export default function ShadowITDashboard() {
         if (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1')) {
           redirectUri = `${window.location.origin}/tools/shadow-it-scan/api/auth/microsoft/callback`;
         } else {
-          redirectUri = 'https://stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
+          redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
         }
         
         console.log('Using redirectUri:', redirectUri);
@@ -2018,15 +2038,10 @@ export default function ShadowITDashboard() {
         const searchParams = new URLSearchParams(window.location.search);
         const errorParam = searchParams.get('error');
         
-        // Always use consent when data_refresh_required is present
-        // or if we're in the error modal
-        const needsConsent = errorParam === 'data_refresh_required' || 
-                             errorParam === 'missing_data' ||
-                             errorParam === 'interaction_required' ||
-                             loginError !== ''; // If there's any error, force consent
-
-        const promptMode = needsConsent ? 'consent' : 'none';
-        console.log(`Using prompt mode: ${promptMode} based on error: ${errorParam}`);
+        // Always use consent instead of none - this ensures the Microsoft login will always work
+        // Setting to 'none' causes errors for new users or when consent is required
+        const promptMode = 'consent';
+        console.log(`Using prompt mode: ${promptMode}`);
 
         const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
         authUrl.searchParams.append('client_id', clientId);

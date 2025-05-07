@@ -114,8 +114,8 @@ export class MicrosoftWorkspaceService {
     try {
       // Check if we have a refresh token
       if (!this.currentTokens || !this.currentTokens.refresh_token) {
-        console.log('No refresh token available for Microsoft, cannot refresh');
-        return null;
+        console.error('No refresh token available for Microsoft, cannot refresh');
+        throw new Error('Missing Microsoft refresh token - unable to refresh access token');
       }
 
       // Check if token is expired or we're forcing a refresh
@@ -127,52 +127,74 @@ export class MicrosoftWorkspaceService {
         return null;
       }
 
-      console.log('Refreshing Microsoft access token...');
-      
-      // Prepare the token endpoint request
-      const tokenEndpoint = `https://login.microsoftonline.com/${this.tenantId}/oauth2/v2.0/token`;
-      const params = new URLSearchParams({
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        refresh_token: this.currentTokens.refresh_token,
-        grant_type: 'refresh_token',
-        scope: 'https://graph.microsoft.com/.default offline_access'
-      });
-
-      // Make the refresh token request
-      const response = await fetch(tokenEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString(),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Failed to refresh Microsoft token:', errorData);
-        throw new Error(`Failed to refresh token: ${response.status} ${response.statusText}`);
+      if (force) {
+        console.log('Forcing Microsoft token refresh as requested');
+      } else {
+        console.log('Microsoft access token expired, refreshing...');
       }
+      
+      try {
+        // Prepare the token endpoint request
+        const tokenEndpoint = `https://login.microsoftonline.com/${this.tenantId}/oauth2/v2.0/token`;
+        const params = new URLSearchParams({
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+          refresh_token: this.currentTokens.refresh_token,
+          grant_type: 'refresh_token',
+          scope: 'https://graph.microsoft.com/.default offline_access'
+        });
 
-      // Parse the new tokens
-      const newTokens = await response.json();
-      
-      // Merge with existing tokens, ensuring we keep the refresh token if not returned
-      const updatedTokens = {
-        ...this.currentTokens,
-        access_token: newTokens.access_token,
-        id_token: newTokens.id_token || this.currentTokens.id_token,
-        refresh_token: newTokens.refresh_token || this.currentTokens.refresh_token,
-        expires_at: Date.now() + (newTokens.expires_in * 1000)
-      };
-      
-      // Update the client with the new tokens
-      await this.setCredentials(updatedTokens);
-      
-      console.log('Successfully refreshed Microsoft access token');
-      return updatedTokens;
+        // Make the refresh token request
+        const response = await fetch(tokenEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: params.toString(),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.text();
+          console.error('Failed to refresh Microsoft token:', errorData);
+          throw new Error(`Failed to refresh token: ${response.status} ${response.statusText} - ${errorData}`);
+        }
+
+        // Parse the new tokens
+        const newTokens = await response.json();
+        
+        // Merge with existing tokens, ensuring we keep the refresh token if not returned
+        const updatedTokens = {
+          ...this.currentTokens,
+          access_token: newTokens.access_token,
+          id_token: newTokens.id_token || this.currentTokens.id_token,
+          refresh_token: newTokens.refresh_token || this.currentTokens.refresh_token,
+          expires_at: Date.now() + (newTokens.expires_in * 1000)
+        };
+        
+        // Update the client with the new tokens
+        await this.setCredentials(updatedTokens);
+        
+        console.log('Successfully refreshed Microsoft access token');
+        return updatedTokens;
+      } catch (refreshError) {
+        console.error('Detailed Microsoft token refresh error:', refreshError);
+        
+        // Add more context to the error
+        if (refreshError instanceof Error) {
+          // Check for common OAuth errors and provide better messages
+          if (refreshError.message.includes('invalid_grant')) {
+            throw new Error(`Invalid Microsoft refresh token. OAuth grant has expired or been revoked: ${refreshError.message}`);
+          } else if (refreshError.message.includes('AADSTS')) {
+            throw new Error(`Microsoft token refresh error: ${refreshError.message}`);
+          } else {
+            throw new Error(`Microsoft token refresh failed: ${refreshError.message}`);
+          }
+        }
+        
+        throw refreshError; // Re-throw any other errors
+      }
     } catch (error) {
-      console.error('Error refreshing Microsoft access token:', error);
+      console.error('Error in Microsoft refreshAccessToken:', error);
       throw error;
     }
   }
