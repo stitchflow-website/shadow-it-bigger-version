@@ -171,7 +171,62 @@ export default function ShadowITDashboard() {
   // Add this state near your other useState declarations
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginError, setLoginError] = useState<string>('');
-  
+  const [sessionValidated, setSessionValidated] = useState(false);
+
+  // Add a client-side session validation effect
+  useEffect(() => {
+    // Check if Supabase is available (client-side)
+    if (typeof window !== 'undefined') {
+      const validateSession = async () => {
+        try {
+          const { createClient } = await import('@supabase/supabase-js');
+          const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+              auth: {
+                autoRefreshToken: true,
+                persistSession: true,
+              }
+            }
+          );
+          
+          // Try to get session
+          const { data, error } = await supabase.auth.getSession();
+          
+          if (error) {
+            console.error('Session validation error:', error);
+          }
+          
+          // Check for session validity but don't redirect
+          if (data?.session) {
+            console.log('Supabase session is valid');
+            setSessionValidated(true);
+          } else {
+            console.log('No valid Supabase session found, falling back to traditional auth');
+            // Check for traditional cookies as fallback
+            const hasCookies = document.cookie.includes('orgId=') && document.cookie.includes('userEmail=');
+            
+            if (hasCookies) {
+              console.log('Traditional cookies found, considering authenticated');
+              setSessionValidated(true);
+            } else {
+              console.log('No valid auth found, but will not redirect');
+              // Don't force login, just show login button
+              setSessionValidated(false);
+            }
+          }
+        } catch (error) {
+          console.error('Error during session validation:', error);
+          // Don't force login on errors
+          setSessionValidated(false);
+        }
+      };
+      
+      validateSession();
+    }
+  }, []);
+
   // Helper function to redirect to Google consent screen
   const redirectToGoogleConsent = () => {
     let redirectURI;
@@ -1116,36 +1171,9 @@ export default function ShadowITDashboard() {
 
   // Modify the checkAuth function to be more generic
   const isAuthenticated = () => {
-    // Only access cookies in the browser
-    if (typeof window === 'undefined') {
-      return false; // On server, consider not authenticated
-    }
-    
-    // Debug: Log all cookies to see what's available
-    const allCookies = document.cookie;
-    console.log("All cookies:", allCookies);
-    
-    const cookies = document.cookie.split(';');
-    console.log("Split cookies:", cookies);
-    
-    // Trim the cookies and check for orgId and userEmail
-    const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
-    const userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
-    
-    console.log("orgIdCookie:", orgIdCookie);
-    console.log("userEmailCookie:", userEmailCookie);
-    
-    // Use the same logic as in fetchData to also check URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlOrgId = urlParams.get('orgId');
-    
-    console.log("URL orgId:", urlOrgId);
-    
-    // Consider authenticated if either cookies or URL param is present
-    const authenticated = !!(orgIdCookie && userEmailCookie) || !!urlOrgId;
-    console.log("Authentication result:", authenticated);
-    
-    return authenticated;
+    // Use our sessionValidated state that's managed by the effect
+    // This prevents redirect loops by only using client-side validation
+    return sessionValidated;
   };
 
   console.log("isAuthenticated", isAuthenticated());
@@ -2097,47 +2125,46 @@ export default function ShadowITDashboard() {
     };
 
     return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-        <div className="bg-white rounded-xl shadow-lg w-full max-w-md">
-          <div className="p-6">
-            <h2 className="text-xl font-semibold mb-2">Sign in to continue</h2>
-            <p className="text-sm text-gray-500 mb-6">
-              Ensure you connect your admin org account to get started with the app
-            </p>
-            
-            {loginError && (
-              <div className="mb-4 p-4 text-sm text-red-800 bg-red-100 rounded-lg">
-                {loginError}
-              </div>
-            )}
-            
-            <div className="flex flex-col space-y-4">
-              <Button 
-                onClick={handleGoogleLogin}
-                className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-                size="lg"
-                disabled={isLoading}
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+          <h2 className="text-2xl font-bold mb-6 text-center">Sign In</h2>
+          {loginError && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              <p>{loginError}</p>
+              <button 
+                onClick={retryAuthentication}
+                className="mt-2 text-blue-600 hover:underline font-medium"
               >
-                <img src="/tools/shadow-it-scan/images/google-logo.svg" alt="Google logo" className="h-5 w-5" />
-                {isLoading && loginProvider === 'google' ? 'Connecting...' : 'Sign in with Google Workspace'}
-              </Button>
-              
-              <Button 
-                onClick={handleMicrosoftLogin}
-                className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-                size="lg"
-                disabled={isLoading}
-              >
-                <img src="/tools/shadow-it-scan/images/microsoft-logo.svg" alt="Microsoft logo" className="h-5 w-5" />
-                {isLoading && loginProvider === 'microsoft' ? 'Connecting...' : 'Sign in with Microsoft Entra ID'}
-              </Button>
+                Retry Authentication
+              </button>
             </div>
+          )}
+          <div className="flex flex-col space-y-4">
+            <Button 
+              onClick={handleGoogleLogin}
+              className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+              size="lg"
+              disabled={isLoading}
+            >
+              <img src="/tools/shadow-it-scan/images/google-logo.svg" alt="Google logo" className="h-5 w-5" />
+              {isLoading && loginProvider === 'google' ? 'Connecting...' : 'Sign in with Google Workspace'}
+            </Button>
             
-            <div className="flex justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowLoginModal(false)}>
-                Cancel
-              </Button>
-            </div>
+            <Button 
+              onClick={handleMicrosoftLogin}
+              className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+              size="lg"
+              disabled={isLoading}
+            >
+              <img src="/tools/shadow-it-scan/images/microsoft-logo.svg" alt="Microsoft logo" className="h-5 w-5" />
+              {isLoading && loginProvider === 'microsoft' ? 'Connecting...' : 'Sign in with Microsoft Entra ID'}
+            </Button>
+          </div>
+          
+          <div className="flex justify-end mt-6">
+            <Button variant="outline" onClick={() => setShowLoginModal(false)}>
+              Cancel
+            </Button>
           </div>
         </div>
       </div>
@@ -2149,6 +2176,47 @@ export default function ShadowITDashboard() {
     // This effect will trigger whenever appCategories or mainView changes
     // No action needed - just having this dependency will cause charts to re-render
   }, [appCategories, mainView]);
+
+  // Add a function to manually validate session and clear any errors
+  const retryAuthentication = async () => {
+    try {
+      console.log('Manually retrying authentication...');
+      setLoginError('');
+      setIsLoading(true);
+      
+      // Call our retry-session API endpoint
+      const response = await fetch('/tools/shadow-it-scan/api/auth/retry-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error('Error refreshing session:', data.error);
+        setLoginError('Unable to refresh your session. Please sign in again.');
+        setShowLoginModal(true);
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('Session refreshed successfully');
+      setSessionValidated(true);
+      setShowLoginModal(false);
+      setIsLoading(false);
+      
+      // Reload the page to ensure cookies are properly set
+      window.location.reload();
+      return;
+    } catch (error) {
+      console.error('Error during authentication retry:', error);
+      setLoginError('Something went wrong. Please try signing in again.');
+      setShowLoginModal(true);
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="mx-auto py-8 space-y-4 font-sans text-gray-900 bg-[#FAF8FA]">
@@ -2196,18 +2264,18 @@ export default function ShadowITDashboard() {
 
       <main className="pt-[40px] pl-10 pr-10 bg-white mt-4 pb-10">
 
-            {!isAuthenticated() && (
+            {!sessionValidated && (
               <div className="bg-black border border-gray-800 rounded-lg p-4 mb-6">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <span className="text-yellow-500">👋</span>
                     <p className="text-gray-200">
-                    This is a preview of the app. Get started with the Shadow IT scan for your workspace
+                      This is a preview of the app. Get started with the Shadow IT scan for your workspace
                     </p>
                   </div>
                   <Button
                     onClick={() => {
-                      setShowLoginModal(true)
+                      setShowLoginModal(true);
                     }}
                     variant="outline"
                     className="w-full sm:w-auto bg-white hover:bg-white/90 text-black border-white hover:text-black transition-colors"
