@@ -392,6 +392,7 @@ export async function GET(request: NextRequest) {
         .insert({
           name: emailDomain,
           domain: emailDomain,
+          auth_provider: 'microsoft',
           updated_at: new Date().toISOString(),
           first_admin: userData.userPrincipalName // Set first admin for new organizations
         })
@@ -646,7 +647,7 @@ export async function GET(request: NextRequest) {
 
     // Create default notification preferences for the user
     try {
-      await fetch(`/tools/shadow-it-scan/api/auth/create-default-preferences`, {
+      await fetch(`https://www.stitchflow.com/tools/shadow-it-scan/api/auth/create-default-preferences`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

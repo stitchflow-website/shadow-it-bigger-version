@@ -101,9 +101,54 @@ export async function sendUserWebhook(
 export async function sendSuccessSignupWebhook(
   userEmail: string, 
   userName: string,
-  reason:string = ''
+  provider: string = ''
 ): Promise<boolean> {
-  return sendUserWebhook(userEmail, userName, reason);
+  try {
+    console.log(`Sending success signup webhook for ${userEmail} (${provider})`);
+    
+    // Create the request with a timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    try {
+      const webhookResponse = await fetch('https://primary-production-d8d8.up.railway.app/webhook/d98b3a82-3ac8-44d0-b28f-ea7682badee2', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic ' + Buffer.from('thamim:G7#kL9@vB3!mQ2$z').toString('base64')
+        },
+        body: JSON.stringify({
+          user_email: userEmail,
+          app_name: 'Shadow IT',
+          user_name: userName || '',
+          reason: provider || ''
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+      
+      if (!webhookResponse.ok) {
+        const responseText = await webhookResponse.text();
+        console.error(`Failed to send webhook: Status ${webhookResponse.status}, Response: ${responseText}`);
+        return false;
+      } else {
+        console.log('Successfully sent webhook notification');
+        return true;
+      }
+    } catch (fetchError: unknown) {
+      clearTimeout(timeoutId);
+      if ((fetchError as { name?: string })?.name === 'AbortError') {
+        console.error('Webhook request timed out after 10 seconds');
+      } else {
+        console.error('Error during webhook fetch:', fetchError);
+      }
+      return false;
+    }
+  } catch (webhookError) {
+    console.error('Error in sendSuccessSignupWebhook:', webhookError);
+    return false;
+  }
 }
 
 /**

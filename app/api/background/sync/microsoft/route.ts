@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
     const microsoftService = new MicrosoftWorkspaceService({
       client_id: process.env.MICROSOFT_CLIENT_ID!,
       client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-      tenant_id: process.env.MICROSOFT_TENANT_ID!
+      tenant_id: process.env.MICROSOFT_TENANT_ID || 'common'
     });
 
     await microsoftService.setCredentials({
