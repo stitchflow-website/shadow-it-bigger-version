@@ -618,11 +618,11 @@ async function processGoogleWorkspace(org: any) {
         .from('sync_status')
         .insert({
           organization_id: org.id,
+          user_email: latestSync.user_email,
           status: 'COMPLETED',
           message: 'Tokens refreshed successfully',
           access_token: refreshedTokens.access_token,
           refresh_token: refreshedTokens.refresh_token || latestSync.refresh_token,
-          token_expiry: refreshedTokens.expiry_date,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })

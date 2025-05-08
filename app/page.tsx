@@ -2008,40 +2008,19 @@ export default function ShadowITDashboard() {
         const hasValidSession = await checkSession();
         console.log('Has valid session:', hasValidSession);
         
-        // Check for stored email and check if user exists already
-        let userExists = false;
-        const storedEmail = localStorage.getItem('userEmail');
-        if (storedEmail) {
-          userExists = await checkUserExists(storedEmail);
-          console.log('Checked if user exists:', userExists);
-        }
+        // For new browsers without a session, we always need consent
+        // We can't rely on localStorage across browsers
         
-        // Get browser info for better debugging
-        const isBrave = navigator.userAgent.includes('Brave') || 
-                       (navigator.userAgent.includes('Chrome') && 
-                        !navigator.userAgent.includes('Edg') && 
-                        document.hasStorageAccess !== undefined &&
-                        /Chrome\/[0-9]+/.test(navigator.userAgent));
-        
+        // Get browser features for debugging
         console.log('Browser features:', {
           hasStorageAccess: document.hasStorageAccess !== undefined,
           isChrome: navigator.userAgent.includes('Chrome'),
           isEdge: navigator.userAgent.includes('Edg'),
-          isBraveLike: isBrave
         });
         
-        // Determine if we need consent
-        // 1. If user has valid session, don't need consent
-        // 2. If user exists in database but no valid session, don't need consent (use prompt=select_account)
-        // 3. If error requires consent, use consent
-        // 4. If login error occurred, use consent
-        
-        let promptMode = 'none'; // Default when session is valid
-        
-        if (!hasValidSession) {
-          // No valid session, but if user exists we can use select_account instead of full consent
-          promptMode = userExists ? 'select_account' : 'consent';
-        }
+        // For a proper cross-browser experience, we need to use consent
+        // prompt=none only works if the user has an active session in the current browser
+        let promptMode = hasValidSession ? 'none' : 'consent';
         
         // Override with consent if specific errors require it
         if (errorParam === 'data_refresh_required' || 
@@ -2051,7 +2030,7 @@ export default function ShadowITDashboard() {
           promptMode = 'consent';
         }
         
-        console.log(`Using prompt mode: ${promptMode} based on session validity, user existence, and error: ${errorParam}`);
+        console.log(`Using prompt mode: ${promptMode} for Google auth`);
 
         const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         authUrl.searchParams.append('client_id', clientId);
@@ -2088,19 +2067,22 @@ export default function ShadowITDashboard() {
         setLoginError('');
 
         const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
-        let redirectUri;
+        let redirectUri = process.env.NEXT_PUBLIC_MICROSOFT_REDIRECT_URI;
 
-        if (!clientId) {
+        if (!clientId || !redirectUri) {
           setLoginError("Missing Microsoft OAuth configuration");
-          console.error('Missing client ID');
+          console.error('Missing env variables:', { 
+            clientId: clientId ? 'present' : 'missing',
+            redirectUri: redirectUri ? 'present' : 'missing'
+          });
           setIsLoading(false);
           setLoginProvider(null);
           return;
         }
 
-        // If we're on localhost, use the current origin
-        if (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1')) {
-          redirectUri = `${window.location.origin}/tools/shadow-it-scan/api/auth/microsoft/callback`;
+        // If we're on localhost, update the redirect URI
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          redirectUri = window.location.origin + '/api/auth/microsoft';
         } else {
           redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
         }
@@ -2127,46 +2109,10 @@ export default function ShadowITDashboard() {
         const hasValidSession = await checkSession();
         console.log('Has valid session:', hasValidSession);
         
-        // Check for stored email and check if user exists already
-        let userExists = false;
-        const storedEmail = localStorage.getItem('userEmail');
-        if (storedEmail) {
-          userExists = await checkUserExists(storedEmail);
-          console.log('Checked if user exists:', userExists);
-        }
+        // Always use consent for a more consistent experience
+        const promptMode = 'consent';
         
-        // Get browser info for better debugging
-        const isBrave = navigator.userAgent.includes('Brave') || 
-                       (navigator.userAgent.includes('Chrome') && 
-                        !navigator.userAgent.includes('Edg') && 
-                        document.hasStorageAccess !== undefined &&
-                        /Chrome\/[0-9]+/.test(navigator.userAgent));
-        
-        console.log('Browser features:', {
-          hasStorageAccess: document.hasStorageAccess !== undefined,
-          isChrome: navigator.userAgent.includes('Chrome'),
-          isEdge: navigator.userAgent.includes('Edg'),
-          isBraveLike: isBrave
-        });
-        
-        // Determine if we need consent
-        // Microsoft is more sensitive to prompt=none, so we're more careful
-        let promptMode = 'none'; // Default when session is valid
-        
-        if (!hasValidSession) {
-          // No valid session, but if user exists we can use select_account instead of full consent
-          promptMode = userExists ? 'select_account' : 'consent';
-        }
-        
-        // Override with consent if specific errors require it
-        if (errorParam === 'data_refresh_required' || 
-            errorParam === 'missing_data' ||
-            errorParam === 'interaction_required' ||
-            loginError !== '') {
-          promptMode = 'consent';
-        }
-        
-        console.log(`Using prompt mode: ${promptMode} based on session validity, user existence, and error: ${errorParam}`);
+        console.log(`Using prompt mode: ${promptMode} for Microsoft auth`);
 
         const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
         authUrl.searchParams.append('client_id', clientId);
@@ -2175,7 +2121,6 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('response_mode', 'query');
         authUrl.searchParams.append('prompt', promptMode);
-        authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
 
         localStorage.setItem('auth_provider', 'microsoft');
         localStorage.setItem('lastLogin', Date.now().toString());
