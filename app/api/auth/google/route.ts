@@ -68,6 +68,7 @@ export async function GET(request: Request) {
     const { searchParams, origin } = new URL(request.url);
     const code = searchParams.get('code');
     const error = searchParams.get('error');
+    const state = searchParams.get('state');
     const referer = request.headers.get('referer') || '';
     
     // Determine if the request is coming from the main website
@@ -176,6 +177,18 @@ export async function GET(request: Request) {
                   // Store email in localStorage for cross-browser session awareness
                   localStorage.setItem('userEmail', "${userInfo.email}");
                   localStorage.setItem('lastLogin', "${new Date().getTime()}");
+                  
+                  // Store additional session data in localStorage for cross-browser compatibility
+                  localStorage.setItem('userOrgId', "${userOrg.id}");
+                  localStorage.setItem('userHd', "${userInfo.hd || ''}");
+                  
+                  // Check if this is a different browser than the one that initiated auth
+                  const stateFromStorage = localStorage.getItem('oauthState');
+                  const stateFromUrl = "${state || ''}";
+                  if (stateFromStorage && stateFromUrl && stateFromStorage === stateFromUrl) {
+                    localStorage.setItem('sameDeviceAuth', 'true');
+                  }
+                  
                   window.location.href = "https://www.stitchflow.com/tools/shadow-it-scan/";
                 </script>
               </head>
@@ -479,6 +492,19 @@ export async function GET(request: Request) {
           // Store email in localStorage for cross-browser session awareness
           localStorage.setItem('userEmail', "${userInfo.email}");
           localStorage.setItem('lastLogin', "${new Date().getTime()}");
+          
+          // Enhanced storage for better cross-browser experience
+          localStorage.setItem('userOrgId', "${org.id}");
+          localStorage.setItem('userHd', "${userInfo.hd || ''}");
+          localStorage.setItem('authProvider', "google");
+          
+          // Check if this is a different browser than the one that initiated auth
+          const stateFromStorage = localStorage.getItem('oauthState');
+          const stateFromUrl = "${state || ''}";
+          if (stateFromStorage && stateFromUrl && stateFromStorage === stateFromUrl) {
+            localStorage.setItem('sameDeviceAuth', 'true');
+          }
+          
           window.location.href = "${redirectUrl.toString()}";
         </script>
       </head>

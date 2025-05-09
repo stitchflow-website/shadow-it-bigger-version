@@ -1900,6 +1900,7 @@ export default function ShadowITDashboard() {
   const LoginModal = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [loginProvider, setLoginProvider] = useState<'google' | 'microsoft' | null>(null);
+    const [loginError, setLoginError] = useState('');
     
     // Function to check if user has a valid session
     const checkSession = async () => {
@@ -1925,18 +1926,49 @@ export default function ShadowITDashboard() {
                           document.cookie.includes('orgId') || 
                           document.cookie.includes('userEmail');
         
-        // If we have some cookies, do a secondary check against localStorage
+        // Cross-browser check - look for localStorage data
+        const userEmail = localStorage.getItem('userEmail');
+        const lastLogin = localStorage.getItem('lastLogin');
+        const userOrgId = localStorage.getItem('userOrgId');
+        
+        // If cookies present, session is valid in this browser
         if (hasCookies) {
-          const lastLogin = localStorage.getItem('lastLogin');
-          if (lastLogin) {
-            // Check if login was within last 30 days
-            const loginTime = parseInt(lastLogin, 10);
-            const now = Date.now();
-            const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+          return true;
+        }
+        
+        // If localStorage has critical auth data and login was recent, consider valid
+        if (userEmail && lastLogin && userOrgId) {
+          // Check if login was within last 30 days
+          const loginTime = parseInt(lastLogin, 10);
+          const now = Date.now();
+          const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+          
+          if (now - loginTime < thirtyDaysMs) {
+            console.log('Found recent auth data in localStorage - treating as valid session');
             
-            if (now - loginTime < thirtyDaysMs) {
-              console.log('Found recent login record in localStorage');
-              return true;
+            // Since we have valid localStorage but no cookies,
+            // this is likely a cross-browser scenario
+            
+            // Make API call to recover session
+            try {
+              const recoveryResponse = await fetch('/tools/shadow-it-scan/api/auth/recover-session', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  email: userEmail,
+                  orgId: userOrgId
+                })
+              });
+              
+              if (recoveryResponse.ok) {
+                console.log('Successfully recovered session');
+                return true;
+              }
+            } catch (recoveryError) {
+              console.error('Error recovering session:', recoveryError);
+              // Continue with normal login flow if recovery fails
             }
           }
         }
@@ -2032,6 +2064,10 @@ export default function ShadowITDashboard() {
         
         console.log(`Using prompt mode: ${promptMode} for Google auth`);
 
+        // Generate a state parameter to verify the response
+        const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+        localStorage.setItem('oauthState', state);
+
         const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
@@ -2040,6 +2076,8 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('access_type', 'offline');
         authUrl.searchParams.append('prompt', promptMode);
         authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
+        authUrl.searchParams.append('state', state);
+        authUrl.searchParams.append('include_granted_scopes', 'true');
 
         localStorage.setItem('auth_provider', 'google');
         localStorage.setItem('lastLogin', Date.now().toString());
@@ -2114,6 +2152,10 @@ export default function ShadowITDashboard() {
         
         console.log(`Using prompt mode: ${promptMode} for Microsoft auth`);
 
+        // Generate a state parameter to verify the response
+        const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+        localStorage.setItem('oauthState', state);
+
         const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
@@ -2121,6 +2163,7 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('response_mode', 'query');
         authUrl.searchParams.append('prompt', promptMode);
+        authUrl.searchParams.append('state', state);
 
         localStorage.setItem('auth_provider', 'microsoft');
         localStorage.setItem('lastLogin', Date.now().toString());

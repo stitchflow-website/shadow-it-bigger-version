@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
     // Get authorization code from query params
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
+    const state = searchParams.get('state');
     
     if (!code) {
       console.error('No authorization code received from Microsoft');
@@ -468,6 +469,19 @@ export async function GET(request: NextRequest) {
             // Store email in localStorage for cross-browser session awareness
             localStorage.setItem('userEmail', "${userData.userPrincipalName}");
             localStorage.setItem('lastLogin', "${new Date().getTime()}");
+            
+            // Enhanced storage for better cross-browser experience
+            localStorage.setItem('userOrgId', "${org.id}");
+            localStorage.setItem('userDomain', "${emailDomain || ''}");
+            localStorage.setItem('authProvider', "microsoft");
+            
+            // Check if this is a different browser than the one that initiated auth
+            const stateFromStorage = localStorage.getItem('oauthState');
+            const stateFromUrl = "${state || ''}";
+            if (stateFromStorage && stateFromUrl && stateFromStorage === stateFromUrl) {
+              localStorage.setItem('sameDeviceAuth', 'true');
+            }
+            
             window.location.href = "${dashboardUrl.toString()}";
           </script>
         </head>
@@ -577,6 +591,19 @@ export async function GET(request: NextRequest) {
           // Store email in localStorage for cross-browser session awareness
           localStorage.setItem('userEmail', "${userData.userPrincipalName}");
           localStorage.setItem('lastLogin', "${new Date().getTime()}");
+          
+          // Enhanced storage for better cross-browser experience
+          localStorage.setItem('userOrgId', "${org.id}");
+          localStorage.setItem('userDomain', "${emailDomain || ''}");
+          localStorage.setItem('authProvider', "microsoft");
+          
+          // Check if this is a different browser than the one that initiated auth
+          const stateFromStorage = localStorage.getItem('oauthState');
+          const stateFromUrl = "${state || ''}";
+          if (stateFromStorage && stateFromUrl && stateFromStorage === stateFromUrl) {
+            localStorage.setItem('sameDeviceAuth', 'true');
+          }
+          
           window.location.href = "${redirectUrl.toString()}";
         </script>
       </head>
