@@ -117,112 +117,11 @@ export async function GET(request: Request) {
     const userInfo = await googleService.getAuthenticatedUserInfo();
     console.log('Authenticated user:', userInfo);
     
-    // If we don't have a refresh token, the user probably used prompt=none
+    // If we don't have a refresh token, something went wrong with the consent flow
+    // We should redirect to the auth page with an error
     if (!oauthTokens.refresh_token) {
-      console.error('No refresh token received - likely due to prompt=none.');
-      
-      // Check for an existing valid session
-      // For a Request object, we need to extract cookies manually
-      const cookies = request.headers.get('cookie') || '';
-      const sessionIdMatch = cookies.match(/shadow_session_id=([^;]+)/);
-      const sessionId = sessionIdMatch ? sessionIdMatch[1] : undefined;
-      
-      // Check if we have a valid session
-      const hasValidSession = await isValidSession(sessionId);
-      
-      if (hasValidSession) {
-        console.log('Found valid session, proceeding without refresh token');
-        // Continue with the flow using existing session
-      } else {
-        console.log('No valid session found, checking for existing user');
-        
-        // Check if the user already exists in our database
-        const { data: existingUser } = await supabaseAdmin
-          .from('users_signedup')
-          .select('id, email')
-          .eq('email', userInfo.email)
-          .single();
-        
-        console.log('Checking if user exists:', existingUser ? 'Yes' : 'No');
-        
-        if (existingUser) {
-          // First try to find organization by domain
-          let { data: userOrg } = await supabaseAdmin
-            .from('organizations')
-            .select('id')
-            .eq('domain', userInfo.hd)
-            .single();
-            
-          // If not found by domain, try finding by first_admin
-          if (!userOrg) {
-            const { data: orgByAdmin } = await supabaseAdmin
-              .from('organizations')
-              .select('id')
-              .eq('first_admin', userInfo.email)
-              .single();
-              
-            userOrg = orgByAdmin;
-          }
-          
-          if (userOrg) {
-            console.log('User already exists and has organization, redirecting to dashboard');
-            
-            // Create HTML response with localStorage setting and redirect
-            const htmlResponse = `
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <title>Redirecting...</title>
-                <script>
-                  // Store email in localStorage for cross-browser session awareness
-                  localStorage.setItem('userEmail', "${userInfo.email}");
-                  localStorage.setItem('lastLogin', "${new Date().getTime()}");
-                  
-                  // Store additional session data in localStorage for cross-browser compatibility
-                  localStorage.setItem('userOrgId', "${userOrg.id}");
-                  localStorage.setItem('userHd', "${userInfo.hd || ''}");
-                  
-                  // Check if this is a different browser than the one that initiated auth
-                  const stateFromStorage = localStorage.getItem('oauthState');
-                  const stateFromUrl = "${state || ''}";
-                  if (stateFromStorage && stateFromUrl && stateFromStorage === stateFromUrl) {
-                    localStorage.setItem('sameDeviceAuth', 'true');
-                  }
-                  
-                  window.location.href = "https://www.stitchflow.com/tools/shadow-it-scan/";
-                </script>
-              </head>
-              <body>
-                <p>Redirecting to dashboard...</p>
-              </body>
-              </html>
-            `;
-            
-            const dashboardResponse = new NextResponse(htmlResponse, {
-              status: 200,
-              headers: {
-                'Content-Type': 'text/html',
-              },
-            });
-            
-            // Set necessary cookies with environment-aware settings
-            const cookieOptions = {
-              secure: process.env.NODE_ENV === 'production',
-              sameSite: process.env.NODE_ENV === 'production' ? ('strict' as const) : ('lax' as const),
-              path: '/',
-              domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
-            };
-            
-            dashboardResponse.cookies.set('orgId', userOrg.id, cookieOptions);
-            dashboardResponse.cookies.set('userEmail', userInfo.email, cookieOptions);
-            
-            return dashboardResponse;
-          }
-        }
-        
-        // If user doesn't exist or we couldn't find their organization, force consent flow
-        return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
-      }
+      console.error('No refresh token received even with consent prompt. Redirecting to auth error.');
+      return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=auth_failed_no_refresh_token');
     }
 
     if (!userInfo.hd) {
@@ -362,244 +261,95 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
     }
 
-    // Check if this organization already has completed a successful sync
-    const { data: existingCompletedSync } = await supabaseAdmin
-      .from('sync_status')
-      .select('id, created_at')
-      .eq('organization_id', org.id)
-      .eq('status', 'COMPLETED')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    // Check if there's a recent failed sync that might indicate missing data
-    const { data: recentFailedSync } = await supabaseAdmin
-      .from('sync_status')
-      .select('id, message')
-      .eq('organization_id', org.id)
-      .eq('status', 'FAILED')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    // Check if there are apps for this organization
-    const { count: appCount, error: appCountError } = await supabaseAdmin
-      .from('applications')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', org.id);
-
-    // Determine if we need a fresh sync even for returning users
-    // We need a fresh sync if:
-    // 1. There are no apps in the database but the user is returning
-    // 2. There was a recent failed sync with a critical error
-    const needsFreshSync = !isNewUser && (
-      appCount === 0 || 
-      (recentFailedSync && recentFailedSync.message && 
-       (recentFailedSync.message.includes('Missing required fields') || 
-        recentFailedSync.message.includes('failed')))
-    );
-
-    // If the user needs a fresh sync, we now need to force fresh consent to ensure
-    // we have all the required permissions, especially if data was deleted
-    if (needsFreshSync) {
-      console.log('Returning user with missing or corrupt data detected, forcing fresh consent');
-      
-      // Return a special error code that will be handled in the frontend
-      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
-    }
-
-    // If the user and organization already exist with completed sync and no data issues, 
-    // redirect directly to the dashboard instead of the loading page
-    if (!isNewUser && existingCompletedSync && !needsFreshSync) {
-      console.log('Returning user with healthy completed sync detected, skipping loading page');
-      const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
-      
-      // Create response with redirect directly to dashboard
-      const response = NextResponse.redirect(dashboardUrl);
-
-      // Set necessary cookies with environment-aware settings
-      const cookieOptions = {
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? ('strict' as const) : ('lax' as const),
-        path: '/',
-        domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
-      };
-
-      response.cookies.set('orgId', org.id, cookieOptions);
-      response.cookies.set('userEmail', userInfo.email, cookieOptions);
-      
-      // Create a session in user_sessions table
-      try {
-        // Generate a unique session ID
-        const sessionId = crypto.randomUUID();
-        
-        // Set session expiry (30 days from now)
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 30);
-        
-        // Create the session record
-        const { data: sessionData, error: sessionError } = await supabaseAdmin
-          .from('user_sessions')
-          .insert({
-            id: sessionId,
-            user_id: userId,
-            user_email: userInfo.email,
-            auth_provider: 'google',
-            expires_at: expiresAt.toISOString(),
-            refresh_token: oauthTokens.refresh_token,
-            access_token: oauthTokens.access_token,
-            user_agent: request.headers.get('user-agent') || '',
-            ip_address: request.headers.get('x-forwarded-for') || ''
-          })
-          .select()
-          .single();
-        
-        if (sessionError) {
-          console.error('Error creating session:', sessionError);
-        } else {
-          console.log('Session created successfully:', sessionId);
-          
-          // Set the session ID cookie
-          response.cookies.set('shadow_session_id', sessionId, {
-            ...cookieOptions,
-            httpOnly: true, // Make sure it's not accessible via JavaScript
-            expires: expiresAt // Set the expiry date
-          });
-        }
-      } catch (error) {
-        console.error('Error creating session:', error);
-      }
-      
-      return response;
-    }
-
-    // Default case: new user or no completed sync yet - create URL for loading page with syncId parameter
-    const redirectUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/loading');
-    if (syncStatus?.id) {
-      redirectUrl.searchParams.set('syncId', syncStatus.id);
-    }
-
-    console.log('Setting cookies and redirecting to:', redirectUrl.toString());
+    // Generate a unique session ID for the user
+    const sessionId = crypto.randomUUID();
     
-    // Create the response with redirect
-    // Use HTML response to set localStorage before redirecting
+    // Set session expiry (30 days from now)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+    
+    // Create the session record in database
+    const { error: sessionError } = await supabaseAdmin
+      .from('user_sessions')
+      .insert({
+        id: sessionId,
+        user_id: userId,
+        user_email: userInfo.email,
+        auth_provider: 'google',
+        expires_at: expiresAt.toISOString(),
+        refresh_token: oauthTokens.refresh_token,
+        access_token: oauthTokens.access_token,
+        user_agent: request.headers.get('user-agent') || '',
+        ip_address: request.headers.get('x-forwarded-for') || '',
+        created_at: new Date().toISOString()
+      });
+    
+    if (sessionError) {
+      console.error('Error creating session:', sessionError);
+    } else {
+      console.log('Session created successfully:', sessionId);
+    }
+    
+    // Default case: redirect to dashboard with cross-browser data
+    const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
+    
+    // Create HTML response with localStorage setting and redirect
     const htmlResponse = `
       <!DOCTYPE html>
       <html>
       <head>
         <title>Redirecting...</title>
         <script>
-          // Store email in localStorage for cross-browser session awareness
+          // Store critical session data in localStorage for cross-browser awareness
           localStorage.setItem('userEmail', "${userInfo.email}");
           localStorage.setItem('lastLogin', "${new Date().getTime()}");
-          
-          // Enhanced storage for better cross-browser experience
           localStorage.setItem('userOrgId', "${org.id}");
-          localStorage.setItem('userHd', "${userInfo.hd || ''}");
+          localStorage.setItem('userHd', "${userInfo.hd}");
+          localStorage.setItem('sessionId', "${sessionId}");
           localStorage.setItem('authProvider', "google");
+          localStorage.setItem('sessionCreatedAt', "${new Date().toISOString()}");
           
-          // Check if this is a different browser than the one that initiated auth
+          // Check if this is the same browser that initiated auth
           const stateFromStorage = localStorage.getItem('oauthState');
           const stateFromUrl = "${state || ''}";
-          if (stateFromStorage && stateFromUrl && stateFromStorage === stateFromUrl) {
-            localStorage.setItem('sameDeviceAuth', 'true');
-          }
+          const loginTime = localStorage.getItem('login_attempt_time');
+          const isSameBrowser = !!(stateFromStorage && stateFromUrl && stateFromStorage === stateFromUrl);
           
-          window.location.href = "${redirectUrl.toString()}";
+          localStorage.setItem('isSameBrowser', isSameBrowser ? 'true' : 'false');
+          
+          // Redirect to the dashboard
+          window.location.href = "${dashboardUrl}";
         </script>
       </head>
       <body>
-        <p>Redirecting to dashboard...</p>
+        <p>Session established! Redirecting you to dashboard...</p>
       </body>
       </html>
     `;
     
+    // Build the response with cookies
     const response = new NextResponse(htmlResponse, {
       status: 200,
       headers: {
         'Content-Type': 'text/html',
       },
     });
-
-    // Set necessary cookies with environment-aware settings
+    
+    // Set necessary cookies with production-appropriate settings
     const cookieOptions = {
       secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? ('strict' as const) : ('lax' as const),
+      sameSite: 'lax' as const,
       path: '/',
-      domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined
+      domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined,
+      expires: expiresAt
     };
-
+    
     response.cookies.set('orgId', org.id, cookieOptions);
     response.cookies.set('userEmail', userInfo.email, cookieOptions);
-    
-    // Create a session in user_sessions table
-    try {
-      // Generate a unique session ID
-      const sessionId = crypto.randomUUID();
-      
-      // Set session expiry (30 days from now)
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
-      
-      // Create the session record
-      const { data: sessionData, error: sessionError } = await supabaseAdmin
-        .from('user_sessions')
-        .insert({
-          id: sessionId,
-          user_id: userId,
-          user_email: userInfo.email,
-          auth_provider: 'google',
-          expires_at: expiresAt.toISOString(),
-          refresh_token: oauthTokens.refresh_token,
-          access_token: oauthTokens.access_token,
-          user_agent: request.headers.get('user-agent') || '',
-          ip_address: request.headers.get('x-forwarded-for') || ''
-        })
-        .select()
-        .single();
-      
-      if (sessionError) {
-        console.error('Error creating session:', sessionError);
-      } else {
-        console.log('Session created successfully:', sessionId);
-        
-        // Set the session ID cookie
-        response.cookies.set('shadow_session_id', sessionId, {
-          ...cookieOptions,
-          httpOnly: true, // Make sure it's not accessible via JavaScript
-          expires: expiresAt // Set the expiry date
-        });
-      }
-    } catch (error) {
-      console.error('Error creating session:', error);
-    }
-
-    // Store basic user info in the background
-    try {
-      await supabaseAdmin
-        .from('users_signedup')
-        .upsert({
-          email: userInfo.email,
-          name: userInfo.name,
-          avatar_url: userInfo.picture || null,
-          updated_at: new Date().toISOString(),
-        });
-      
-      console.log('Basic user info stored');
-      
-      // Send webhook notification for successful signup (only for new users)
-      if (isNewUser) {
-        console.log('Sending webhook notification for successful signup');
-        try {
-          const webhookSuccess = await sendSuccessSignupWebhook(userInfo.email, userInfo.name);
-          console.log(`Webhook call result: ${webhookSuccess ? 'Success' : 'Failed'}`);
-        } catch (webhookError) {
-          console.error('Error in webhook call:', webhookError);
-        }
-      }
-    } catch (error: unknown) {
-      console.error('Error storing basic user info:', error);
-    }
+    response.cookies.set('shadow_session_id', sessionId, {
+      ...cookieOptions,
+      httpOnly: true
+    });
     
     // Trigger the background sync in a non-blocking way
     const apiUrl = createRedirectUrl('/api/background/sync');
@@ -620,24 +370,6 @@ export async function GET(request: Request) {
     })).catch(error => {
       console.error('Error triggering background sync:', error);
     });
-
-    // Create default notification preferences for the user
-    try {
-      await fetch(`https://www.stitchflow.com/tools/shadow-it-scan/api/auth/create-default-preferences`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          orgId: org.id,
-          userEmail: userInfo.email
-        })
-      });
-      console.log('Created default notification preferences for user');
-    } catch (prefsError) {
-      console.error('Error creating default notification preferences:', prefsError);
-      // Continue despite error - not critical
-    }
 
     return response;
   } catch (error) {

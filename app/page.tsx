@@ -2032,59 +2032,37 @@ export default function ShadowITDashboard() {
           'email'
         ].join(' ');
 
-        // Check if we have an error that indicates we need fresh consent
-        const searchParams = new URLSearchParams(window.location.search);
-        const errorParam = searchParams.get('error');
+        // Generate a state parameter to verify the response and enable cross-browser detection
+        const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
         
-        // Check if user has an active session
-        const hasValidSession = await checkSession();
-        console.log('Has valid session:', hasValidSession);
+        // Always store in localStorage to identify this browser session
+        localStorage.setItem('oauthState', state);
+        localStorage.setItem('auth_provider', 'google');
+        localStorage.setItem('lastLogin', Date.now().toString());
+        localStorage.setItem('login_attempt_time', Date.now().toString());
         
-        // For new browsers without a session, we always need consent
-        // We can't rely on localStorage across browsers
-        
-        // Get browser features for debugging
-        console.log('Browser features:', {
-          hasStorageAccess: document.hasStorageAccess !== undefined,
-          isChrome: navigator.userAgent.includes('Chrome'),
-          isEdge: navigator.userAgent.includes('Edg'),
-        });
-        
-        // For a proper cross-browser experience, we need to use consent
-        // prompt=none only works if the user has an active session in the current browser
-        let promptMode = hasValidSession ? 'none' : 'consent';
-        
-        // Override with consent if specific errors require it
-        if (errorParam === 'data_refresh_required' || 
-            errorParam === 'missing_data' ||
-            errorParam === 'interaction_required' ||
-            loginError !== '') {
-          promptMode = 'consent';
-        }
+        // Always use 'consent' for prompt to ensure refresh token is provided
+        // This is the key fix - we are explicitly asking for consent which will ensure refresh_token
+        const promptMode = 'consent';
         
         console.log(`Using prompt mode: ${promptMode} for Google auth`);
-
-        // Generate a state parameter to verify the response
-        const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
-        localStorage.setItem('oauthState', state);
 
         const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
         authUrl.searchParams.append('response_type', 'code');
         authUrl.searchParams.append('scope', scopes);
-        authUrl.searchParams.append('access_type', 'offline');
+        authUrl.searchParams.append('access_type', 'offline'); 
         authUrl.searchParams.append('prompt', promptMode);
-        authUrl.searchParams.append('nonce', Math.random().toString(36).substring(2));
-        authUrl.searchParams.append('state', state);
         authUrl.searchParams.append('include_granted_scopes', 'true');
+        authUrl.searchParams.append('state', state);
 
-        localStorage.setItem('auth_provider', 'google');
-        localStorage.setItem('lastLogin', Date.now().toString());
-
-        // Before redirecting, clean URL by removing error parameter
-        if (errorParam) {
-          const cleanUrl = new URL(window.location.href);
+        // Force approval prompt to ensure refresh token is always provided
+        authUrl.searchParams.append('approval_prompt', 'force');
+        
+        // Clean URL before redirecting
+        const cleanUrl = new URL(window.location.href);
+        if (cleanUrl.searchParams.has('error')) {
           cleanUrl.searchParams.delete('error');
           window.history.replaceState({}, document.title, cleanUrl.toString());
         }
@@ -2139,22 +2117,19 @@ export default function ShadowITDashboard() {
           'email'
         ].join(' ');
 
-        // Check if we have an error that indicates we need fresh consent
-        const searchParams = new URLSearchParams(window.location.search);
-        const errorParam = searchParams.get('error');
+        // Generate a state parameter to verify the response and enable cross-browser detection
+        const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
         
-        // Check if user has an active session
-        const hasValidSession = await checkSession();
-        console.log('Has valid session:', hasValidSession);
+        // Always store in localStorage to identify this browser session
+        localStorage.setItem('oauthState', state);
+        localStorage.setItem('auth_provider', 'microsoft');
+        localStorage.setItem('lastLogin', Date.now().toString());
+        localStorage.setItem('login_attempt_time', Date.now().toString());
         
         // Always use consent for a more consistent experience
         const promptMode = 'consent';
         
         console.log(`Using prompt mode: ${promptMode} for Microsoft auth`);
-
-        // Generate a state parameter to verify the response
-        const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
-        localStorage.setItem('oauthState', state);
 
         const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
         authUrl.searchParams.append('client_id', clientId);
@@ -2164,13 +2139,10 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('response_mode', 'query');
         authUrl.searchParams.append('prompt', promptMode);
         authUrl.searchParams.append('state', state);
-
-        localStorage.setItem('auth_provider', 'microsoft');
-        localStorage.setItem('lastLogin', Date.now().toString());
         
-        // Before redirecting, clean URL by removing error parameter
-        if (errorParam) {
-          const cleanUrl = new URL(window.location.href);
+        // Clean URL before redirecting
+        const cleanUrl = new URL(window.location.href);
+        if (cleanUrl.searchParams.has('error')) {
           cleanUrl.searchParams.delete('error');
           window.history.replaceState({}, document.title, cleanUrl.toString());
         }
