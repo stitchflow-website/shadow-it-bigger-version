@@ -126,7 +126,7 @@ export async function GET(request: Request) {
     const error = searchParams.get('error');
     const state = searchParams.get('state') || crypto.randomUUID();
     const isPromptNone = searchParams.get('prompt') === 'none';
-    const hasRequestedScopes = searchParams.get('requested_scopes') === 'true';
+    const hasGrantedConsent = searchParams.get('consent_granted') === 'true';
     
     // Helper function to create redirect URL
     const createRedirectUrl = (path: string) => {
@@ -178,26 +178,28 @@ export async function GET(request: Request) {
     const userInfo = await googleService.getAuthenticatedUserInfo();
     console.log('Authenticated user:', userInfo);
 
-    // Check if user already exists in our system and get their credentials
+    // Check if user already exists in our system
     const { data: existingUser } = await supabaseAdmin
       .from('users_signedup')
       .select('id, email')
       .eq('email', userInfo.email)
       .single();
 
-    const existingCreds = existingUser ? await getUserCredentials(userInfo.email) : null;
-
     // For first-time users or users without admin scopes, we need to check admin status
     let hasAdminAccess = false;
     try {
       hasAdminAccess = await googleService.isUserAdmin(userInfo.email);
+      console.log('Admin access check:', { hasAdminAccess, hasGrantedConsent, isNewUser: !existingUser });
     } catch (err) {
       console.log('Could not verify admin status with current token');
     }
 
-    // If user doesn't have admin access and hasn't been asked for scopes yet
-    if (!hasAdminAccess && !hasRequestedScopes) {
-      console.log('Need admin scopes - User exists:', !!existingUser, 'Has admin access:', hasAdminAccess);
+    // Request admin scopes if:
+    // 1. User is new (not in our DB) OR
+    // 2. User doesn't have admin access
+    // BUT only if they haven't just granted consent
+    if ((!existingUser || !hasAdminAccess) && !hasGrantedConsent) {
+      console.log('Requesting admin scopes - New user:', !existingUser, 'Has admin access:', hasAdminAccess);
       const adminScopes = [
         'https://www.googleapis.com/auth/admin.directory.user.readonly',
         'https://www.googleapis.com/auth/admin.directory.domain.readonly',
@@ -207,18 +209,18 @@ export async function GET(request: Request) {
       const authUrl = googleService.generateAuthUrl({
         access_type: 'offline',
         scope: adminScopes,
-        prompt: 'select_account', // Force account selection
+        prompt: 'consent',
         login_hint: userInfo.email,
         state,
         include_granted_scopes: true
-      }) + '&requested_scopes=true&prompt=consent'; // Force consent
+      }) + '&consent_granted=true'; // Add flag to indicate consent was requested
 
       return NextResponse.redirect(authUrl);
     }
 
-    // At this point user either:
-    // 1. Exists and has admin access already
-    // 2. Just got admin access through the redirect above
+    // At this point:
+    // 1. User exists and has admin access, OR
+    // 2. New user who just granted admin access
     let isAdmin = false;
     try {
       isAdmin = await googleService.isUserAdmin(userInfo.email);
@@ -279,61 +281,6 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/?error=not_workspace_account', request.url));
     }
     
-    // Check if user already exists before storing info and sending webhook
-    const { data: storedUser } = await supabaseAdmin
-      .from('users_signedup')
-      .select('id')
-      .eq('email', userInfo.email)
-      .single();
-    
-    const isNewUser = !storedUser;
-    
-    // Store basic user info
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from('users_signedup')
-      .upsert({
-        id: storedUser?.id, // Include ID if exists
-        email: userInfo.email,
-        name: userInfo.name,
-        avatar_url: userInfo.picture || null,
-        updated_at: new Date().toISOString(),
-      })
-      .select('id')
-      .single();
-        
-    if (userError) {
-      console.error('Error upserting user:', userError);
-    }
-    
-    // Get the user ID from the query or existing user
-    const userId = userData?.id || storedUser?.id;
-
-    // Store the refresh token if we received one
-    if (oauthTokens.refresh_token) {
-      await storeUserSession(userInfo.email, userInfo.id, oauthTokens.refresh_token);
-      console.log('Stored refresh token in user session');
-    } else {
-      console.warn('No refresh token received from Google OAuth. Forcing new consent.');
-      // If we didn't get a refresh token, force a new consent screen
-      const adminScopes = [
-        'https://www.googleapis.com/auth/admin.directory.user.readonly',
-        'https://www.googleapis.com/auth/admin.directory.domain.readonly',
-        'https://www.googleapis.com/auth/admin.directory.user.security'
-      ].join(' ');
-
-      const consentState = crypto.randomUUID();
-      const authUrl = googleService.generateAuthUrl({
-        access_type: 'offline',
-        scope: adminScopes,
-        prompt: 'consent',
-        login_hint: userInfo.email,
-        state: consentState,
-        include_granted_scopes: true
-      });
-
-      return NextResponse.redirect(authUrl);
-    }
-
     // Create organization ID from domain
     const orgId = userInfo.hd.replace(/\./g, '-');
 
@@ -349,7 +296,7 @@ export async function GET(request: Request) {
         domain: userInfo.hd,
         auth_provider: 'google',
         updated_at: new Date().toISOString(),
-        first_admin: isNewUser ? userInfo.email : undefined,
+        first_admin: !existingUser ? userInfo.email : undefined,
       }, { onConflict: 'google_org_id' })
       .select('id')
       .single();
@@ -362,13 +309,6 @@ export async function GET(request: Request) {
     console.log('Organization upserted:', { org_id: org.id });
 
     // Create a status record for tracking the sync progress
-    // Use refresh token from db if we don't have a new one
-    let syncRefreshToken = oauthTokens.refresh_token;
-    if (!syncRefreshToken) {
-      const storedCreds = await getUserCredentials(userInfo.email);
-      syncRefreshToken = storedCreds?.refresh_token ?? '';
-    }
-
     const { data: syncStatus, error: syncStatusError } = await supabaseAdmin
       .from('sync_status')
       .insert({
@@ -378,7 +318,7 @@ export async function GET(request: Request) {
         progress: 0,
         message: 'Started Google Workspace data sync',
         access_token: oauthTokens.access_token,
-        refresh_token: syncRefreshToken,
+        refresh_token: oauthTokens.refresh_token || null,
       })
       .select()
       .single();
@@ -400,25 +340,28 @@ export async function GET(request: Request) {
       .from('user_sessions')
       .insert({
         id: sessionId,
-        user_id: userId,
+        user_id: existingUser?.id,
         user_email: userInfo.email,
         auth_provider: 'google',
         expires_at: expiresAt.toISOString(),
-        refresh_token: syncRefreshToken || null, // Make refresh_token optional
+        refresh_token: oauthTokens.refresh_token || null,
         access_token: oauthTokens.access_token,
         user_agent: request.headers.get('user-agent') || '',
         ip_address: request.headers.get('x-forwarded-for') || '',
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       });
-    
+
     if (sessionError) {
       console.error('Error creating session:', sessionError);
     } else {
       console.log('Session created successfully:', sessionId);
     }
-    
-    // Default case: redirect to dashboard with cross-browser data
-    const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
+
+    // Redirect to loading page with sync status
+    const loadingUrl = new URL('/tools/shadow-it-scan/loading', request.url);
+    loadingUrl.searchParams.set('syncId', syncStatus.id);
+    loadingUrl.searchParams.set('orgId', org.id);
     
     // Create HTML response with localStorage setting and redirect
     const htmlResponse = `
@@ -436,21 +379,14 @@ export async function GET(request: Request) {
           localStorage.setItem('authProvider', "google");
           localStorage.setItem('sessionCreatedAt', "${new Date().toISOString()}");
           localStorage.setItem('googleId', "${userInfo.id}");
+          localStorage.setItem('syncId', "${syncStatus.id}");
           
-          // Check if this is the same browser that initiated auth
-          const stateFromStorage = localStorage.getItem('oauthState');
-          const stateFromUrl = "${state || ''}";
-          const loginTime = localStorage.getItem('login_attempt_time');
-          const isSameBrowser = !!(stateFromStorage && stateFromUrl && stateFromStorage === stateFromUrl);
-          
-          localStorage.setItem('isSameBrowser', isSameBrowser ? 'true' : 'false');
-          
-          // Redirect to the dashboard
-          window.location.href = "${dashboardUrl}";
+          // Redirect to the loading page
+          window.location.href = "${loadingUrl}";
         </script>
       </head>
       <body>
-        <p>Session established! Redirecting you to dashboard...</p>
+        <p>Session established! Redirecting to sync status page...</p>
       </body>
       </html>
     `;
@@ -490,7 +426,7 @@ export async function GET(request: Request) {
         organization_id: org.id,
         sync_id: syncStatus.id,
         access_token: oauthTokens.access_token,
-        refresh_token: syncRefreshToken,
+        refresh_token: oauthTokens.refresh_token || null,
         user_email: userInfo.email,
         user_hd: userInfo.hd,
         provider: 'google'
