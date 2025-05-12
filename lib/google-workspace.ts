@@ -21,6 +21,17 @@ interface Credentials {
   scope?: string;
 }
 
+// Authentication options interface for generating OAuth URLs
+interface AuthUrlOptions {
+  access_type?: 'online' | 'offline';
+  include_granted_scopes?: boolean;
+  login_hint?: string;
+  prompt?: 'none' | 'consent' | 'select_account';
+  scope?: string | string[];
+  state?: string;
+  hd?: string;
+}
+
 export class GoogleWorkspaceService {
   private oauth2Client: OAuth2Client;
   private admin: any;
@@ -43,6 +54,44 @@ export class GoogleWorkspaceService {
     this.oauth2 = google.oauth2({
       version: 'v2',
       auth: this.oauth2Client
+    });
+  }
+
+  /**
+   * Generates an authorization URL for OAuth flow
+   * @param options Options for the authorization URL
+   * @returns The authorization URL
+   */
+  generateAuthUrl(options: AuthUrlOptions): string {
+    // Default scopes for Google Workspace authentication
+    const defaultScopes = [
+      'openid',
+      'profile',
+      'email',
+      'https://www.googleapis.com/auth/admin.directory.user.readonly',
+      'https://www.googleapis.com/auth/admin.directory.domain.readonly',
+      'https://www.googleapis.com/auth/admin.directory.user.security'
+    ];
+    
+    // Use provided scopes or default scopes
+    const scope = options.scope || defaultScopes;
+    
+    // Generate the URL with the provided options
+    return this.oauth2Client.generateAuthUrl({
+      // Default to offline access to get refresh token
+      access_type: options.access_type || 'offline',
+      // Default to including previously granted scopes
+      include_granted_scopes: options.include_granted_scopes !== undefined ? options.include_granted_scopes : true,
+      // Optional domain restriction
+      hd: options.hd,
+      // User account hint
+      login_hint: options.login_hint,
+      // Prompt behavior
+      prompt: options.prompt || 'select_account',
+      // Scope(s) being requested
+      scope,
+      // State for CSRF protection
+      state: options.state
     });
   }
 
@@ -76,29 +125,30 @@ export class GoogleWorkspaceService {
         return {
           access_token: response.token,
           refresh_token: refreshToken, // Keep the original refresh token
-          expires_in: 3600 // Default to 1 hour
+          expires_in: 3600, // Default to 1 hour
+          expiry_date: Date.now() + 3600 * 1000 // Add expiry_date for consistency
         };
       } else if (response.token && typeof response.token === 'object') {
         // Token is an object
         const tokenObj = response.token as Credentials;
+        const expiryDate = tokenObj.expiry_date || (Date.now() + 3600 * 1000);
         return {
           access_token: tokenObj.access_token,
           refresh_token: tokenObj.refresh_token || refreshToken, // Use new refresh token if provided
           id_token: tokenObj.id_token,
-          expires_in: tokenObj.expiry_date 
-            ? Math.floor((tokenObj.expiry_date - Date.now()) / 1000) 
-            : 3600
+          expires_in: Math.floor((expiryDate - Date.now()) / 1000),
+          expiry_date: expiryDate
         };
       } else {
         // Fallback to credentials
         const credentials = this.oauth2Client.credentials;
+        const expiryDate = credentials.expiry_date || (Date.now() + 3600 * 1000);
         return {
           access_token: credentials.access_token,
           refresh_token: credentials.refresh_token || refreshToken,
           id_token: credentials.id_token,
-          expires_in: credentials.expiry_date 
-            ? Math.floor((credentials.expiry_date - Date.now()) / 1000) 
-            : 3600
+          expires_in: Math.floor((expiryDate - Date.now()) / 1000),
+          expiry_date: expiryDate
         };
       }
     } catch (error) {
@@ -202,6 +252,7 @@ export class GoogleWorkspaceService {
   }
 
   async getUsersList() {
+    // https: // developers.google.com/admin-sdk/directory/reference/rest/v1/users/list
     const response = await this.admin.users.list({
       customer: 'my_customer',
       maxResults: 500,

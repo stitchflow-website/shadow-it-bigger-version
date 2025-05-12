@@ -1902,102 +1902,6 @@ export default function ShadowITDashboard() {
     const [loginProvider, setLoginProvider] = useState<'google' | 'microsoft' | null>(null);
     const [loginError, setLoginError] = useState('');
     
-    // Function to check if user has a valid session
-    const checkSession = async () => {
-      try {
-        // First try to validate session through our API
-        const response = await fetch('/tools/shadow-it-scan/api/auth/session/validate', {
-          credentials: 'include', // Ensure cookies are sent
-          cache: 'no-store', // Prevent caching to ensure fresh response
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          return data.authenticated === true;
-        }
-        
-        // Fallback check - look for the cookies directly
-        // This helps in browsers like Brave with stricter cookie policies
-        const hasCookies = document.cookie.includes('shadow_session_id') || 
-                          document.cookie.includes('orgId') || 
-                          document.cookie.includes('userEmail');
-        
-        // Cross-browser check - look for localStorage data
-        const userEmail = localStorage.getItem('userEmail');
-        const lastLogin = localStorage.getItem('lastLogin');
-        const userOrgId = localStorage.getItem('userOrgId');
-        
-        // If cookies present, session is valid in this browser
-        if (hasCookies) {
-          return true;
-        }
-        
-        // If localStorage has critical auth data and login was recent, consider valid
-        if (userEmail && lastLogin && userOrgId) {
-          // Check if login was within last 30 days
-          const loginTime = parseInt(lastLogin, 10);
-          const now = Date.now();
-          const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-          
-          if (now - loginTime < thirtyDaysMs) {
-            console.log('Found recent auth data in localStorage - treating as valid session');
-            
-            // Since we have valid localStorage but no cookies,
-            // this is likely a cross-browser scenario
-            
-            // Make API call to recover session
-            try {
-              const recoveryResponse = await fetch('/tools/shadow-it-scan/api/auth/recover-session', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  email: userEmail,
-                  orgId: userOrgId
-                })
-              });
-              
-              if (recoveryResponse.ok) {
-                console.log('Successfully recovered session');
-                return true;
-              }
-            } catch (recoveryError) {
-              console.error('Error recovering session:', recoveryError);
-              // Continue with normal login flow if recovery fails
-            }
-          }
-        }
-        
-        return false;
-      } catch (error) {
-        console.error('Error checking session:', error);
-        return false;
-      }
-    };
-    
-    // Function to check if a user email already exists in the system
-    const checkUserExists = async (email: string): Promise<boolean> => {
-      if (!email) return false;
-      
-      try {
-        // Just a simple GET request to an API endpoint that checks if user exists
-        const response = await fetch(`/tools/shadow-it-scan/api/auth/user-exists?email=${encodeURIComponent(email)}`);
-        if (response.ok) {
-          const data = await response.json();
-          return data.exists === true;
-        }
-        return false;
-      } catch (error) {
-        console.error('Error checking if user exists:', error);
-        return false;
-      }
-    };
-    
     const handleGoogleLogin = async () => {
       try {
         setIsLoading(true);
@@ -2023,10 +1927,8 @@ export default function ShadowITDashboard() {
         
         console.log('Using redirectUri:', redirectUri);
         
+        // Use minimal scopes initially - just enough to identify the user
         const scopes = [
-          'https://www.googleapis.com/auth/admin.directory.user.readonly',
-          'https://www.googleapis.com/auth/admin.directory.domain.readonly',
-          'https://www.googleapis.com/auth/admin.directory.user.security',
           'openid',
           'profile',
           'email'
@@ -2041,24 +1943,15 @@ export default function ShadowITDashboard() {
         localStorage.setItem('lastLogin', Date.now().toString());
         localStorage.setItem('login_attempt_time', Date.now().toString());
         
-        // Always use 'consent' for prompt to ensure refresh token is provided
-        // This is the key fix - we are explicitly asking for consent which will ensure refresh_token
-        const promptMode = 'consent';
-        
-        console.log(`Using prompt mode: ${promptMode} for Google auth`);
-
         const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
         authUrl.searchParams.append('response_type', 'code');
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('access_type', 'offline'); 
-        authUrl.searchParams.append('prompt', promptMode);
+        authUrl.searchParams.append('prompt', 'select_account');
         authUrl.searchParams.append('include_granted_scopes', 'true');
         authUrl.searchParams.append('state', state);
-
-        // Force approval prompt to ensure refresh token is always provided
-        authUrl.searchParams.append('approval_prompt', 'force');
         
         // Clean URL before redirecting
         const cleanUrl = new URL(window.location.href);
@@ -2126,27 +2019,15 @@ export default function ShadowITDashboard() {
         localStorage.setItem('lastLogin', Date.now().toString());
         localStorage.setItem('login_attempt_time', Date.now().toString());
         
-        // Always use consent for a more consistent experience
-        const promptMode = 'consent';
-        
-        console.log(`Using prompt mode: ${promptMode} for Microsoft auth`);
-
         const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
         authUrl.searchParams.append('response_type', 'code');
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('response_mode', 'query');
-        authUrl.searchParams.append('prompt', promptMode);
+        authUrl.searchParams.append('prompt', 'select_account');
         authUrl.searchParams.append('state', state);
-        
-        // Clean URL before redirecting
-        const cleanUrl = new URL(window.location.href);
-        if (cleanUrl.searchParams.has('error')) {
-          cleanUrl.searchParams.delete('error');
-          window.history.replaceState({}, document.title, cleanUrl.toString());
-        }
-        
+
         window.location.href = authUrl.toString();
       } catch (err) {
         console.error('Microsoft login error:', err);
@@ -2191,12 +2072,12 @@ export default function ShadowITDashboard() {
                 <img src="/tools/shadow-it-scan/images/microsoft-logo.svg" alt="Microsoft logo" className="h-5 w-5" />
                 {isLoading && loginProvider === 'microsoft' ? 'Connecting...' : 'Sign in with Microsoft Entra ID'}
               </Button>
-            </div>
-            
-            <div className="flex justify-end mt-6">
-              <Button variant="outline" onClick={() => setShowLoginModal(false)}>
-                Cancel
-              </Button>
+              
+              <div className="flex justify-end mt-6">
+                <Button variant="outline" onClick={() => setShowLoginModal(false)}>
+                  Cancel
+                </Button>
+              </div>
             </div>
           </div>
         </div>

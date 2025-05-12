@@ -51,6 +51,7 @@
     "cmdk": "1.0.4",
     "crypto-browserify": "^3.12.1",
     "date-fns": "^4.1.0",
+    "dotenv": "^16.5.0",
     "embla-carousel-react": "8.5.1",
     "google-auth-library": "^9.15.1",
     "googleapis": "^133.0.0",

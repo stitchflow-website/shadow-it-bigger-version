@@ -62,17 +62,65 @@ async function isValidSession(sessionId: string | undefined): Promise<boolean> {
   }
 }
 
+/**
+ * Helper function to check if user already has stored credentials
+ * @param email User's email address
+ * @returns Object containing the refresh token if found
+ */
+async function getUserCredentials(email: string): Promise<{ refresh_token?: string } | null> {
+  if (!email) return null;
+  
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .select('refresh_token')
+      .eq('email', email)
+      .single();
+    
+    if (error || !data) return null;
+    return data;
+  } catch (error) {
+    console.error('Error fetching user credentials:', error);
+    return null;
+  }
+}
+
+/**
+ * Helper function to store or update user credentials
+ */
+async function storeUserCredentials(email: string, googleId: string, refreshToken: string) {
+  try {
+    // Using upsert to create or update credentials
+    const { error } = await supabaseAdmin
+      .from('user_credentials')
+      .upsert({
+        email,
+        google_id: googleId,
+        refresh_token: refreshToken,
+        updated_at: new Date().toISOString()
+      }, { 
+        onConflict: 'email' 
+      });
+    
+    if (error) {
+      console.error('Error storing user credentials:', error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('Error in storeUserCredentials:', error);
+    return false;
+  }
+}
+
 export async function GET(request: Request) {
   try {
     console.log('1. Starting Google OAuth callback...');
     const { searchParams, origin } = new URL(request.url);
     const code = searchParams.get('code');
     const error = searchParams.get('error');
-    const state = searchParams.get('state');
-    const referer = request.headers.get('referer') || '';
-    
-    // Determine if the request is coming from the main website
-    const isFromMainSite = referer.includes('localhost') || referer.includes('127.0.0.1');
+    const state = searchParams.get('state') || crypto.randomUUID();
+    const isPromptNone = searchParams.get('prompt') === 'none';
     
     // Helper function to create redirect URL
     const createRedirectUrl = (path: string) => {
@@ -82,6 +130,13 @@ export async function GET(request: Request) {
     };
 
     if (error) {
+      // If error is login_required or interaction_required with prompt=none,
+      // redirect to the auth URL with a full consent flow
+      if (isPromptNone && (error === 'login_required' || error === 'interaction_required')) {
+        console.log('Silent auth failed, redirecting to full auth flow');
+        return NextResponse.redirect(new URL('/tools/shadow-it-scan/?trigger_consent=true', request.url));
+      }
+      
       console.error('OAuth error received:', error);
       return NextResponse.redirect(`https://stitchflow.com/tools/shadow-it-scan/?error=${error}`);
     }
@@ -116,12 +171,84 @@ export async function GET(request: Request) {
     console.log('Getting authenticated user info...');
     const userInfo = await googleService.getAuthenticatedUserInfo();
     console.log('Authenticated user:', userInfo);
-    
-    // If we don't have a refresh token, something went wrong with the consent flow
-    // We should redirect to the auth page with an error
-    if (!oauthTokens.refresh_token) {
-      console.error('No refresh token received even with consent prompt. Redirecting to auth error.');
-      return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=auth_failed_no_refresh_token');
+
+    // Check if user already exists in our system and get their credentials
+    const { data: existingUser } = await supabaseAdmin
+      .from('users_signedup')
+      .select('id, email')
+      .eq('email', userInfo.email)
+      .single();
+
+    const existingCreds = existingUser ? await getUserCredentials(userInfo.email) : null;
+
+    // If user exists and has valid credentials, use them
+    if (existingUser && existingCreds?.refresh_token) {
+      console.log('Found existing refresh token with admin scopes. Using it.');
+      oauthTokens.refresh_token = existingCreds.refresh_token;
+    } else {
+      // Check if we need admin scopes
+      let hasAdminAccess = false;
+      try {
+        hasAdminAccess = await googleService.isUserAdmin(userInfo.email);
+      } catch (err) {
+        console.log('Could not verify admin status with current token');
+      }
+
+      if (!hasAdminAccess) {
+        // We need to get admin scopes
+        console.log('Need admin scopes for user');
+        const adminScopes = [
+          'https://www.googleapis.com/auth/admin.directory.user.readonly',
+          'https://www.googleapis.com/auth/admin.directory.domain.readonly',
+          'https://www.googleapis.com/auth/admin.directory.user.security'
+        ].join(' ');
+
+        const authUrl = googleService.generateAuthUrl({
+          access_type: 'offline',
+          scope: adminScopes,
+          prompt: 'consent',
+          login_hint: userInfo.email,
+          state,
+          include_granted_scopes: true
+        });
+
+        return NextResponse.redirect(authUrl);
+      }
+    }
+
+    // At this point we either have admin access or existing valid credentials
+    let isAdmin = false;
+    try {
+      isAdmin = await googleService.isUserAdmin(userInfo.email);
+    } catch (err) {
+      console.error('Error checking admin status:', err);
+    }
+
+    if (!isAdmin) {
+      console.error('User is not an admin');
+      
+      // Record failed signup
+      try {
+        await supabaseAdmin
+          .from('users_failed_signups')
+          .insert({
+            email: userInfo.email,
+            name: userInfo.name,
+            reason: 'not_admin',
+            provider: 'google',
+            domain: userInfo.hd,
+            metadata: JSON.stringify(userInfo),
+            created_at: new Date().toISOString(),
+          });
+        console.log('Recorded failed signup: not_admin');
+        
+        // Send webhook notification for failed signup
+        await sendFailedSignupWebhook(userInfo.email, userInfo.name, 'not_admin');
+      } catch (err) {
+        console.error('Error recording failed signup:', err);
+      }
+        
+      return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/?error=admin_required', request.url));
     }
 
     if (!userInfo.hd) {
@@ -151,19 +278,19 @@ export async function GET(request: Request) {
     }
     
     // Check if user already exists before storing info and sending webhook
-    const { data: existingUser } = await supabaseAdmin
+    const { data: storedUser } = await supabaseAdmin
       .from('users_signedup')
       .select('id')
       .eq('email', userInfo.email)
       .single();
     
-    const isNewUser = !existingUser;
+    const isNewUser = !storedUser;
     
     // Store basic user info
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users_signedup')
       .upsert({
-        id: existingUser?.id, // Include ID if exists
+        id: storedUser?.id, // Include ID if exists
         email: userInfo.email,
         name: userInfo.name,
         avatar_url: userInfo.picture || null,
@@ -177,41 +304,12 @@ export async function GET(request: Request) {
     }
     
     // Get the user ID from the query or existing user
-    const userId = userData?.id || existingUser?.id;
+    const userId = userData?.id || storedUser?.id;
 
-    // Check if user is an admin
-    let isAdmin = false;
-    try {
-      isAdmin = await googleService.isUserAdmin(userInfo.email);
-    } catch (err: unknown) {
-      console.error('Error checking admin status:', err);
-    }
-    
-    if (!isAdmin) {
-      console.error('User is not an admin');
-      
-      // Record failed signup
-      try {
-        await supabaseAdmin
-          .from('users_failed_signups')
-          .insert({
-            email: userInfo.email,
-            name: userInfo.name,
-            reason: 'not_admin',
-            provider: 'google',
-            domain: userInfo.hd,
-            metadata: JSON.stringify(userInfo),
-            created_at: new Date().toISOString(),
-          });
-        console.log('Recorded failed signup: not_admin');
-        
-        // Send webhook notification for failed signup
-        await sendFailedSignupWebhook(userInfo.email, userInfo.name, 'not_admin');
-      } catch (err: unknown) {
-        console.error('Error recording failed signup:', err);
-      }
-        
-      return NextResponse.redirect(new URL('https://www.stitchflow.com/tools/shadow-it-scan/?error=admin_required', request.url));
+    // Store the refresh token in user_credentials table if we received one
+    if (oauthTokens.refresh_token) {
+      await storeUserCredentials(userInfo.email, userInfo.id, oauthTokens.refresh_token);
+      console.log('Stored refresh token for future cross-browser sessions');
     }
 
     // Create organization ID from domain
@@ -242,6 +340,13 @@ export async function GET(request: Request) {
     console.log('Organization upserted:', { org_id: org.id });
 
     // Create a status record for tracking the sync progress
+    // Use refresh token from db if we don't have a new one
+    let syncRefreshToken = oauthTokens.refresh_token;
+    if (!syncRefreshToken) {
+      const storedCreds = await getUserCredentials(userInfo.email);
+      syncRefreshToken = storedCreds?.refresh_token;
+    }
+
     const { data: syncStatus, error: syncStatusError } = await supabaseAdmin
       .from('sync_status')
       .insert({
@@ -251,7 +356,7 @@ export async function GET(request: Request) {
         progress: 0,
         message: 'Started Google Workspace data sync',
         access_token: oauthTokens.access_token,
-        refresh_token: oauthTokens.refresh_token,
+        refresh_token: syncRefreshToken,
       })
       .select()
       .single();
@@ -277,7 +382,7 @@ export async function GET(request: Request) {
         user_email: userInfo.email,
         auth_provider: 'google',
         expires_at: expiresAt.toISOString(),
-        refresh_token: oauthTokens.refresh_token,
+        refresh_token: syncRefreshToken, // Use the refresh token we have
         access_token: oauthTokens.access_token,
         user_agent: request.headers.get('user-agent') || '',
         ip_address: request.headers.get('x-forwarded-for') || '',
@@ -308,6 +413,7 @@ export async function GET(request: Request) {
           localStorage.setItem('sessionId', "${sessionId}");
           localStorage.setItem('authProvider', "google");
           localStorage.setItem('sessionCreatedAt', "${new Date().toISOString()}");
+          localStorage.setItem('googleId', "${userInfo.id}");
           
           // Check if this is the same browser that initiated auth
           const stateFromStorage = localStorage.getItem('oauthState');
@@ -362,7 +468,7 @@ export async function GET(request: Request) {
         organization_id: org.id,
         sync_id: syncStatus.id,
         access_token: oauthTokens.access_token,
-        refresh_token: oauthTokens.refresh_token,
+        refresh_token: syncRefreshToken,
         user_email: userInfo.email,
         user_hd: userInfo.hd,
         provider: 'google'
