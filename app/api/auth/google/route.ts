@@ -202,11 +202,11 @@ export async function GET(request: Request) {
       const authUrl = googleService.generateAuthUrl({
         access_type: 'offline',
         scope: adminScopes,
-        prompt: 'consent', // Only ask for consent, not account selection
-        login_hint: userInfo.email, // Pre-select the account
+        prompt: 'select_account', // Force account selection
+        login_hint: userInfo.email,
         state,
         include_granted_scopes: true
-      }) + '&requested_scopes=true'; // Add custom parameter to URL
+      }) + '&requested_scopes=true&prompt=consent'; // Force consent
 
       return NextResponse.redirect(authUrl);
     }
@@ -307,6 +307,13 @@ export async function GET(request: Request) {
     if (oauthTokens.refresh_token) {
       await storeUserCredentials(userInfo.email, userInfo.id, oauthTokens.refresh_token);
       console.log('Stored refresh token for future cross-browser sessions');
+    } else {
+      console.warn('No refresh token received from Google OAuth. User may need to revoke access and try again.');
+      // If this is a first-time user and we didn't get a refresh token, we should redirect them to revoke and try again
+      if (!existingUser) {
+        console.log('First-time user without refresh token - redirecting to revoke access');
+        return NextResponse.redirect('https://myaccount.google.com/permissions');
+      }
     }
 
     // Create organization ID from domain
