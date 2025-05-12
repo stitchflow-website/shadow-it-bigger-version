@@ -248,7 +248,7 @@ export async function GET(request: Request) {
             // Force a new OAuth with directly selected account and consent
             const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
             authUrl.searchParams.append('client_id', '${process.env.GOOGLE_CLIENT_ID}');
-            authUrl.searchParams.append('redirect_uri', '${process.env.GOOGLE_REDIRECT_URI}');
+            authUrl.searchParams.append('redirect_uri', 'https://stitchflow.com/tools/shadow-it-scan/');
             authUrl.searchParams.append('response_type', 'code');
             authUrl.searchParams.append('scope', '${adminScopes}');
             authUrl.searchParams.append('access_type', 'offline');
