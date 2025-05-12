@@ -243,12 +243,32 @@ export async function GET(request: Request) {
         ? 'https://stitchflow.com/tools/shadow-it-scan/api/auth/google'
         : `${createRedirectUrl('/api/auth/google')}`;
         
+      // Set a cookie with the email to prevent account chooser screen
+      const emailCookieResponse = new NextResponse('', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html',
+        }
+      });
+      
+      // Set a cookie to remember the email (Google uses this)
+      emailCookieResponse.cookies.set('ACCOUNT_CHOOSER', userInfo.email, {
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax' as const,
+        maxAge: 300 // Just need it for a short time
+      });
+      
       const htmlResponse = `
         <!DOCTYPE html>
         <html>
         <head>
           <title>Redirecting to consent...</title>
           <script>
+            // Store the email in cookies that Google reads
+            document.cookie = "g_csrf_token=${state};path=/;max-age=300;SameSite=Lax";
+            document.cookie = "g_selected_account=${userInfo.email};path=/;max-age=300;SameSite=Lax";
+            
             // Force a new OAuth with directly selected account and consent
             const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
             authUrl.searchParams.append('client_id', '${process.env.GOOGLE_CLIENT_ID}');
@@ -261,8 +281,12 @@ export async function GET(request: Request) {
             authUrl.searchParams.append('state', '${state}');
             authUrl.searchParams.append('include_granted_scopes', 'true');
             
+            // Another Google-specific param to skip account chooser
+            authUrl.searchParams.append('authuser', '0');
+            
             // Store email in session storage to retrieve later
             sessionStorage.setItem('selected_email', '${userInfo.email}');
+            localStorage.setItem('g_selected_account', '${userInfo.email}');
             
             console.log("Redirecting to Google OAuth with:", {
               redirectUri: '${redirectUri}',
@@ -270,7 +294,10 @@ export async function GET(request: Request) {
               state: '${state}'
             });
             
-            window.location.href = authUrl.toString();
+            // Add a small delay to ensure cookies are set
+            setTimeout(() => {
+              window.location.href = authUrl.toString();
+            }, 100);
           </script>
         </head>
         <body>
@@ -283,6 +310,7 @@ export async function GET(request: Request) {
         status: 200,
         headers: {
           'Content-Type': 'text/html',
+          'Set-Cookie': `g_selected_account=${userInfo.email}; path=/; max-age=300; SameSite=Lax`
         }
       });
     }
@@ -390,26 +418,40 @@ export async function GET(request: Request) {
       throw orgError;
     }
 
-    console.log('Organization upserted:', { org_id: org.id });
+    // Check if we already have data for this organization 
+    const { data: existingData } = await supabaseAdmin
+      .from('applications')
+      .select('id')
+      .eq('organization_id', org.id)
+      .limit(1);
+      
+    const hasExistingData = existingData && existingData.length > 0;
+    console.log('Existing data check:', { hasExistingData, orgId: org.id });
 
-    // Create a status record for tracking the sync progress
-    const { data: syncStatus, error: syncStatusError } = await supabaseAdmin
-      .from('sync_status')
-      .insert({
-        organization_id: org.id,
-        user_email: userInfo.email,
-        status: 'IN_PROGRESS',
-        progress: 0,
-        message: 'Started Google Workspace data sync',
-        access_token: oauthTokens.access_token,
-        refresh_token: oauthTokens.refresh_token || null,
-      })
-      .select()
-      .single();
+    // Only create a sync status for new users or users without existing data
+    let syncStatus = null;
+    if (!existingUser || !hasExistingData) {
+      // Create a status record for tracking the sync progress
+      const { data: newSyncStatus, error: syncStatusError } = await supabaseAdmin
+        .from('sync_status')
+        .insert({
+          organization_id: org.id,
+          user_email: userInfo.email,
+          status: 'IN_PROGRESS',
+          progress: 0,
+          message: 'Started Google Workspace data sync',
+          access_token: oauthTokens.access_token,
+          refresh_token: oauthTokens.refresh_token || null,
+        })
+        .select()
+        .single();
 
-    if (syncStatusError) {
-      console.error('Error creating sync status:', syncStatusError);
-      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
+      if (syncStatusError) {
+        console.error('Error creating sync status:', syncStatusError);
+        return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
+      }
+      
+      syncStatus = newSyncStatus;
     }
 
     // Generate a unique session ID for the user
@@ -442,10 +484,22 @@ export async function GET(request: Request) {
       console.log('Session created successfully:', sessionId);
     }
 
-    // Redirect to loading page with sync status
-    const loadingUrl = new URL('https://stitchflow.com/tools/shadow-it-scan/loading');
-    loadingUrl.searchParams.set('syncId', syncStatus.id);
-    loadingUrl.searchParams.set('orgId', org.id);
+    // Determine where to redirect based on user status
+    let redirectUrl;
+    if (!existingUser || !hasExistingData) {
+      // For new users or users without data, redirect to loading page with sync status
+      redirectUrl = new URL('https://stitchflow.com/tools/shadow-it-scan/loading');
+      if (syncStatus) {
+        redirectUrl.searchParams.set('syncId', syncStatus.id);
+      }
+      redirectUrl.searchParams.set('orgId', org.id);
+      console.log('Redirecting new user to loading page');
+    } else {
+      // For returning users with existing data, go straight to dashboard
+      redirectUrl = new URL('https://stitchflow.com/tools/shadow-it-scan/');
+      redirectUrl.searchParams.set('orgId', org.id);
+      console.log('Redirecting returning user directly to dashboard');
+    }
     
     // Create HTML response with localStorage setting and redirect
     const htmlResponse = `
@@ -463,14 +517,18 @@ export async function GET(request: Request) {
           localStorage.setItem('authProvider', "google");
           localStorage.setItem('sessionCreatedAt', "${new Date().toISOString()}");
           localStorage.setItem('googleId', "${userInfo.id}");
-          localStorage.setItem('syncId', "${syncStatus.id}");
+          ${syncStatus ? `localStorage.setItem('syncId', "${syncStatus.id}");` : ''}
           
-          // Redirect to the loading page
-          window.location.href = "${loadingUrl}";
+          // Store user profile info
+          localStorage.setItem('userName', "${userInfo.name}");
+          localStorage.setItem('userAvatarUrl', "${userInfo.picture || ''}");
+          
+          // Redirect to the appropriate page
+          window.location.href = "${redirectUrl}";
         </script>
       </head>
       <body>
-        <p>Session established! Redirecting to sync status page...</p>
+        <p>Session established! Redirecting...</p>
       </body>
       </html>
     `;
@@ -499,25 +557,44 @@ export async function GET(request: Request) {
       httpOnly: true
     });
     
-    // Trigger the background sync in a non-blocking way
-    const apiUrl = createRedirectUrl('/api/background/sync');
-    Promise.resolve(fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        organization_id: org.id,
-        sync_id: syncStatus.id,
-        access_token: oauthTokens.access_token,
-        refresh_token: oauthTokens.refresh_token || null,
-        user_email: userInfo.email,
-        user_hd: userInfo.hd,
-        provider: 'google'
-      }),
-    })).catch(error => {
-      console.error('Error triggering background sync:', error);
-    });
+    // Only trigger background sync for new users or users without data
+    if (syncStatus) {
+      // Trigger the background sync in a non-blocking way
+      const apiUrl = createRedirectUrl('/api/background/sync');
+      Promise.resolve(fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          organization_id: org.id,
+          sync_id: syncStatus.id,
+          access_token: oauthTokens.access_token,
+          refresh_token: oauthTokens.refresh_token || null,
+          user_email: userInfo.email,
+          user_hd: userInfo.hd,
+          provider: 'google'
+        }),
+      })).catch(error => {
+        console.error('Error triggering background sync:', error);
+      });
+    }
+
+    // Now make sure we store the user's profile information in users_signedup table
+    const { error: userError } = await supabaseAdmin
+      .from('users_signedup')
+      .upsert({
+        email: userInfo.email,
+        name: userInfo.name,
+        avatar_url: userInfo.picture || null,
+        updated_at: new Date().toISOString(),
+      }, { 
+        onConflict: 'email' 
+      });
+      
+    if (userError) {
+      console.error('Error upserting user profile:', userError);
+    }
 
     return response;
   } catch (error) {
