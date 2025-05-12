@@ -257,7 +257,7 @@ export async function GET(request: Request) {
             authUrl.searchParams.append('scope', '${adminScopes}');
             authUrl.searchParams.append('access_type', 'offline');
             authUrl.searchParams.append('prompt', 'consent');
-            authUrl.searchParams.append('login_hint', '${userInfo.email}');
+            authUrl.searchParams.append('login_hint', ${userInfo.email});
             authUrl.searchParams.append('state', '${state}');
             authUrl.searchParams.append('include_granted_scopes', 'true');
             
@@ -443,7 +443,7 @@ export async function GET(request: Request) {
     }
 
     // Redirect to loading page with sync status
-    const loadingUrl = new URL('/tools/shadow-it-scan/loading', request.url);
+    const loadingUrl = new URL('https://stitchflow.com/tools/shadow-it-scan/loading');
     loadingUrl.searchParams.set('syncId', syncStatus.id);
     loadingUrl.searchParams.set('orgId', org.id);
     
