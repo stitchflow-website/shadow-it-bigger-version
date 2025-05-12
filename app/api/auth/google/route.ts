@@ -329,7 +329,7 @@ export async function GET(request: Request) {
         login_hint: userInfo.email,
         state: consentState,
         include_granted_scopes: true
-      }) + '&approval_prompt=force';
+      });
 
       return NextResponse.redirect(authUrl);
     }
