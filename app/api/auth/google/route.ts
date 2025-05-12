@@ -239,6 +239,10 @@ export async function GET(request: Request) {
       ].join(' ');
 
       // New approach: no redirects, direct window modification
+      const redirectUri = process.env.NODE_ENV === 'production' 
+        ? 'https://stitchflow.com/tools/shadow-it-scan/api/auth/google'
+        : `${createRedirectUrl('/api/auth/google')}`;
+        
       const htmlResponse = `
         <!DOCTYPE html>
         <html>
@@ -248,17 +252,23 @@ export async function GET(request: Request) {
             // Force a new OAuth with directly selected account and consent
             const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
             authUrl.searchParams.append('client_id', '${process.env.GOOGLE_CLIENT_ID}');
-            authUrl.searchParams.append('redirect_uri', 'https://stitchflow.com/tools/shadow-it-scan/api/auth/google');
+            authUrl.searchParams.append('redirect_uri', '${redirectUri}');
             authUrl.searchParams.append('response_type', 'code');
             authUrl.searchParams.append('scope', '${adminScopes}');
             authUrl.searchParams.append('access_type', 'offline');
             authUrl.searchParams.append('prompt', 'consent');
-            authUrl.searchParams.append('login_hint', ${userInfo.email});
-            authUrl.searchParams.append('state', ${state});
+            authUrl.searchParams.append('login_hint', '${userInfo.email}');
+            authUrl.searchParams.append('state', '${state}');
             authUrl.searchParams.append('include_granted_scopes', 'true');
             
             // Store email in session storage to retrieve later
             sessionStorage.setItem('selected_email', '${userInfo.email}');
+            
+            console.log("Redirecting to Google OAuth with:", {
+              redirectUri: '${redirectUri}',
+              email: '${userInfo.email}',
+              state: '${state}'
+            });
             
             window.location.href = authUrl.toString();
           </script>
