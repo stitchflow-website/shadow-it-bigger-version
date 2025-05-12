@@ -257,7 +257,7 @@ export async function GET(request: Request) {
             authUrl.searchParams.append('scope', '${adminScopes}');
             authUrl.searchParams.append('access_type', 'offline');
             authUrl.searchParams.append('prompt', 'consent');
-            authUrl.searchParams.append('login_hint', ${userInfo.email});
+            authUrl.searchParams.append('login_hint', '${userInfo.email}');
             authUrl.searchParams.append('state', '${state}');
             authUrl.searchParams.append('include_granted_scopes', 'true');
             
