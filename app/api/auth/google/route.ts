@@ -86,29 +86,34 @@ async function getUserCredentials(email: string): Promise<{ refresh_token?: stri
 }
 
 /**
- * Helper function to store or update user credentials
+ * Helper function to store or update user session
  */
-async function storeUserCredentials(email: string, googleId: string, refreshToken: string) {
+async function storeUserSession(email: string, googleId: string, refreshToken: string) {
   try {
-    // Using upsert to create or update credentials
+    const sessionId = crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days from now
+
+    // Create or update session
     const { error } = await supabaseAdmin
-      .from('user_credentials')
-      .upsert({
-        email,
-        google_id: googleId,
+      .from('user_sessions')
+      .insert({
+        id: sessionId,
+        user_email: email,
+        auth_provider: 'google',
         refresh_token: refreshToken,
+        expires_at: expiresAt.toISOString(),
+        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }, { 
-        onConflict: 'email' 
       });
     
     if (error) {
-      console.error('Error storing user credentials:', error);
+      console.error('Error storing user session:', error);
       return false;
     }
     return true;
   } catch (error) {
-    console.error('Error in storeUserCredentials:', error);
+    console.error('Error in storeUserSession:', error);
     return false;
   }
 }
@@ -303,17 +308,30 @@ export async function GET(request: Request) {
     // Get the user ID from the query or existing user
     const userId = userData?.id || storedUser?.id;
 
-    // Store the refresh token in user_credentials table if we received one
+    // Store the refresh token if we received one
     if (oauthTokens.refresh_token) {
-      await storeUserCredentials(userInfo.email, userInfo.id, oauthTokens.refresh_token);
-      console.log('Stored refresh token for future cross-browser sessions');
+      await storeUserSession(userInfo.email, userInfo.id, oauthTokens.refresh_token);
+      console.log('Stored refresh token in user session');
     } else {
-      console.warn('No refresh token received from Google OAuth. User may need to revoke access and try again.');
-      // If this is a first-time user and we didn't get a refresh token, we should redirect them to revoke and try again
-      if (!existingUser) {
-        console.log('First-time user without refresh token - redirecting to revoke access');
-        return NextResponse.redirect('https://myaccount.google.com/permissions');
-      }
+      console.warn('No refresh token received from Google OAuth. Forcing new consent.');
+      // If we didn't get a refresh token, force a new consent screen
+      const adminScopes = [
+        'https://www.googleapis.com/auth/admin.directory.user.readonly',
+        'https://www.googleapis.com/auth/admin.directory.domain.readonly',
+        'https://www.googleapis.com/auth/admin.directory.user.security'
+      ].join(' ');
+
+      const consentState = crypto.randomUUID();
+      const authUrl = googleService.generateAuthUrl({
+        access_type: 'offline',
+        scope: adminScopes,
+        prompt: 'consent',
+        login_hint: userInfo.email,
+        state: consentState,
+        include_granted_scopes: true
+      }) + '&approval_prompt=force';
+
+      return NextResponse.redirect(authUrl);
     }
 
     // Create organization ID from domain
@@ -348,7 +366,7 @@ export async function GET(request: Request) {
     let syncRefreshToken = oauthTokens.refresh_token;
     if (!syncRefreshToken) {
       const storedCreds = await getUserCredentials(userInfo.email);
-      syncRefreshToken = storedCreds?.refresh_token;
+      syncRefreshToken = storedCreds?.refresh_token ?? '';
     }
 
     const { data: syncStatus, error: syncStatusError } = await supabaseAdmin
