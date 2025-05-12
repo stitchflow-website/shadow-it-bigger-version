@@ -181,42 +181,38 @@ export async function GET(request: Request) {
 
     const existingCreds = existingUser ? await getUserCredentials(userInfo.email) : null;
 
-    // If user exists and has valid credentials, use them
-    if (existingUser && existingCreds?.refresh_token) {
-      console.log('Found existing refresh token with admin scopes. Using it.');
-      oauthTokens.refresh_token = existingCreds.refresh_token;
-    } else {
-      // Check if we need admin scopes
-      let hasAdminAccess = false;
-      try {
-        hasAdminAccess = await googleService.isUserAdmin(userInfo.email);
-      } catch (err) {
-        console.log('Could not verify admin status with current token');
-      }
-
-      if (!hasAdminAccess) {
-        // We need to get admin scopes
-        console.log('Need admin scopes for user');
-        const adminScopes = [
-          'https://www.googleapis.com/auth/admin.directory.user.readonly',
-          'https://www.googleapis.com/auth/admin.directory.domain.readonly',
-          'https://www.googleapis.com/auth/admin.directory.user.security'
-        ].join(' ');
-
-        const authUrl = googleService.generateAuthUrl({
-          access_type: 'offline',
-          scope: adminScopes,
-          prompt: 'consent',
-          login_hint: userInfo.email,
-          state,
-          include_granted_scopes: true
-        });
-
-        return NextResponse.redirect(authUrl);
-      }
+    // For first-time users or users without admin scopes, we need to check admin status
+    let hasAdminAccess = false;
+    try {
+      hasAdminAccess = await googleService.isUserAdmin(userInfo.email);
+    } catch (err) {
+      console.log('Could not verify admin status with current token');
     }
 
-    // At this point we either have admin access or existing valid credentials
+    // If user is not signed up OR doesn't have admin access, we need to get admin scopes
+    if (!existingUser || !hasAdminAccess) {
+      console.log('Need admin scopes - User exists:', !!existingUser, 'Has admin access:', hasAdminAccess);
+      const adminScopes = [
+        'https://www.googleapis.com/auth/admin.directory.user.readonly',
+        'https://www.googleapis.com/auth/admin.directory.domain.readonly',
+        'https://www.googleapis.com/auth/admin.directory.user.security'
+      ].join(' ');
+
+      const authUrl = googleService.generateAuthUrl({
+        access_type: 'offline',
+        scope: adminScopes,
+        prompt: 'consent',
+        login_hint: userInfo.email,
+        state,
+        include_granted_scopes: true
+      });
+
+      return NextResponse.redirect(authUrl);
+    }
+
+    // At this point user either:
+    // 1. Exists and has admin access already
+    // 2. Just got admin access through the redirect above
     let isAdmin = false;
     try {
       isAdmin = await googleService.isUserAdmin(userInfo.email);
@@ -382,7 +378,7 @@ export async function GET(request: Request) {
         user_email: userInfo.email,
         auth_provider: 'google',
         expires_at: expiresAt.toISOString(),
-        refresh_token: syncRefreshToken, // Use the refresh token we have
+        refresh_token: syncRefreshToken || null, // Make refresh_token optional
         access_token: oauthTokens.access_token,
         user_agent: request.headers.get('user-agent') || '',
         ip_address: request.headers.get('x-forwarded-for') || '',
