@@ -121,6 +121,7 @@ export async function GET(request: Request) {
     const error = searchParams.get('error');
     const state = searchParams.get('state') || crypto.randomUUID();
     const isPromptNone = searchParams.get('prompt') === 'none';
+    const hasRequestedScopes = searchParams.get('requested_scopes') === 'true';
     
     // Helper function to create redirect URL
     const createRedirectUrl = (path: string) => {
@@ -189,8 +190,8 @@ export async function GET(request: Request) {
       console.log('Could not verify admin status with current token');
     }
 
-    // If user is not signed up OR doesn't have admin access, we need to get admin scopes
-    if (!existingUser || !hasAdminAccess) {
+    // If user doesn't have admin access and hasn't been asked for scopes yet
+    if (!hasAdminAccess && !hasRequestedScopes) {
       console.log('Need admin scopes - User exists:', !!existingUser, 'Has admin access:', hasAdminAccess);
       const adminScopes = [
         'https://www.googleapis.com/auth/admin.directory.user.readonly',
@@ -201,11 +202,11 @@ export async function GET(request: Request) {
       const authUrl = googleService.generateAuthUrl({
         access_type: 'offline',
         scope: adminScopes,
-        prompt: 'consent',
-        login_hint: userInfo.email,
+        prompt: 'consent', // Only ask for consent, not account selection
+        login_hint: userInfo.email, // Pre-select the account
         state,
         include_granted_scopes: true
-      });
+      }) + '&requested_scopes=true'; // Add custom parameter to URL
 
       return NextResponse.redirect(authUrl);
     }
