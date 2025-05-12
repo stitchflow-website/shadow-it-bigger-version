@@ -127,6 +127,7 @@ export async function GET(request: Request) {
     const state = searchParams.get('state') || crypto.randomUUID();
     const isPromptNone = searchParams.get('prompt') === 'none';
     const hasGrantedConsent = searchParams.get('consent_granted') === 'true';
+    const selectedEmail = searchParams.get('login_hint');
     
     // Helper function to create redirect URL
     const createRedirectUrl = (path: string) => {
@@ -185,42 +186,115 @@ export async function GET(request: Request) {
       .eq('email', userInfo.email)
       .single();
 
+    // Check if we've already processed this user in an auth flow (to prevent loops)
+    const { data: flowState } = await supabaseAdmin
+      .from('auth_flow_state')
+      .select('completed_consent')
+      .eq('email', userInfo.email)
+      .single();
+
+    const hasCompletedConsent = flowState?.completed_consent === true;
+    
+    console.log('Auth flow check:', { 
+      email: userInfo.email, 
+      hasCompletedConsent, 
+      hasRefreshToken: !!oauthTokens.refresh_token 
+    });
+
     // For first-time users or users without admin scopes, we need to check admin status
     let hasAdminAccess = false;
     try {
       hasAdminAccess = await googleService.isUserAdmin(userInfo.email);
-      console.log('Admin access check:', { hasAdminAccess, hasGrantedConsent, isNewUser: !existingUser });
+      console.log('Admin access check:', { 
+        hasAdminAccess, 
+        hasCompletedConsent, 
+        isNewUser: !existingUser 
+      });
     } catch (err) {
       console.log('Could not verify admin status with current token');
     }
 
     // Request admin scopes if:
-    // 1. User is new (not in our DB) OR
-    // 2. User doesn't have admin access
-    // BUT only if they haven't just granted consent
-    if ((!existingUser || !hasAdminAccess) && !hasGrantedConsent) {
+    // 1. New user (not in DB) OR no admin access AND
+    // 2. Haven't completed consent flow AND
+    // 3. Don't have a refresh token
+    if ((!existingUser || !hasAdminAccess) && !hasCompletedConsent && !oauthTokens.refresh_token) {
       console.log('Requesting admin scopes - New user:', !existingUser, 'Has admin access:', hasAdminAccess);
+      
+      // First, mark that we've started the consent flow for this user
+      await supabaseAdmin
+        .from('auth_flow_state')
+        .upsert({
+          email: userInfo.email,
+          started_at: new Date().toISOString(),
+          completed_consent: false
+        }, { 
+          onConflict: 'email' 
+        });
+
       const adminScopes = [
         'https://www.googleapis.com/auth/admin.directory.user.readonly',
         'https://www.googleapis.com/auth/admin.directory.domain.readonly',
         'https://www.googleapis.com/auth/admin.directory.user.security'
       ].join(' ');
 
-      const authUrl = googleService.generateAuthUrl({
-        access_type: 'offline',
-        scope: adminScopes,
-        prompt: 'consent',
-        login_hint: userInfo.email,
-        state,
-        include_granted_scopes: true
-      }) + '&consent_granted=true'; // Add flag to indicate consent was requested
+      // New approach: no redirects, direct window modification
+      const htmlResponse = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Redirecting to consent...</title>
+          <script>
+            // Force a new OAuth with directly selected account and consent
+            const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+            authUrl.searchParams.append('client_id', '${process.env.GOOGLE_CLIENT_ID}');
+            authUrl.searchParams.append('redirect_uri', '${process.env.GOOGLE_REDIRECT_URI}');
+            authUrl.searchParams.append('response_type', 'code');
+            authUrl.searchParams.append('scope', '${adminScopes}');
+            authUrl.searchParams.append('access_type', 'offline');
+            authUrl.searchParams.append('prompt', 'consent');
+            authUrl.searchParams.append('login_hint', '${userInfo.email}');
+            authUrl.searchParams.append('state', '${state}');
+            authUrl.searchParams.append('include_granted_scopes', 'true');
+            
+            // Store email in session storage to retrieve later
+            sessionStorage.setItem('selected_email', '${userInfo.email}');
+            
+            window.location.href = authUrl.toString();
+          </script>
+        </head>
+        <body>
+          <p>Please wait, redirecting to Google for required permissions...</p>
+        </body>
+        </html>
+      `;
+      
+      return new NextResponse(htmlResponse, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html',
+        }
+      });
+    }
 
-      return NextResponse.redirect(authUrl);
+    // If we got this far with a refresh token, mark the consent as completed
+    if (oauthTokens.refresh_token && !hasCompletedConsent) {
+      await supabaseAdmin
+        .from('auth_flow_state')
+        .upsert({
+          email: userInfo.email,
+          completed_consent: true,
+          completed_at: new Date().toISOString()
+        }, { 
+          onConflict: 'email' 
+        });
+      
+      console.log('Marked consent flow as completed for:', userInfo.email);
     }
 
     // At this point:
     // 1. User exists and has admin access, OR
-    // 2. New user who just granted admin access
+    // 2. New user who just granted admin access with refresh token
     let isAdmin = false;
     try {
       isAdmin = await googleService.isUserAdmin(userInfo.email);
