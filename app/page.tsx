@@ -2552,7 +2552,7 @@ export default function ShadowITDashboard() {
                                         <TooltipProvider>
                                             <Tooltip delayDuration={300}>
                                             <TooltipTrigger asChild>
-                                              <div className="flex items-center justify-center" onClick={() => handleSeeUsers(app.id)}>
+                                              <div className="flex items-center justify-center cursor-pointer" onClick={() => handleSeeUsers(app.id)}>
                                                 <RiskBadge level={app.riskLevel} />
                                               </div>
                                             </TooltipTrigger>
@@ -2566,7 +2566,7 @@ export default function ShadowITDashboard() {
                                         <TooltipProvider>
                                             <Tooltip delayDuration={300}>
                                             <TooltipTrigger asChild>
-                                              <div className="text-center" onClick={() => handleSeeUsers(app.id)}>{app.totalPermissions}</div>
+                                              <div className="text-center cursor-pointer" onClick={() => handleSeeUsers(app.id)}>{app.totalPermissions}</div>
                                             </TooltipTrigger>
                                               <TooltipContent side="right" className="p-2">
                                                 <div className="max-h-48 overflow-y-auto space-y-1">
@@ -3391,7 +3391,7 @@ export default function ShadowITDashboard() {
                                       <TooltipProvider>
                                         <Tooltip delayDuration={300}>
                                           <TooltipTrigger asChild>
-                                            <div className="flex items-center justify-center">
+                                            <div className="flex items-center ml-4">
                                               <RiskBadge level={user.riskLevel} />
                                             </div>
                                           </TooltipTrigger>
@@ -3406,6 +3406,7 @@ export default function ShadowITDashboard() {
                                         {user.scopes.map((scope, i) => {
                                           // Determine risk level color based on the predefined risk assessment logic
                                           let riskColor = "#81C784"; // Default green for low risk
+                                          let riskStatus = "Low Risk";
                                           
                                           // Check for high risk scopes first (from HIGH_RISK_SCOPES in risk-assessment.ts)
                                           const isHighRisk = [
@@ -3428,17 +3429,27 @@ export default function ShadowITDashboard() {
                                           
                                           if (isHighRisk) {
                                             riskColor = "#EF5350"; // Red for high risk
+                                            riskStatus = "High Risk";
                                           } else if (isMediumRisk) {
                                             riskColor = "#FFD54F"; // Yellow for medium risk
+                                            riskStatus = "Medium Risk";
                                           }
                                           
                                           return (
                                             <div key={i} className="py-1 border-b border-muted last:border-0 flex items-center">
-                                              <div 
-                                                className="w-2 h-2 rounded-full mr-2 flex-shrink-0" 
-                                                style={{ backgroundColor: riskColor }}
-                                                aria-label={isHighRisk ? "High risk" : isMediumRisk ? "Medium risk" : "Low risk"}
-                                              />
+                                              <TooltipProvider>
+                                                <Tooltip delayDuration={300}>
+                                                  <TooltipTrigger asChild>
+                                                    <div 
+                                                      className="w-2 h-2 rounded-full mr-2 flex-shrink-0 cursor-help" 
+                                                      style={{ backgroundColor: riskColor }}
+                                                    />
+                                                  </TooltipTrigger>
+                                                  <TooltipContent side="left" className="p-2">
+                                                    <p className="text-xs font-medium">{riskStatus}</p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              </TooltipProvider>
                                               <span className="truncate">{scope}</span>
                                             </div>
                                           )
@@ -3565,6 +3576,28 @@ export default function ShadowITDashboard() {
                                     ? "This represents all permissions the application could request from any user"
                                     : "Users with this permission set:"}
                                 </h5>
+                                {group.isAllScopes ? (
+                                  <div className="text-sm text-muted-foreground italic">
+                                    No single user has all these permissions. Different users have granted different subsets.
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-wrap gap-2">
+                                    {group.users.map((user, userIndex) => (
+                                      <div
+                                        key={userIndex}
+                                        className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
+                                      >
+                                        <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-200 text-xs font-medium text-gray-800">
+                                          {user.name
+                                            .split(" ")
+                                            .map((n) => n[0])
+                                            .join("")}
+                                        </div>
+                                        <span className="text-sm">{user.name}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                                     </div>
                                   ))}
