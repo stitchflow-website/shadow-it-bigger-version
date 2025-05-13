@@ -118,6 +118,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Wait additional time for any background processes to complete
+    console.log('Main sync completed, waiting for background processes...');
+    await new Promise(resolve => setTimeout(resolve, 5000)); // 5 second delay
+    
+    // Update sync status to 95% while we wait for final background tasks
+    await supabaseAdmin
+      .from('sync_status')
+      .update({
+        progress: 95,
+        message: 'Finalizing data synchronization...',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sync_id);
+      
+    // Wait a bit longer to ensure all background processes finish
+    await new Promise(resolve => setTimeout(resolve, 5000)); // Another 5 second delay
+
     // Mark sync as completed
     await supabaseAdmin
       .from('sync_status')

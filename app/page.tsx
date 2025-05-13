@@ -1943,6 +1943,8 @@ export default function ShadowITDashboard() {
         localStorage.setItem('lastLogin', Date.now().toString());
         localStorage.setItem('login_attempt_time', Date.now().toString());
         
+        // Direct account selection - show the accounts dialog directly
+        // This bypasses the initial email input screen
         const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);

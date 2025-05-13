@@ -504,8 +504,8 @@ async function processTokens(
         
         await updateSyncStatus(
           sync_id, 
-          90, 
-          `Processing complete. User and app information was saved, but relationships could not be processed.`
+          85, 
+          `Processing continuing with some issues. Some relationships could not be processed.`
         );
         return;
       }
@@ -516,12 +516,12 @@ async function processTokens(
         90, 
         `Token processing complete, finalizing data...`
       );
-    } catch (error) {
-      console.error(`[Tokens ${sync_id}] Error triggering relations processing:`, error);
+    } catch (relationError) {
+      console.error(`[Tokens ${sync_id}] Error triggering relations processing:`, relationError);
       await updateSyncStatus(
         sync_id, 
-        90, 
-        `Processing complete with issues. Some relationships could not be processed: ${(error as Error).message}`
+        85, 
+        `Processing continuing with some issues. Some relationships could not be processed.`
       );
     }
   } catch (error: any) {

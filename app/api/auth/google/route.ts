@@ -238,81 +238,40 @@ export async function GET(request: Request) {
         'https://www.googleapis.com/auth/admin.directory.user.security'
       ].join(' ');
 
-      // New approach: no redirects, direct window modification
+      // Create a direct URL to Google's auth/consent endpoint, bypassing the account chooser
+      // This is the key change - use the specific endpoint for direct consent
       const redirectUri = process.env.NODE_ENV === 'production' 
         ? 'https://stitchflow.com/tools/shadow-it-scan/api/auth/google'
         : `${createRedirectUrl('/api/auth/google')}`;
-        
-      // Set a cookie with the email to prevent account chooser screen
-      const emailCookieResponse = new NextResponse('', {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/html',
-        }
-      });
-      
-      // Set a cookie to remember the email (Google uses this)
-      emailCookieResponse.cookies.set('ACCOUNT_CHOOSER', userInfo.email, {
-        path: '/',
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax' as const,
-        maxAge: 300 // Just need it for a short time
-      });
-      
-      const htmlResponse = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Redirecting to consent...</title>
-          <script>
-            // Store the email in cookies that Google reads
-            document.cookie = "g_csrf_token=${state};path=/;max-age=300;SameSite=Lax";
-            document.cookie = "g_selected_account=${userInfo.email};path=/;max-age=300;SameSite=Lax";
-            
-            // Force a new OAuth with directly selected account and consent
-            const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-            authUrl.searchParams.append('client_id', '${process.env.GOOGLE_CLIENT_ID}');
-            authUrl.searchParams.append('redirect_uri', '${redirectUri}');
-            authUrl.searchParams.append('response_type', 'code');
-            authUrl.searchParams.append('scope', '${adminScopes}');
-            authUrl.searchParams.append('access_type', 'offline');
-            authUrl.searchParams.append('prompt', 'consent');
-            authUrl.searchParams.append('login_hint', '${userInfo.email}');
-            authUrl.searchParams.append('state', '${state}');
-            authUrl.searchParams.append('include_granted_scopes', 'true');
-            
-            // Another Google-specific param to skip account chooser
-            authUrl.searchParams.append('authuser', '0');
-            
-            // Store email in session storage to retrieve later
-            sessionStorage.setItem('selected_email', '${userInfo.email}');
-            localStorage.setItem('g_selected_account', '${userInfo.email}');
-            
-            console.log("Redirecting to Google OAuth with:", {
-              redirectUri: '${redirectUri}',
-              email: '${userInfo.email}',
-              state: '${state}'
-            });
-            
-            // Add a small delay to ensure cookies are set
-            setTimeout(() => {
-              window.location.href = authUrl.toString();
-            }, 100);
-          </script>
-        </head>
-        <body>
-          <p>Please wait, redirecting to Google for required permissions...</p>
-        </body>
-        </html>
-      `;
-      
-      return new NextResponse(htmlResponse, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/html',
-          'Set-Cookie': `g_selected_account=${userInfo.email}; path=/; max-age=300; SameSite=Lax`
-        }
-      });
+
+      // Directly redirecting to the consent endpoint instead of the choose account endpoint
+      const authUrl = new URL('https://accounts.google.com/o/oauth2/auth/oauthchooseaccount');
+      authUrl.searchParams.append('client_id', process.env.GOOGLE_CLIENT_ID || '');
+      authUrl.searchParams.append('redirect_uri', redirectUri);
+      authUrl.searchParams.append('response_type', 'code');
+      authUrl.searchParams.append('scope', adminScopes);
+      authUrl.searchParams.append('access_type', 'offline');
+      // Forcing consent only, not account selection
+      authUrl.searchParams.append('prompt', 'consent');
+      // Pre-select the account with the login_hint
+      authUrl.searchParams.append('login_hint', userInfo.email);
+      // Important: tell Google to use a specific account
+      authUrl.searchParams.append('authuser', '0');
+      authUrl.searchParams.append('state', state);
+      authUrl.searchParams.append('include_granted_scopes', 'true');
+      // Add specific Google parameters to bypass account chooser
+      authUrl.searchParams.append('service', 'lso');
+      authUrl.searchParams.append('o2v', '2');
+      authUrl.searchParams.append('flowName', 'GeneralOAuthFlow');
+      // Add skip account selection parameter
+      authUrl.searchParams.append('skipAccountSelect', 'true');
+
+      // Add state to track that we've requested consent
+      authUrl.searchParams.append('consent_requested', 'true');
+
+      console.log('Redirecting for admin scopes with URL:', authUrl.toString());
+
+      return NextResponse.redirect(authUrl);
     }
 
     // If we got this far with a refresh token, mark the consent as completed

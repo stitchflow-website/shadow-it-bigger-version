@@ -117,8 +117,8 @@ function LoadingContent() {
             setStuckSync(true);
           }
 
-          // If main sync is complete (progress >= 85%), redirect to dashboard
-          if (data.progress >= 85 || data.status === 'COMPLETED') {
+          // Only redirect when sync is ACTUALLY COMPLETED, not just at high progress
+          if (data.status === 'COMPLETED') {
             console.log('Sync complete, redirecting to dashboard');
             // Wait a moment to show progress before redirecting
             setTimeout(() => {
