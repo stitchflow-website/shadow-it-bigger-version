@@ -1954,7 +1954,6 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('response_type', 'code');
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('access_type', 'offline'); 
-        authUrl.searchParams.append('prompt', 'select_account');
         authUrl.searchParams.append('include_granted_scopes', 'true');
         authUrl.searchParams.append('state', state);
         
