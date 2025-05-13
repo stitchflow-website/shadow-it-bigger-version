@@ -174,7 +174,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-lg w-full max-w-md overflow-hidden">
         <div className="flex justify-between items-center p-6 border-b border-gray-100">
-          <h2 className="text-xl font-semibold">Settings</h2>
+          <h2 className="text-xl font-semibold">Email Notifications</h2>
           <Button
             variant="ghost"
             size="sm"
@@ -193,7 +193,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
           ) : (
             <>
-              <h3 className="text-base font-medium text-gray-900">Customize your email notification preferences</h3>
+              <h3 className="text-base font-medium text-gray-900">Customize your notification preferences</h3>
               
               {error && (
                 <div className="p-3 bg-red-50 text-red-700 rounded-md text-sm">

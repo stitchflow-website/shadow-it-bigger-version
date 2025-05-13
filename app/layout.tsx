@@ -17,7 +17,7 @@ export default function RootLayout({
     <html lang="en">
 
       <body>{children}</body>
-      <footer className="bottom-0 left-0 right-0 flex justify-between items-center px-4 py-3 bg-[#1a1a2e] text-white">
+      {/* <footer className="bottom-0 left-0 right-0 flex justify-between items-center px-4 py-3 bg-[#1a1a2e] text-white">
         <div className="flex items-center gap-4">
           <Link href="/" className="hover:text-blue-500 transition-colors">
             stitchflow.com
@@ -35,7 +35,7 @@ export default function RootLayout({
         >
           contact@stitchflow.io
         </a>
-      </footer>
+      </footer> */}
     </html>
   )
 }
