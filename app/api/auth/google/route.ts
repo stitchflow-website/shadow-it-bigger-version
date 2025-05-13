@@ -244,28 +244,27 @@ export async function GET(request: Request) {
         ? 'https://stitchflow.com/tools/shadow-it-scan/api/auth/google'
         : `${createRedirectUrl('/api/auth/google')}`;
 
-      // Directly redirecting to the consent endpoint instead of the choose account endpoint
-      const authUrl = new URL('https://accounts.google.com/o/oauth2/auth/oauthchooseaccount');
+      // Use the v2/auth endpoint that better respects login_hint instead of oauthchooseaccount
+      const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       authUrl.searchParams.append('client_id', process.env.GOOGLE_CLIENT_ID || '');
       authUrl.searchParams.append('redirect_uri', redirectUri);
       authUrl.searchParams.append('response_type', 'code');
       authUrl.searchParams.append('scope', adminScopes);
       authUrl.searchParams.append('access_type', 'offline');
-      // Forcing consent only, not account selection
+      // Only request consent when we need it for admin scopes
       authUrl.searchParams.append('prompt', 'consent');
       // Pre-select the account with the login_hint
       authUrl.searchParams.append('login_hint', userInfo.email);
-      // Important: tell Google to use a specific account
-      authUrl.searchParams.append('authuser', '0');
       authUrl.searchParams.append('state', state);
       authUrl.searchParams.append('include_granted_scopes', 'true');
-      // Add specific Google parameters to bypass account chooser
-      authUrl.searchParams.append('service', 'lso');
-      authUrl.searchParams.append('o2v', '2');
-      authUrl.searchParams.append('flowName', 'GeneralOAuthFlow');
-      // Add skip account selection parameter
-      authUrl.searchParams.append('skipAccountSelect', 'true');
-
+      
+      // Remove legacy/internal parameters that conflict with the login flow:
+      // - authuser
+      // - skipAccountSelect
+      // - service
+      // - o2v
+      // - flowName
+      
       // Add state to track that we've requested consent
       authUrl.searchParams.append('consent_requested', 'true');
 

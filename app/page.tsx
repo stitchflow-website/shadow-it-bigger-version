@@ -3293,16 +3293,16 @@ export default function ShadowITDashboard() {
 
                     <Tabs defaultValue="users" className="mb-6">
                       <TabsList className="bg-gray-100 p-1">
-                        <TabsTrigger value="users" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                        <TabsTrigger value="users" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:text-gray-900">
                         All Users
                         </TabsTrigger>
-                        <TabsTrigger value="scopes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                        <TabsTrigger value="scopes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:text-gray-900">
                         Scope User Groups
                         </TabsTrigger>
                         {/* <TabsTrigger value="similar" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                           Similar Apps
                         </TabsTrigger> */}
-                        <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                        <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:text-gray-900">
                           Notes
                         </TabsTrigger>
                       </TabsList>
@@ -3527,7 +3527,7 @@ export default function ShadowITDashboard() {
                         <div className="p-5 border border-gray-200 rounded-md bg-white">
                           <h3 className="text-lg font-medium mb-4">Scope User Groups</h3>
                           <p className="text-sm text-muted-foreground mb-4">
-                          Users are grouped by identical scope permission sets. Each user group represents a unique set of permissions.
+                            Users are grouped by identical scope permission sets. Each user group represents a unique set of permissions.
                           </p>
 
                             {(() => {
@@ -3539,75 +3539,172 @@ export default function ShadowITDashboard() {
 
                               return (
                                 <>
-                                  {currentScopeGroups.map((group, groupIndex) => (
-                            <div key={groupIndex} className="mb-6 border rounded-md overflow-hidden">
-                              <div className={`p-3 flex justify-between items-center border-b border-gray-200 ${group.isAllScopes ? "bg-blue-50" : "bg-gray-50"}`}>
-                                <h4 className="font-medium">
-                                  {group.isAllScopes ? (
-                                    <span className="flex items-center">
-                                      <Info className="h-4 w-4 mr-1 text-blue-600" />
-                                      All Application Scopes
-                                    </span>
-                                  ) : (
-                                    `User Group ${scopeStartIndex + groupIndex + (scopeCurrentPage === 1 ? 0 : -1)} - ${group.users.length} ${group.users.length === 1 ? "user" : "users"}`
-                                  )}
-                                </h4>
-                                <Badge variant={group.isAllScopes ? "default" : "outline"} className={group.isAllScopes ? "bg-blue-600" : "bg-primary/10"}>
-                                  {group.scopes.length} {group.scopes.length === 1 ? "permission" : "permissions"}
-                                </Badge>
-                              </div>
-
-                              <div className="p-3 border-b">
-                                        <h5 className="text-sm font-medium mb-2">
-                                          {group.isAllScopes ? "Total Available Permissions:" : "Permissions:"}
-                                        </h5>
-                                        <div className="max-h-60 overflow-y-auto">
-                                          {group.scopes.map((scope, scopeIndex) => (
-                                            <div key={scopeIndex} className="py-1 border-b border-muted last:border-0 text-sm">
-                                              {scope}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-
-                                      <div className="p-3">
-                                <h5 className="text-sm font-medium mb-2">
-                                  {group.isAllScopes 
-                                    ? "This represents all permissions the application could request from any user"
-                                    : "Users with this permission set:"}
-                                </h5>
-                                {group.isAllScopes ? (
-                                  <div className="text-sm text-muted-foreground italic">
-                                    No single user has all these permissions. Different users have granted different subsets.
-                                  </div>
-                                ) : (
-                                  <div className="flex flex-wrap gap-2">
-                                    {group.users.map((user, userIndex) => (
-                                      <div
-                                        key={userIndex}
-                                        className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
-                                      >
-                                        <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-200 text-xs font-medium text-gray-800">
-                                          {user.name
-                                            .split(" ")
-                                            .map((n) => n[0])
-                                            .join("")}
-                                        </div>
-                                        <span className="text-sm">{user.name}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
+                                  {/* First box - All Application Scopes */}
+                                  <div className="mb-6 border rounded-md overflow-hidden">
+                                    <div className="p-3 flex justify-between items-center border-b border-gray-200 bg-blue-50">
+                                      <h4 className="font-medium">
+                                        <span className="flex items-center">
+                                          <Info className="h-4 w-4 mr-1 text-blue-600" />
+                                          All Application Scopes
+                                        </span>
+                                      </h4>
+                                      <Badge variant="default" className="bg-blue-600">
+                                        {selectedApp?.scopes.length || 0} {(selectedApp?.scopes.length || 0) === 1 ? "permission" : "permissions"}
+                                      </Badge>
                                     </div>
-                                  ))}
+
+                                    <div className="p-3 border-b">
+                                      <div className="max-h-60 overflow-y-auto">
+                                        {selectedApp?.scopes.map((scope, scopeIndex) => {
+                                          // Determine risk level for the scope
+                                          const isHighRisk = ['admin', 'admin.directory.user', 'admin.directory.group', 
+                                                            'admin.directory.user.security', 'gmail', 'drive', 
+                                                            'cloud-platform'].some(highRiskScope => 
+                                                              scope.includes(highRiskScope));
+                                          
+                                          const isMediumRisk = ['admin.directory.user.readonly',
+                                                              'admin.directory.group.readonly',
+                                                              'calendar',
+                                                              'contacts'].some(mediumRiskScope => 
+                                                                scope.includes(mediumRiskScope));
+
+                                          let riskColor = "#81C784"; // Default green for low risk
+                                          if (isHighRisk) {
+                                            riskColor = "#EF5350"; // Red for high risk
+                                          } else if (isMediumRisk) {
+                                            riskColor = "#FFD54F"; // Yellow for medium risk
+                                          }
+
+                                          return (
+                                            <div key={scopeIndex} className="py-1 border-b border-muted last:border-0 flex items-center">
+                                              <div 
+                                                className="w-2 h-2 rounded-full mr-2 flex-shrink-0" 
+                                                style={{ backgroundColor: riskColor }}
+                                              />
+                                              <span className="text-sm">{scope}</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    <div className="p-3">
+                                      <p className="text-sm text-muted-foreground">
+                                        This represents all permissions the application could request from any user
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* User Group boxes - skip the first "All Scopes" group */}
+                                  {currentScopeGroups
+                                    .filter(group => !group.isAllScopes)
+                                    .map((group, groupIndex) => {
+                                      // Determine highest risk level in this group
+                                      const hasHighRisk = group.scopes.some(scope => 
+                                        ['admin', 'admin.directory.user', 'admin.directory.group', 
+                                          'admin.directory.user.security', 'gmail', 'drive', 
+                                          'cloud-platform'].some(highRiskScope => 
+                                          scope.includes(highRiskScope))
+                                      );
+                                      
+                                      const hasMediumRisk = !hasHighRisk && group.scopes.some(scope => 
+                                        ['admin.directory.user.readonly',
+                                          'admin.directory.group.readonly',
+                                          'calendar',
+                                          'contacts'].some(mediumRiskScope => 
+                                          scope.includes(mediumRiskScope))
+                                      );
+
+                                      return (
+                                        <div key={groupIndex} className="mb-6 border rounded-md overflow-hidden">
+                                          <div className="p-3 flex justify-between items-center border-b border-gray-200 bg-gray-50">
+                                            <h4 className="font-medium">
+                                              User Group {scopeStartIndex + groupIndex + 1} - {group.users.length} {group.users.length === 1 ? "user" : "users"}
+                                            </h4>
+                                            <div className="flex items-center gap-2">
+                                              {hasHighRisk && (
+                                                <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200">
+                                                  Contains high-risk scopes
+                                                </Badge>
+                                              )}
+                                              {hasMediumRisk && (
+                                                <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                                                  Contains medium-risk scopes
+                                                </Badge>
+                                              )}
+                                              <Badge variant="outline" className="bg-primary/10">
+                                                {group.scopes.length} {group.scopes.length === 1 ? "permission" : "permissions"}
+                                              </Badge>
+                                            </div>
+                                          </div>
+
+                                          <div className="p-3 border-b">
+                                            <h5 className="text-sm font-medium mb-2">Permissions:</h5>
+                                            <div className="max-h-60 overflow-y-auto">
+                                              {group.scopes.map((scope, scopeIndex) => {
+                                                // Determine risk level for each scope
+                                                const isHighRisk = ['admin', 'admin.directory.user', 'admin.directory.group', 
+                                                                  'admin.directory.user.security', 'gmail', 'drive', 
+                                                                  'cloud-platform'].some(highRiskScope => 
+                                                                    scope.includes(highRiskScope));
+                                                
+                                                const isMediumRisk = ['admin.directory.user.readonly',
+                                                                    'admin.directory.group.readonly',
+                                                                    'calendar',
+                                                                    'contacts'].some(mediumRiskScope => 
+                                                                      scope.includes(mediumRiskScope));
+
+                                                let riskColor = "#81C784"; // Default green for low risk
+                                                if (isHighRisk) {
+                                                  riskColor = "#EF5350"; // Red for high risk
+                                                } else if (isMediumRisk) {
+                                                  riskColor = "#FFD54F"; // Yellow for medium risk
+                                                }
+
+                                                return (
+                                                  <div key={scopeIndex} className="py-1 border-b border-muted last:border-0 flex items-center">
+                                                    <div 
+                                                      className="w-2 h-2 rounded-full mr-2 flex-shrink-0" 
+                                                      style={{ backgroundColor: riskColor }}
+                                                    />
+                                                    <span className="text-sm">{scope}</span>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+
+                                          <div className="p-3">
+                                            <h5 className="text-sm font-medium mb-2">
+                                              Users with this permission set:
+                                            </h5>
+                                            <div className="flex flex-wrap gap-2">
+                                              {group.users.map((user, userIndex) => (
+                                                <div
+                                                  key={userIndex}
+                                                  className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
+                                                >
+                                                  <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-200 text-xs font-medium text-gray-800">
+                                                    {user.name
+                                                      .split(" ")
+                                                      .map((n) => n[0])
+                                                      .join("")}
+                                                  </div>
+                                                  <span className="text-sm">{user.name}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
 
                                   {/* Scope Groups pagination controls */}
                                   {scopeGroups.length > itemsPerPage && (
                                     <div className="mt-4 flex items-center justify-between px-4 py-2 border-t border-gray-200">
                                       <div className="text-sm text-muted-foreground">
                                         Showing {scopeStartIndex + 1}-{Math.min(scopeEndIndex, scopeGroups.length)} of {scopeGroups.length} scope groups
-                                     </div>
+                                      </div>
                                       <div className="flex items-center space-x-2">
                                         <Button
                                           variant="outline"
@@ -3640,31 +3737,31 @@ export default function ShadowITDashboard() {
                                                 {page}
                                               </Button>
                                             )
-                                  ))}
-                                </div>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setScopeCurrentPage(prev => Math.min(totalScopePages, prev + 1))}
-                                        disabled={scopeCurrentPage === totalScopePages}
-                                      >
-                                        Next
-                                      </Button>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setScopeCurrentPage(totalScopePages)}
-                                        disabled={scopeCurrentPage === totalScopePages}
-                                      >
-                                        Last
-                                      </Button>
-                              </div>
-                            </div>
+                                          ))}
+                                        </div>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => setScopeCurrentPage(prev => Math.min(totalScopePages, prev + 1))}
+                                          disabled={scopeCurrentPage === totalScopePages}
+                                        >
+                                          Next
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => setScopeCurrentPage(totalScopePages)}
+                                          disabled={scopeCurrentPage === totalScopePages}
+                                        >
+                                          Last
+                                        </Button>
+                                      </div>
+                                    </div>
                                   )}
                                 </>
                               )
                             })()}
-                        </div>
+                          </div>
                       </TabsContent>
 
                       {/* <TabsContent value="similar">
