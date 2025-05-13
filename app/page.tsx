@@ -2004,14 +2004,10 @@ export default function ShadowITDashboard() {
         
         const scopes = [
           'User.Read',
-          'Directory.Read.All',
-          'Application.Read.All',
-          'DelegatedPermissionGrant.ReadWrite.All',
-          'AppRoleAssignment.ReadWrite.All',
-          'offline_access',
           'openid',
           'profile',
-          'email'
+          'email',
+          'offline_access'
         ].join(' ');
 
         // Generate a state parameter to verify the response and enable cross-browser detection

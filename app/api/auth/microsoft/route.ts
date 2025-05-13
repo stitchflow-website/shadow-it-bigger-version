@@ -115,96 +115,108 @@ export async function GET(request: NextRequest) {
     const userData = await userResponse.json();
     console.log('Microsoft user data:', userData);
     
+    // === NEW DYNAMIC SCOPE LOGIC START ===
+
+    // Check auth_flow_state for this user and provider
+    const { data: flowState } = await supabaseAdmin
+      .from('auth_flow_state') // Ensure this table exists and has a 'provider' column
+      .select('completed_consent')
+      .eq('email', userData.userPrincipalName)
+      .eq('provider', 'microsoft') // Specify provider
+      .single();
+    const hasCompletedConsent = flowState?.completed_consent === true;
+
+    console.log('Microsoft Auth flow check:', { 
+      email: userData.userPrincipalName, 
+      hasCompletedConsent, 
+      hasRefreshToken: !!refresh_token 
+    });
+
+    // If we DON'T have a refresh_token AND the user hasn't completed the full consent flow yet,
+    // redirect to Microsoft to request full admin scopes and prompt for consent.
+    if (!refresh_token && !hasCompletedConsent) {
+      console.log('Requesting Microsoft admin scopes - User needs to complete consent flow.');
+      
+      // Mark that we've started the consent flow for this user
+      await supabaseAdmin
+        .from('auth_flow_state')
+        .upsert({
+          email: userData.userPrincipalName,
+          provider: 'microsoft',
+          started_at: new Date().toISOString(),
+          completed_consent: false
+        }, { 
+          onConflict: 'email,provider' // Assumes composite unique constraint on (email, provider)
+        });
+
+      const adminScopes = [
+        'User.Read.All', // Read all user profiles
+        'Directory.Read.All', // Read directory data (users, groups, org structure)
+        'Application.Read.All', // Read enterprise apps and app registrations
+        'AuditLog.Read.All', // Read audit logs
+        'offline_access', // Crucial for getting a refresh token
+        'openid', 'profile', 'email' // Standard OIDC scopes
+      ].join(' ');
+
+      // Reconstruct redirectUri for consistency, reusing existing logic
+      let authRedirectUri = process.env.MICROSOFT_REDIRECT_URI;
+      if (process.env.NODE_ENV === 'development') {
+        authRedirectUri = `${request.nextUrl.origin}/api/auth/microsoft`;
+      } else {
+        authRedirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
+      }
+
+      const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+      authUrl.searchParams.append('client_id', clientId!);
+      authUrl.searchParams.append('redirect_uri', authRedirectUri!);
+      authUrl.searchParams.append('response_type', 'code');
+      authUrl.searchParams.append('scope', adminScopes);
+      authUrl.searchParams.append('prompt', 'consent'); // Force the consent screen
+      authUrl.searchParams.append('login_hint', userData.userPrincipalName); // Pre-fill user's email
+      authUrl.searchParams.append('state', state || crypto.randomUUID()); // Pass state along
+      
+      console.log('Redirecting for Microsoft admin scopes with URL:', authUrl.toString());
+      return NextResponse.redirect(authUrl);
+    }
+
+    // If we got this far and have a refresh_token, AND consent wasn't marked as completed, update it.
+    // This handles the case where the user just came back from the admin consent prompt.
+    if (refresh_token && !hasCompletedConsent) {
+      await supabaseAdmin
+        .from('auth_flow_state')
+        .upsert({
+          email: userData.userPrincipalName,
+          provider: 'microsoft',
+          completed_consent: true,
+          completed_at: new Date().toISOString()
+        }, { 
+          onConflict: 'email,provider' 
+        });
+      console.log('Marked Microsoft consent flow as completed for:', userData.userPrincipalName);
+    }
+    
+    // === NEW DYNAMIC SCOPE LOGIC END ===
+
     // If we don't have a refresh token, the user probably used prompt=none
     // We need a refresh token for background syncs to work, so redirect to auth with prompt=consent
+    // This existing block handles cases where a refresh token is missing despite other conditions.
+    // It should now primarily catch scenarios where `hasCompletedConsent` was true, but no refresh token was issued.
     if (!refresh_token) {
-      console.error('No refresh token received - likely due to prompt=none. Checking for existing session.');
+      console.warn('No refresh token received. This might be due to organizational policies or if consent was previously completed but token is not available now. Checking existing session.');
       
       // Check for existing valid session before deciding to force consent
-      // Get the session ID from the cookie
-      const sessionId = request.cookies.get('shadow_session_id')?.value;
-      const hasValidSession = await isValidSession(sessionId);
+      const sessionIdFromCookie = request.cookies.get('shadow_session_id')?.value; // Renamed to avoid conflict
+      const hasValidSession = await isValidSession(sessionIdFromCookie);
       
       if (hasValidSession) {
-        console.log('Found valid session, proceeding without refresh token');
-        // Proceed with the existing session - no need to force consent
+        console.log('Found valid Microsoft session, proceeding without a new refresh token for this specific callback.');
+        // Proceed with the existing session - no need to force full re-auth if session is fine
       } else {
-        console.log('No valid session found, forcing consent flow');
-        // Check if the user already exists in our database
-        const { data: existingUser } = await supabaseAdmin
-          .from('users_signedup')
-          .select('id, email')
-          .eq('email', userData.userPrincipalName)
-          .single();
-        
-        console.log('Checking if user exists:', existingUser ? 'Yes' : 'No');
-        
-        if (existingUser) {
-          // First try to find organization by domain
-          const emailDomain = userData.userPrincipalName.split('@')[1];
-          let { data: userOrg } = await supabaseAdmin
-            .from('organizations')
-            .select('id')
-            .eq('domain', emailDomain)
-            .single();
-            
-          // If not found by domain, try finding by first_admin
-          if (!userOrg) {
-            const { data: orgByAdmin } = await supabaseAdmin
-              .from('organizations')
-              .select('id')
-              .eq('first_admin', userData.userPrincipalName)
-              .single();
-              
-            userOrg = orgByAdmin;
-          }
-          
-          if (userOrg) {
-            console.log('User already exists and has organization, redirecting to dashboard');
-            
-            // Create HTML response with localStorage setting and redirect
-            const dashboardHtmlResponse = `
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <title>Redirecting...</title>
-                <script>
-                  // Store email in localStorage for cross-browser session awareness
-                  localStorage.setItem('userEmail', "${userData.userPrincipalName}");
-                  localStorage.setItem('lastLogin', "${new Date().getTime()}");
-                  window.location.href = "https://www.stitchflow.com/tools/shadow-it-scan/";
-                </script>
-              </head>
-              <body>
-                <p>Redirecting to dashboard...</p>
-              </body>
-              </html>
-            `;
-            
-            const dashboardResponse = new NextResponse(dashboardHtmlResponse, {
-              status: 200,
-              headers: {
-                'Content-Type': 'text/html',
-              },
-            });
-            
-            // Set necessary cookies
-            const dashboardCookieOptions = {
-              httpOnly: true,
-              secure: process.env.NODE_ENV === 'production',
-              sameSite: 'lax' as const,
-              path: '/'
-            };
-            
-            dashboardResponse.cookies.set('orgId', userOrg.id, dashboardCookieOptions);
-            dashboardResponse.cookies.set('userEmail', userData.userPrincipalName, dashboardCookieOptions);
-            
-            return dashboardResponse;
-          }
-        }
-        
-        // If user doesn't exist or we couldn't find their organization, force consent flow
-        return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
+        console.log('No valid Microsoft session found and no refresh token. User may need to re-authenticate fully or data is stale.');
+        // This redirect effectively asks the user to restart the auth flow.
+        // If they had `completed_consent=true`, they might get a refresh token next time.
+        // If not, the `!refresh_token && !hasCompletedConsent` block will engage.
+        return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
       }
     }
 
