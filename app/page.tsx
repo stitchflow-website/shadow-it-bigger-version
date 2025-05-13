@@ -2187,24 +2187,24 @@ export default function ShadowITDashboard() {
                         const activeFilters = [filterCategory, filterRisk, filterManaged].filter(Boolean).length;
                         
                         if (activeFilters === 0) {
-                          return `we found ${sortedApps.length} applications.`;
+                          return `We found ${sortedApps.length} applications.`;
                         }
 
                         // Single filter messages
                         if (activeFilters === 1) {
                           if (filterCategory) {
-                            return `we found ${sortedApps.length} applications in ${filterCategory}.`;
+                            return `We found ${sortedApps.length} applications in ${filterCategory}.`;
                           }
                           if (filterRisk) {
-                            return `we found ${sortedApps.length} ${filterRisk.toLowerCase()} risk applications.`;
+                            return `We found ${sortedApps.length} ${filterRisk.toLowerCase()} risk applications.`;
                           }
                           if (filterManaged) {
-                            return `we found ${sortedApps.length} ${filterManaged.toLowerCase()} applications.`;
+                            return `We found ${sortedApps.length} ${filterManaged.toLowerCase()} applications.`;
                           }
                         }
 
                         // Multiple filters - show total count with "filtered"
-                        return `we found ${sortedApps.length} filtered applications.`;
+                        return `We found ${sortedApps.length} filtered applications.`;
                       })()}
                     </p>
                   </div>
@@ -3102,24 +3102,24 @@ export default function ShadowITDashboard() {
                       const activeFilters = [filterCategory, filterRisk, filterManaged].filter(Boolean).length;
                       
                       if (activeFilters === 0) {
-                        return `we found ${sortedApps.length} applications.`;
+                        return `We found ${sortedApps.length} applications.`;
                       }
 
                       // Single filter messages
                       if (activeFilters === 1) {
                         if (filterCategory) {
-                          return `we found ${sortedApps.length} applications in ${filterCategory}.`;
+                          return `We found ${sortedApps.length} applications in ${filterCategory}.`;
                         }
                         if (filterRisk) {
-                          return `we found ${sortedApps.length} ${filterRisk.toLowerCase()} risk applications.`;
+                          return `We found ${sortedApps.length} ${filterRisk.toLowerCase()} risk applications.`;
                         }
                         if (filterManaged) {
-                          return `we found ${sortedApps.length} ${filterManaged.toLowerCase()} applications.`;
+                          return `We found ${sortedApps.length} ${filterManaged.toLowerCase()} applications.`;
                         }
                       }
 
                       // Multiple filters - show total count with "filtered"
-                      return `we found ${sortedApps.length} filtered applications.`;
+                      return `We found ${sortedApps.length} filtered applications.`;
                     })()}
                   </h2>
                 </div>
@@ -3255,7 +3255,7 @@ export default function ShadowITDashboard() {
                           </div>
                     
                         <div className="flex items-center gap-1">
-                          <span className="text-sm text-muted-foreground font-medium">Status:</span>
+                          <span className="text-sm text-muted-foreground font-medium">Managed Status:</span>
                           <select
                               className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
                             value={editedStatuses[selectedApp.id] || selectedApp.managementStatus}
@@ -3292,16 +3292,16 @@ export default function ShadowITDashboard() {
 
                     <Tabs defaultValue="users" className="mb-6">
                       <TabsList className="bg-gray-100 p-1">
-                        <TabsTrigger value="users" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:text-gray-900">
+                        <TabsTrigger value="users" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:bg-gray-200 data-[state=active]:hover:bg-white">
                         All Users
                         </TabsTrigger>
-                        <TabsTrigger value="scopes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:text-gray-900">
+                        <TabsTrigger value="scopes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:bg-gray-200 data-[state=active]:hover:bg-white">
                         Scope User Groups
                         </TabsTrigger>
                         {/* <TabsTrigger value="similar" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
                           Similar Apps
                         </TabsTrigger> */}
-                        <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:text-gray-900">
+                        <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:bg-gray-200 data-[state=active]:hover:bg-white">
                           Notes
                         </TabsTrigger>
                       </TabsList>
@@ -3405,7 +3405,7 @@ export default function ShadowITDashboard() {
                                         {user.scopes.map((scope, i) => {
                                           // Determine risk level color based on the predefined risk assessment logic
                                           let riskColor = "#81C784"; // Default green for low risk
-                                          let riskStatus = "Low Risk";
+                                          let riskStatus = "Low-Risk Scopes";
                                           
                                           // Check for high risk scopes first (from HIGH_RISK_SCOPES in risk-assessment.ts)
                                           const isHighRisk = [
@@ -3428,10 +3428,10 @@ export default function ShadowITDashboard() {
                                           
                                           if (isHighRisk) {
                                             riskColor = "#EF5350"; // Red for high risk
-                                            riskStatus = "High Risk";
+                                            riskStatus = "High-Risk Scopes";
                                           } else if (isMediumRisk) {
                                             riskColor = "#FFD54F"; // Yellow for medium risk
-                                            riskStatus = "Medium Risk";
+                                            riskStatus = "Medium-Risk Scopes";
                                           }
                                           
                                           return (
@@ -3440,7 +3440,7 @@ export default function ShadowITDashboard() {
                                                 <Tooltip delayDuration={300}>
                                                   <TooltipTrigger asChild>
                                                     <div 
-                                                      className="w-2 h-2 rounded-full mr-2 flex-shrink-0 cursor-help" 
+                                                      className="w-2 h-2 rounded-full mr-2 flex-shrink-0 cursor-pointer" 
                                                       style={{ backgroundColor: riskColor }}
                                                     />
                                                   </TooltipTrigger>
@@ -3525,7 +3525,7 @@ export default function ShadowITDashboard() {
                       <TabsContent value="scopes">
                         <div className="p-5 border border-gray-200 rounded-md bg-white">
                           <h3 className="text-lg font-medium mb-4">Scope User Groups</h3>
-                          <p className="text-sm text-muted-foreground mb-4">
+                          <p className="text-sm text-black mb-4">
                             Users are grouped by identical scope permission sets. Each user group represents a unique set of permissions.
                           </p>
 

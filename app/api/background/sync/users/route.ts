@@ -31,12 +31,12 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
 
 export async function POST(request: Request) {
+  const requestData = await request.json(); // Moved up for error handling access
+  const { organization_id, sync_id, access_token, refresh_token } = requestData;
+
   try {
     console.log('Starting user fetch processing');
     
-    const requestData = await request.json();
-    const { organization_id, sync_id, access_token, refresh_token } = requestData;
-
     // Validate required fields
     if (!organization_id || !sync_id || !access_token || !refresh_token) {
       return NextResponse.json(
@@ -44,29 +44,28 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    // Send immediate response
-    const response = NextResponse.json({ 
-      message: 'User fetch started',
+    
+    // Await the processing
+    await processUsers(organization_id, sync_id, access_token, refresh_token, request);
+    
+    // Return success response after processing is done
+    return NextResponse.json({ 
+      message: 'User fetch completed successfully',
       syncId: sync_id,
       organizationId: organization_id
     });
-    
-    // Process in the background
-    processUsers(organization_id, sync_id, access_token, refresh_token, request)
-      .catch(async (error) => {
-        console.error('User processing failed:', error);
+
+  } catch (error: any) {
+    console.error('Error in user fetch API:', error);
+    // Ensure sync status is updated on failure if processUsers throws
+    if (sync_id) { // Check if sync_id is available
         await updateSyncStatus(
           sync_id,
           -1,
           `User fetch failed: ${error.message}`,
           'FAILED'
         );
-      });
-    
-    return response;
-  } catch (error: any) {
-    console.error('Error in user fetch API:', error);
+    }
     return NextResponse.json(
       { error: 'Failed to process users', details: error.message },
       { status: 500 }
