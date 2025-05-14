@@ -109,13 +109,33 @@ export async function GET(request: NextRequest) {
       status: syncRecord.status
     });
 
-    console.log(process.env.MICROSOFT_TENANT_ID)
     // Initialize Microsoft service with credentials
     console.log('🔑 Initializing Microsoft service...');
+    
+    // We need to determine tenant ID from the user's domain
+    // First try to get user email from the sync record
+    const userEmail = syncRecord.user_email;
+    if (!userEmail) {
+      throw new Error('Missing user email in sync record');
+    }
+    
+    // Parse domain from email (everything after @)
+    const emailDomain = userEmail.split('@')[1];
+    if (!emailDomain) {
+      throw new Error('Invalid email format, cannot extract domain');
+    }
+    
+    // For Microsoft Entra ID, the tenant ID can be:
+    // 1. The domain itself (like "contoso.onmicrosoft.com")
+    // 2. "common" for multi-tenant applications
+    // 3. A tenant-specific GUID
+    // Using "common" is the most reliable approach for user-delegated tokens
+    console.log(`🔑 Using tenant ID "common" for Microsoft API authentication`);
+    
     const microsoftService = new MicrosoftWorkspaceService({
       client_id: process.env.MICROSOFT_CLIENT_ID!,
       client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-      tenant_id: process.env.MICROSOFT_TENANT_ID 
+      tenant_id: 'common' // Using "common" ensures we can work with any tenant
     });
 
     await microsoftService.setCredentials({
