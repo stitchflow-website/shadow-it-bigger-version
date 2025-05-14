@@ -115,35 +115,58 @@ export async function GET(request: NextRequest) {
     const userData = await userResponse.json();
     console.log('Microsoft user data:', userData);
     
-    // === ADJUSTED DYNAMIC SCOPE LOGIC START ===
+    // === REFINED DYNAMIC SCOPE LOGIC START ===
 
-    const { data: flowState } = await supabaseAdmin
+    const { data: flowStateBeforeThisCallback } = await supabaseAdmin
       .from('auth_flow_state')
       .select('completed_consent')
       .eq('email', userData.userPrincipalName)
       .eq('provider', 'microsoft')
       .single();
-    const hasCompletedAdminConsentInDb = flowState?.completed_consent === true;
+    
+    const hasCompletedAdminConsentInDbInitially = flowStateBeforeThisCallback?.completed_consent === true;
+    let justCompletedAdminConsentRedirect = false;
+
+    // If we got a refresh token NOW, and the DB state from BEFORE this callback showed admin consent was NOT completed,
+    // it strongly implies the user just successfully came back from the admin consent redirect we initiated.
+    if (refresh_token && flowStateBeforeThisCallback?.completed_consent === false) {
+      await supabaseAdmin
+        .from('auth_flow_state')
+        .upsert({
+          email: userData.userPrincipalName,
+          provider: 'microsoft',
+          completed_consent: true, // Mark as fully completed
+          completed_at: new Date().toISOString()
+        }, { 
+          onConflict: 'email,provider' 
+        });
+      console.log('Marked Microsoft admin consent flow as completed in DB for:', userData.userPrincipalName);
+      justCompletedAdminConsentRedirect = true; // Flag that we just updated the consent state
+    }
+
+    // Now, re-evaluate if we still need to send for admin consent.
+    // This check should only trigger if the consent wasn't completed in a *previous* session AND we didn't *just* complete it.
+    const shouldRedirectForAdminConsent = !hasCompletedAdminConsentInDbInitially && !justCompletedAdminConsentRedirect;
 
     console.log('Microsoft Auth flow check:', { 
       email: userData.userPrincipalName, 
-      hasCompletedAdminConsentInDb,
-      initialRefreshTokenPresent: !!refresh_token 
+      hasCompletedAdminConsentInDbInitially,
+      initialRefreshTokenPresentThisCallback: !!refresh_token,
+      justCompletedAdminConsentRedirect,
+      shouldRedirectForAdminConsent
     });
 
-    // If the user hasn't completed the full admin consent flow in our system yet,
-    // redirect to Microsoft to request full admin scopes and prompt for explicit consent.
-    if (!hasCompletedAdminConsentInDb) {
-      console.log('Requesting Microsoft admin scopes - User needs to complete full admin consent flow as per DB.');
+    if (shouldRedirectForAdminConsent) {
+      console.log('Requesting Microsoft admin scopes - User needs to complete full admin consent flow as per DB (and did not just return from it).');
       
-      // Mark that we've initiated this specific admin consent flow step
+      // Update started_at or ensure the record exists if this is the first attempt
       await supabaseAdmin
         .from('auth_flow_state')
         .upsert({
           email: userData.userPrincipalName,
           provider: 'microsoft',
           started_at: new Date().toISOString(),
-          completed_consent: false // Explicitly mark as not completed yet for this stage
+          completed_consent: false 
         }, { 
           onConflict: 'email,provider'
         });
@@ -153,7 +176,7 @@ export async function GET(request: NextRequest) {
         'Directory.Read.All',
         'Application.Read.All',
         'AuditLog.Read.All',
-        'offline_access', // Crucial for getting a refresh token for these broader permissions
+        'offline_access',
         'openid', 'profile', 'email'
       ].join(' ');
 
@@ -169,40 +192,22 @@ export async function GET(request: NextRequest) {
       authUrl.searchParams.append('redirect_uri', authRedirectUri!);
       authUrl.searchParams.append('response_type', 'code');
       authUrl.searchParams.append('scope', adminScopes);
-      authUrl.searchParams.append('prompt', 'consent'); // Force the consent screen for admin scopes
+      authUrl.searchParams.append('prompt', 'consent'); 
       authUrl.searchParams.append('login_hint', userData.userPrincipalName);
       authUrl.searchParams.append('state', state || crypto.randomUUID());
       
       console.log('Redirecting for Microsoft admin scopes with URL:', authUrl.toString());
-      return NextResponse.redirect(authUrl); // This is the redirect for admin consent
-    }
-
-    // If we reach here, hasCompletedAdminConsentInDb was true, meaning the user should have already completed the admin consent flow previously.
-    // Or, the user just returned from the admin consent redirect triggered above.
-
-    // If a refresh_token is present NOW AND the original DB state (flowState) showed consent was NOT completed,
-    // it implies the user just successfully completed the admin consent redirect.
-    if (refresh_token && flowState?.completed_consent === false) {
-      await supabaseAdmin
-        .from('auth_flow_state')
-        .upsert({
-          email: userData.userPrincipalName,
-          provider: 'microsoft',
-          completed_consent: true, // Now mark as fully completed
-          completed_at: new Date().toISOString()
-        }, { 
-          onConflict: 'email,provider' 
-        });
-      console.log('Marked Microsoft admin consent flow as completed in DB for:', userData.userPrincipalName);
+      return NextResponse.redirect(authUrl);
     }
     
-    // === ADJUSTED DYNAMIC SCOPE LOGIC END ===
+    // === REFINED DYNAMIC SCOPE LOGIC END ===
 
-    // Fallback check: If admin consent is marked as completed in our DB (either from a previous session or just updated),
-    // but we *still* don't have a refresh token (e.g., it expired, or Microsoft didn't issue one despite offline_access),
-    // then try to handle it gracefully or inform the user.
-    if (hasCompletedAdminConsentInDb && !refresh_token) {
-      console.warn('Admin consent was completed in DB, but no refresh token received in this interaction. Checking for a valid session.');
+    // Fallback check for missing refresh token AFTER consent should have been completed.
+    // `hasCompletedAdminConsentInDbInitially` reflects state from before this callback.
+    // `justCompletedAdminConsentRedirect` tells us if we just set it to true.
+    // So, if (hasCompletedAdminConsentInDbInitially || justCompletedAdminConsentRedirect) is true, consent *should* be complete.
+    if ((hasCompletedAdminConsentInDbInitially || justCompletedAdminConsentRedirect) && !refresh_token) {
+      console.warn('Admin consent should be completed, but no refresh token received. Checking valid session.');
       
       const sessionIdFromCookie = request.cookies.get('shadow_session_id')?.value;
       const hasValidSession = await isValidSession(sessionIdFromCookie);
@@ -210,15 +215,14 @@ export async function GET(request: NextRequest) {
       if (hasValidSession) {
         console.log('Found valid Microsoft session. Proceeding, but background sync might fail if refresh token is truly unobtainable.');
       } else {
-        console.log('No valid Microsoft session and no refresh token, despite DB indicating prior admin consent. Data refresh likely required.');
+        console.log('No valid Microsoft session and no refresh token, despite consent completion. Data refresh likely required.');
         return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
       }
-    }
-    // If !hasCompletedAdminConsentInDb but somehow we didn't redirect and also don't have a refresh token, this is an edge case.
-    // The primary redirect `if(!hasCompletedAdminConsentInDb)` should catch most scenarios for new users.
-    else if (!hasCompletedAdminConsentInDb && !refresh_token) {
-        console.warn('Logic error or unexpected state: Admin consent not completed in DB, and no refresh token, but was not redirected for admin consent. This should ideally not happen.');
-        return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=auth_flow_error', request.url));
+    } else if (!refresh_token) {
+        // This case implies consent was not completed and we still don't have a refresh token,
+        // and for some reason, the redirect logic above didn't trigger.
+        console.warn('No refresh token and admin consent not marked as completed. This path should be rare if redirect logic is correct.');
+        return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=auth_flow_error_unexpected', request.url));
     }
 
     // Check if it's a work/school account by looking for onPremisesSamAccountName
