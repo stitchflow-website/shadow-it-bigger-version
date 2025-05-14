@@ -2020,14 +2020,22 @@ export default function ShadowITDashboard() {
         localStorage.setItem('lastLogin', Date.now().toString());
         localStorage.setItem('login_attempt_time', Date.now().toString());
         
+        // Check for force_reconsent parameter in the URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const forceReconsent = urlParams.get('force_reconsent') === 'true';
+        
         const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
         authUrl.searchParams.append('response_type', 'code');
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('response_mode', 'query');
-        authUrl.searchParams.append('prompt', 'select_account');
+        // If force_reconsent is true, always use 'consent' prompt to force the user to grant permissions again
+        authUrl.searchParams.append('prompt', forceReconsent ? 'consent' : 'select_account');
         authUrl.searchParams.append('state', state);
+        if (forceReconsent) {
+          authUrl.searchParams.append('force_reconsent', 'true');
+        }
 
         window.location.href = authUrl.toString();
       } catch (err) {

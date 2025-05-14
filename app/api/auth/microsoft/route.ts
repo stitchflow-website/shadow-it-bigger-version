@@ -135,11 +135,15 @@ export async function GET(request: NextRequest) {
       .eq('email', userData.userPrincipalName)
       .single();
 
+    // If flowState is null, it means this user doesn't exist in auth_flow_state table
     const hasCompletedConsent = flowState?.completed_consent === true;
+    const needsFullConsent = !flowState || !hasCompletedConsent;
     
     console.log('7. Auth flow check:', { 
       email: userData.userPrincipalName, 
       hasCompletedConsent, 
+      needsFullConsent,
+      flowStateExists: !!flowState,
       hasRefreshToken: !!refresh_token,
       isNewUser: !existingUser
     });
@@ -147,10 +151,11 @@ export async function GET(request: NextRequest) {
     // If we don't have a refresh token or need to request admin permissions
     // We check for:
     // 1. New user (not in DB) OR
-    // 2. Haven't completed consent flow AND
-    // 3. Don't have a refresh token (which indicates limited permissions)
-    if ((!existingUser || !hasCompletedConsent) && !refresh_token && !consentRequested) {
-      console.log('8. Requesting full permissions - New user:', !existingUser, 'Has completed consent:', hasCompletedConsent);
+    // 2. User doesn't exist in auth_flow_state OR hasn't completed consent flow AND
+    // 3. Either no refresh token OR force_reconsent parameter is present
+    const forceReconsent = searchParams.get('force_reconsent') === 'true';
+    if (((!existingUser || needsFullConsent) && !refresh_token) || forceReconsent || !flowState) {
+      console.log('8. Requesting full permissions - New user:', !existingUser, 'Needs full consent:', needsFullConsent, 'Force reconsent:', forceReconsent);
       
       // First, mark that we've started the consent flow for this user
       await supabaseAdmin
@@ -457,8 +462,12 @@ export async function GET(request: NextRequest) {
     if (needsFreshSync) {
       console.log('Returning user with missing or corrupt data detected, forcing fresh consent');
       
-      // Return a special error code that will be handled in the frontend
-      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
+      // Use a hardcoded production URL instead of relying on request.url which might resolve to localhost
+      const redirectUrl = process.env.NODE_ENV === 'development'
+        ? `${request.nextUrl.origin}/tools/shadow-it-scan/?error=data_refresh_required&force_reconsent=true`
+        : 'https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required&force_reconsent=true';
+      
+      return NextResponse.redirect(new URL(redirectUrl));
     }
 
     // If the user and organization already exist with completed sync and no data issues, 
