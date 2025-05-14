@@ -220,7 +220,7 @@ export default function ShadowITDashboard() {
     if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1'))) {
       redirectURI = `${window.location.origin}/tools/shadow-it-scan/api/auth/microsoft/callback`;
     } else {
-      redirectURI = `https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft`;
+      redirectURI = `https://stitchflow.com/tools/shadow-it-scan/api/auth/microsoft`;
     }
     
     const scopes = [
@@ -2002,8 +2002,8 @@ export default function ShadowITDashboard() {
         
         console.log('Using redirectUri:', redirectUri);
         
-        // Use minimal scopes initially - just enough to identify the user
         const scopes = [
+          // Start with minimal scopes; we'll request admin scopes later if needed
           'User.Read',
           'offline_access',
           'openid',
@@ -2020,22 +2020,14 @@ export default function ShadowITDashboard() {
         localStorage.setItem('lastLogin', Date.now().toString());
         localStorage.setItem('login_attempt_time', Date.now().toString());
         
-        // Check for force_reconsent parameter in the URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const forceReconsent = urlParams.get('force_reconsent') === 'true';
-        
         const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
         authUrl.searchParams.append('client_id', clientId);
         authUrl.searchParams.append('redirect_uri', redirectUri);
         authUrl.searchParams.append('response_type', 'code');
         authUrl.searchParams.append('scope', scopes);
         authUrl.searchParams.append('response_mode', 'query');
-        // If force_reconsent is true, always use 'consent' prompt to force the user to grant permissions again
-        authUrl.searchParams.append('prompt', forceReconsent ? 'consent' : 'select_account');
+        authUrl.searchParams.append('prompt', 'select_account');
         authUrl.searchParams.append('state', state);
-        if (forceReconsent) {
-          authUrl.searchParams.append('force_reconsent', 'true');
-        }
 
         window.location.href = authUrl.toString();
       } catch (err) {

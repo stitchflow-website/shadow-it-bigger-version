@@ -109,39 +109,13 @@ export async function GET(request: NextRequest) {
       status: syncRecord.status
     });
 
-    // Check if user has completed the consent flow
-    const userEmail = syncRecord.user_email;
-    if (userEmail) {
-      const { data: flowState } = await supabaseAdmin
-        .from('auth_flow_state')
-        .select('completed_consent')
-        .eq('email', userEmail)
-        .eq('auth_provider', 'microsoft')
-        .single();
-        
-      if (!flowState?.completed_consent) {
-        console.log('⚠️ User has not completed consent flow yet. Waiting for full permissions.');
-        
-        // Update sync message but keep status as IN_PROGRESS to try again later
-        await updateSyncStatus(syncRecord.id, 5, 'Waiting for complete permissions from Microsoft...');
-        
-        // Return non-error response but indicate we're waiting
-        return NextResponse.json({ 
-          message: 'Waiting for user to complete permission consent flow',
-          sync_id: syncRecord.id,
-          status: 'WAITING_FOR_CONSENT'
-        });
-      }
-      
-      console.log('✅ User has completed consent flow with full permissions');
-    }
-
+    console.log(process.env.MICROSOFT_TENANT_ID)
     // Initialize Microsoft service with credentials
     console.log('🔑 Initializing Microsoft service...');
     const microsoftService = new MicrosoftWorkspaceService({
       client_id: process.env.MICROSOFT_CLIENT_ID!,
       client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-      tenant_id: process.env.MICROSOFT_TENANT_ID || 'common'
+      tenant_id: process.env.MICROSOFT_TENANT_ID 
     });
 
     await microsoftService.setCredentials({

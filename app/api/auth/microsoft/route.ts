@@ -42,12 +42,10 @@ async function isValidSession(sessionId: string | undefined): Promise<boolean> {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('1. Starting Microsoft OAuth callback...');
     // Get authorization code from query params
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
     const state = searchParams.get('state');
-    const consentRequested = searchParams.get('consent_requested') === 'true';
     
     if (!code) {
       console.error('No authorization code received from Microsoft');
@@ -73,9 +71,9 @@ export async function GET(request: NextRequest) {
       redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
     }
     
-    console.log('2. Using redirect URI for token exchange:', redirectUri);
+    console.log('Using redirect URI for token exchange:', redirectUri);
 
-    console.log('3. Exchanging code for tokens...');
+    console.log('Exchanging code for tokens...');
     // Exchange authorization code for tokens
     const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
       method: 'POST',
@@ -99,14 +97,56 @@ export async function GET(request: NextRequest) {
 
     const tokenData = await tokenResponse.json();
     const { access_token, refresh_token, id_token } = tokenData;
-    console.log('4. Tokens received successfully:', {
-      access_token: access_token ? 'present' : 'missing',
-      refresh_token: refresh_token ? 'present' : 'missing',
-      id_token: id_token ? 'present' : 'missing'
-    });
+    console.log('Tokens received successfully');
     
+    // -------------------- Dynamic scope escalation --------------------
+    // If the current access token does not include admin-level scopes required for
+    // our syncing process, redirect the user back to Microsoft for a full consent
+    // flow requesting those scopes (similar to the Google dynamic scope upgrade).
+
+    const grantedScopes: string[] = (tokenData.scope || '').split(' ');
+    const adminScopes = [
+      'Directory.Read.All',
+      'Application.Read.All',
+      'DelegatedPermissionGrant.ReadWrite.All',
+      'AppRoleAssignment.ReadWrite.All'
+    ];
+
+    // Determine whether we still need admin consent
+    const needsAdminConsent = adminScopes.some(s => !grantedScopes.includes(s));
+
+    // Avoid infinite redirect loops by checking if we've already requested consent
+    const consentRequested = searchParams.get('consent_requested') === 'true';
+
+    if (needsAdminConsent && !consentRequested) {
+      console.log('Missing admin scopes – redirecting user to grant full consent');
+
+      const fullScopes = [
+        // Base scopes
+        'User.Read',
+        'offline_access',
+        'openid',
+        'profile',
+        'email',
+        // Admin scopes we still need
+        ...adminScopes
+      ].join(' ');
+
+      const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+      authUrl.searchParams.append('client_id', clientId);
+      authUrl.searchParams.append('redirect_uri', redirectUri);
+      authUrl.searchParams.append('response_type', 'code');
+      authUrl.searchParams.append('scope', fullScopes);
+      authUrl.searchParams.append('response_mode', 'query');
+      authUrl.searchParams.append('prompt', 'consent');
+      authUrl.searchParams.append('state', state || crypto.randomUUID());
+      authUrl.searchParams.append('consent_requested', 'true');
+
+      return NextResponse.redirect(authUrl);
+    }
+
     // Get user info using the access token
-    console.log('5. Fetching user data...');
+    console.log('Fetching user data...');
     const userResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
       headers: {
         'Authorization': `Bearer ${access_token}`,
@@ -119,98 +159,99 @@ export async function GET(request: NextRequest) {
     }
 
     const userData = await userResponse.json();
-    console.log('6. Microsoft user data:', userData);
+    console.log('Microsoft user data:', userData);
     
-    // Check if user already exists in our system
-    const { data: existingUser } = await supabaseAdmin
-      .from('users_signedup')
-      .select('id, email')
-      .eq('email', userData.userPrincipalName)
-      .single();
-
-    // Check if we've already processed this user in an auth flow (to prevent loops)
-    const { data: flowState, error: flowStateError } = await supabaseAdmin
-      .from('auth_flow_state')
-      .select('completed_consent')
-      .eq('email', userData.userPrincipalName)
-      .single();
+    // If we don't have a refresh token, the user probably used prompt=none
+    // We need a refresh token for background syncs to work, so redirect to auth with prompt=consent
+    if (!refresh_token) {
+      console.error('No refresh token received - likely due to prompt=none. Checking for existing session.');
       
-    if (flowStateError && flowStateError.code !== 'PGRST116') { // PGRST116 is "not found" error
-      console.error('Error checking auth flow state:', flowStateError);
-    }
-
-    // If flowState is null, it means this user doesn't exist in auth_flow_state table
-    const hasCompletedConsent = flowState?.completed_consent === true;
-    
-    console.log('7. Auth flow check:', { 
-      email: userData.userPrincipalName, 
-      hasCompletedConsent,
-      flowStateExists: !!flowState,
-      hasRefreshToken: !!refresh_token,
-      isNewUser: !existingUser,
-      consentRequested
-    });
-
-    // Similar to Google's logic - If new user or not completed consent and no refresh token
-    if ((!existingUser || !hasCompletedConsent) && !refresh_token && !consentRequested) {
-      console.log('8. Requesting full permissions - New user:', !existingUser, 'Has completed consent:', hasCompletedConsent);
+      // Check for existing valid session before deciding to force consent
+      // Get the session ID from the cookie
+      const sessionId = request.cookies.get('shadow_session_id')?.value;
+      const hasValidSession = await isValidSession(sessionId);
       
-      // First, mark that we've started the consent flow for this user
-      await supabaseAdmin
-        .from('auth_flow_state')
-        .upsert({
-          email: userData.userPrincipalName,
-          started_at: new Date().toISOString(),
-          completed_consent: false
-        }, { 
-          onConflict: 'email' 
-        });
-
-      // Define full permission scopes needed for the application
-      const fullScopes = [
-        'User.Read',
-        'Directory.Read.All',
-        'Application.Read.All',
-        'DelegatedPermissionGrant.ReadWrite.All',
-        'AppRoleAssignment.ReadWrite.All',
-        'offline_access',
-        'openid',
-        'profile',
-        'email'
-      ].join(' ');
-
-      // Create a direct URL to Microsoft's auth/consent endpoint for the full permissions
-      const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
-      authUrl.searchParams.append('client_id', clientId);
-      authUrl.searchParams.append('redirect_uri', redirectUri);
-      authUrl.searchParams.append('response_type', 'code');
-      authUrl.searchParams.append('scope', fullScopes);
-      authUrl.searchParams.append('response_mode', 'query');
-      // Force consent to ensure we get refresh token
-      authUrl.searchParams.append('prompt', 'consent');
-      // Pre-select the account with the login_hint
-      authUrl.searchParams.append('login_hint', userData.userPrincipalName);
-      authUrl.searchParams.append('state', state || crypto.randomUUID());
-      // Add flag to indicate we've requested consent
-      authUrl.searchParams.append('consent_requested', 'true');
-
-      console.log('9. Redirecting for full permissions with URL:', authUrl.toString());
-      return NextResponse.redirect(authUrl);
-    }
-
-    // Similar to Google's logic - If we got here with a refresh token, mark consent completed
-    if (refresh_token && !hasCompletedConsent) {
-      await supabaseAdmin
-        .from('auth_flow_state')
-        .upsert({
-          email: userData.userPrincipalName,
-          completed_consent: true,
-          completed_at: new Date().toISOString()
-        }, { 
-          onConflict: 'email' 
-        });
-      
-      console.log('10. Marked consent flow as completed for:', userData.userPrincipalName);
+      if (hasValidSession) {
+        console.log('Found valid session, proceeding without refresh token');
+        // Proceed with the existing session - no need to force consent
+      } else {
+        console.log('No valid session found, forcing consent flow');
+        // Check if the user already exists in our database
+        const { data: existingUser } = await supabaseAdmin
+          .from('users_signedup')
+          .select('id, email')
+          .eq('email', userData.userPrincipalName)
+          .single();
+        
+        console.log('Checking if user exists:', existingUser ? 'Yes' : 'No');
+        
+        if (existingUser) {
+          // First try to find organization by domain
+          const emailDomain = userData.userPrincipalName.split('@')[1];
+          let { data: userOrg } = await supabaseAdmin
+            .from('organizations')
+            .select('id')
+            .eq('domain', emailDomain)
+            .single();
+            
+          // If not found by domain, try finding by first_admin
+          if (!userOrg) {
+            const { data: orgByAdmin } = await supabaseAdmin
+              .from('organizations')
+              .select('id')
+              .eq('first_admin', userData.userPrincipalName)
+              .single();
+              
+            userOrg = orgByAdmin;
+          }
+          
+          if (userOrg) {
+            console.log('User already exists and has organization, redirecting to dashboard');
+            
+            // Create HTML response with localStorage setting and redirect
+            const dashboardHtmlResponse = `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>Redirecting...</title>
+                <script>
+                  // Store email in localStorage for cross-browser session awareness
+                  localStorage.setItem('userEmail', "${userData.userPrincipalName}");
+                  localStorage.setItem('lastLogin', "${new Date().getTime()}");
+                  window.location.href = "https://www.stitchflow.com/tools/shadow-it-scan/";
+                </script>
+              </head>
+              <body>
+                <p>Redirecting to dashboard...</p>
+              </body>
+              </html>
+            `;
+            
+            const dashboardResponse = new NextResponse(dashboardHtmlResponse, {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/html',
+              },
+            });
+            
+            // Set necessary cookies
+            const dashboardCookieOptions = {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax' as const,
+              path: '/'
+            };
+            
+            dashboardResponse.cookies.set('orgId', userOrg.id, dashboardCookieOptions);
+            dashboardResponse.cookies.set('userEmail', userData.userPrincipalName, dashboardCookieOptions);
+            
+            return dashboardResponse;
+          }
+        }
+        
+        // If user doesn't exist or we couldn't find their organization, force consent flow
+        return NextResponse.redirect('https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required');
+      }
     }
 
     // Check if it's a work/school account by looking for onPremisesSamAccountName
@@ -250,8 +291,6 @@ export async function GET(request: NextRequest) {
     }
     
     // Check if user is an admin by checking directory roles
-    // This check should only be performed after we've obtained proper permissions
-    console.log('11. Checking if user is an admin...');
     let isAdmin = false;
     
     try {
@@ -290,8 +329,6 @@ export async function GET(request: NextRequest) {
         // If we can successfully list users, the user is an admin
         isAdmin = listUsersResponse.ok;
       }
-      
-      console.log('12. Admin check result:', isAdmin ? 'User is an admin' : 'User is not an admin');
     } catch (err: unknown) {
       console.error('Error checking admin status:', err);
     }
@@ -329,18 +366,18 @@ export async function GET(request: NextRequest) {
     }
 
     // First check if user exists
-    const { data: existingUserCheck } = await supabaseAdmin
+    const { data: existingUser } = await supabaseAdmin
       .from('users_signedup')
       .select('id')
       .eq('email', userData.userPrincipalName)
       .single();
       
     // Flag to track if this is a new user
-    const isNewUser = !existingUserCheck;
+    const isNewUser = !existingUser;
 
     // Create or update user in users_signedup
     const userToUpsert = {
-      id: existingUserCheck?.id, // Include ID if user exists
+      id: existingUser?.id, // Include ID if user exists
       email: userData.userPrincipalName,
       name: userData.displayName,
       avatar_url: userData.photo || null,
@@ -458,12 +495,8 @@ export async function GET(request: NextRequest) {
     if (needsFreshSync) {
       console.log('Returning user with missing or corrupt data detected, forcing fresh consent');
       
-      // Use a hardcoded production URL instead of relying on request.url which might resolve to localhost
-      const redirectUrl = process.env.NODE_ENV === 'development'
-        ? `${request.nextUrl.origin}/tools/shadow-it-scan/?error=data_refresh_required&force_reconsent=true`
-        : 'https://www.stitchflow.com/tools/shadow-it-scan/?error=data_refresh_required&force_reconsent=true';
-      
-      return NextResponse.redirect(new URL(redirectUrl));
+      // Return a special error code that will be handled in the frontend
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
     }
 
     // If the user and organization already exist with completed sync and no data issues, 
