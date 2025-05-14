@@ -212,19 +212,19 @@ export async function GET(request: NextRequest) {
       const userApp = userAppScopes.get(userAppKey);
       let scopeCount = 0;
       token.scopes?.forEach(scope => {
-        if (scope) userApp.scopes.add(scope);
+        userApp.scopes.add(scope);
         scopeCount++;
       });
       token.adminScopes?.forEach(scope => {
-        if (scope) userApp.scopes.add(scope);
+        userApp.scopes.add(scope);
         scopeCount++;
       });
       token.userScopes?.forEach(scope => {
-        if (scope) userApp.scopes.add(scope);
+        userApp.scopes.add(scope);
         scopeCount++;
       });
       token.appRoleScopes?.forEach(scope => {
-        if (scope) userApp.scopes.add(scope);
+        userApp.scopes.add(scope);
         scopeCount++;
       });
 
@@ -245,9 +245,7 @@ export async function GET(request: NextRequest) {
       token.scopes?.forEach(scope => app.allScopes.add(scope));
       token.adminScopes?.forEach(scope => app.allScopes.add(scope));
       token.userScopes?.forEach(scope => app.allScopes.add(scope));
-      token.appRoleScopes?.forEach(scope => {
-        if (scope) app.allScopes.add(scope);
-      });
+      token.appRoleScopes?.forEach(scope => app.allScopes.add(scope));
     }
 
     // Second pass: Process each application

@@ -327,165 +327,258 @@ export class MicrosoftWorkspaceService {
     try {
       console.log('🔄 Starting OAuth token fetch from Microsoft Entra ID...');
       
+      // 1. Get all users in the organization with pagination
+      console.log('👥 Fetching all users in the organization...');
       const users = await this.getAllPages<MicrosoftGraphUser>(
         '/users', 
         'id,displayName,mail,userPrincipalName,jobTitle,department,lastSignInDateTime'
       );
       console.log(`✅ Found ${users.length} users in the organization`);
 
+      // 2. Get all service principals (applications) with pagination
+      console.log('🔍 Fetching all service principals (applications)...');
       const servicePrincipals = await this.getAllPages<any>(
         '/servicePrincipals',
         'id,appId,displayName,appRoles,oauth2PermissionScopes,servicePrincipalType'
       );
+      
       console.log(`✅ Found ${servicePrincipals.length} service principals`);
 
-      const systemAppPrefixes = ["Microsoft.", "Office 365", "SharePoint Online Web Client", "Microsoft Office"];
-      const systemAppIds: string[] = [];
+      // Filter out system applications that shouldn't be included
+      // These are typically infrastructure apps that aren't relevant for Shadow IT discovery
+      const systemAppPrefixes: string[] = [
+        "Microsoft.",
+        "Office 365",
+        "SharePoint Online Web Client",
+        "Microsoft Office"
+      ];
+      
+      const systemAppIds: string[] = [
+        // Add specific app IDs for system applications if known
+      ];
+      
       const filteredServicePrincipals = servicePrincipals.filter(sp => {
-        const isSystemApp = systemAppPrefixes.some(prefix => sp.displayName && sp.displayName.startsWith(prefix));
+        // Filter out by display name prefix
+        const isSystemApp = systemAppPrefixes.some(prefix => 
+          sp.displayName && sp.displayName.startsWith(prefix)
+        );
+        
+        // Filter out by specific app ID
         const isBlockedAppId = systemAppIds.includes(sp.appId);
+        
+        // Keep the app if it's not a system app and not a blocked app ID
         return !isSystemApp && !isBlockedAppId;
       });
+      
       console.log(`✅ After filtering system apps, using ${filteredServicePrincipals.length} relevant applications`);
 
+      // Create maps for quick lookups
+      const appIdToNameMap = new Map<string, string>();
+      const appIdToServicePrincipalIdMap = new Map<string, string>();
       const spIdToAppIdMap = new Map<string, string>();
-      const spAppIdToDisplayNameMap = new Map<string, string>();
-      const spAppIdToServicePrincipalIdMap = new Map<string, string>(); // Added for easier lookup
       filteredServicePrincipals.forEach((sp: any) => {
-        spIdToAppIdMap.set(sp.id, sp.appId);
-        spAppIdToDisplayNameMap.set(sp.appId, sp.displayName);
-        spAppIdToServicePrincipalIdMap.set(sp.appId, sp.id);
+        appIdToNameMap.set(sp.appId, sp.displayName);
+        appIdToServicePrincipalIdMap.set(sp.appId, sp.id);
+        spIdToAppIdMap.set(sp.id, sp.appId); // Add mapping from SP ID to App ID
       });
-      
-      // Fetch ALL OAuth2 permission grants (both user-delegated and admin-consented for AllPrincipals)
-      const allGrants = await this.getAllPages<OAuth2Grant & {consentType?: string} >('/oauth2PermissionGrants');
-      console.log(`✅ Found ${allGrants.length} total OAuth2 permission grants of all types.`);
 
-      // Map of App AppId to its admin-consented (AllPrincipals) scopes
-      const appAdminConsents = new Map<string, Set<string>>();
-      allGrants.filter(g => g.consentType === 'AllPrincipals').forEach(grant => {
-        const appSp = filteredServicePrincipals.find(sp => sp.id === grant.clientId); // clientId of grant is the service principal of the app
-        if (appSp && grant.scope) {
-          if (!appAdminConsents.has(appSp.appId)) {
-            appAdminConsents.set(appSp.appId, new Set<string>());
-          }
-          grant.scope.split(' ').filter(s => s.trim() !== '').forEach(s => appAdminConsents.get(appSp.appId)!.add(s));
+      // Get all OAuth2PermissionGrants - both user and admin consents
+      console.log("🔐 Fetching all OAuth2 permission grants...");
+      let allOAuth2Grants: any[] = [];
+      try {
+        const allGrantsResponse = await this.client.api('/oauth2PermissionGrants').filter('consentType eq \'AllPrincipals\'').get();
+        if (allGrantsResponse && allGrantsResponse.value) {
+          allOAuth2Grants = allGrantsResponse.value;
         }
-      });
+        console.log(`✅ Found ${allOAuth2Grants.length} total OAuth2 permission grants`);
+        
+        if (allOAuth2Grants.length > 0) {
+          console.log("📝 Sample OAuth2 grant structure:", JSON.stringify(allOAuth2Grants[0], null, 2));
+        }
+      } catch (error) {
+        console.warn("⚠️ Could not fetch all OAuth2 grants:", error);
+        allOAuth2Grants = [];
+      }
 
-      const finalTokens: Token[] = [];
+      // Create a map of service principals (by ID) to their admin-consented scopes
+      // Admin consent has principalId = null or consentType = 'AllPrincipals'
+      const adminConsentedScopesMap = new Map<string, string[]>();
+      
+      // Create a separate map for Microsoft Graph scopes - DO NOT apply these to all apps
+      const microsoftGraphId = '1cb195da-78a4-4ccd-bed9-8ac47e57acbe';
+      
+      // Create a map to store which clientId (app) is requesting access to which resourceId (API)
+      const clientToResourceMap = new Map<string, string>();
+            
+      console.log("📊 Admin-consented scopes map:", Object.fromEntries(adminConsentedScopesMap));
+
+      const tokens: Token[] = [];
+      
+      // Process each user
+      console.log('🔄 Processing user application permissions...');
       let processedUserCount = 0;
-
+      
       for (const user of users) {
         processedUserCount++;
         const userEmail = user.mail || user.userPrincipalName;
+        
         if (!userEmail) {
           console.log(`⚠️ Skipping user with ID ${user.id} - no email address found`);
           continue;
         }
-        console.log(`👤 Processing user ${processedUserCount}/${users.length}: ${userEmail} (ID: ${user.id})`);
 
-        const userAppAccessDetails = new Map<string, { userScopes: Set<string>, appRoleScopes: Set<string>, assignmentType: Set<string>, lastTimeUsed?: string, assignedDate?: string }>();
+        console.log(`👤 Processing user ${processedUserCount}/${users.length}: ${userEmail}`);
 
-        // 1. Process user's direct OAuth grants (delegated permissions)
-        const userSpecificGrants = allGrants.filter(grant => grant.principalId === user.id && grant.consentType !== 'AllPrincipals');
-        console.log(`  🔑 Found ${userSpecificGrants.length} user-specific OAuth grants for ${userEmail}`);
-        for (const grant of userSpecificGrants) {
-          const resourceSp = filteredServicePrincipals.find(sp => sp.id === grant.resourceId); // resourceId is the API the app wants to access
-          if (!resourceSp) continue; // Skip if the resource (API) is not in our filtered list
-
-          const clientAppSp = filteredServicePrincipals.find(sp => sp.id === grant.clientId); // clientId is the app that was granted permission
-          if (!clientAppSp) continue;
-
-          const appId = clientAppSp.appId; // The App ID of the application the user granted consent to
-
-          if (!userAppAccessDetails.has(appId)) {
-            userAppAccessDetails.set(appId, { userScopes: new Set<string>(), appRoleScopes: new Set<string>(), assignmentType: new Set<string>() });
-          }
-          const access = userAppAccessDetails.get(appId)!;
-          grant.scope?.split(' ').filter(s => s.trim() !== '').forEach(s => access.userScopes.add(s));
-          access.assignmentType.add('DelegatedPermission');
-          access.lastTimeUsed = grant.startTime || grant.createdTime || access.lastTimeUsed;
-          access.assignedDate = grant.createdTime || grant.startTime || access.assignedDate;
-        }
-
-        // 2. Process user's app role assignments
+        // 4. Get appRoleAssignments for each user (applications assigned to users)
         console.log(`  📋 Fetching app role assignments for ${userEmail}...`);
-        const appRoleAssignments = await this.getAllPages<any>(`/users/${user.id}/appRoleAssignments`);
-        console.log(`  ✅ Found ${appRoleAssignments.length} app role assignments for ${userEmail}`);
-        for (const assignment of appRoleAssignments) {
-          const resourceSp = filteredServicePrincipals.find(sp => sp.id === assignment.resourceId); // resourceId is the service principal of the app providing the role
-          if (!resourceSp) continue;
-          
-          const appId = resourceSp.appId;
+        const appRoleResponse = await this.client.api(`/users/${user.id}/appRoleAssignments`).get();
+        const appRolesCount = appRoleResponse?.value?.length || 0;
+        console.log(`  ✅ Found ${appRolesCount} app role assignments`);
 
-          if (!userAppAccessDetails.has(appId)) {
-            userAppAccessDetails.set(appId, { userScopes: new Set<string>(), appRoleScopes: new Set<string>(), assignmentType: new Set<string>() });
-          }
-          const access = userAppAccessDetails.get(appId)!;
-          
-          const role = resourceSp.appRoles?.find((r: any) => r.id === assignment.appRoleId);
-          if (role?.value) { // App roles can have 'value' which is like a scope string
-            access.appRoleScopes.add(role.value);
-          } else if (role?.displayName) { // Sometimes 'value' is null, use displayName as a fallback
-             access.appRoleScopes.add(role.displayName);
-          }
-          access.assignmentType.add('AppRole');
-          access.assignedDate = assignment.createdDateTime || access.assignedDate;
-          // App role assignments don't typically have a "last used" time from this endpoint
+        // 5. Get OAuth2PermissionGrants for each user (delegated permissions)
+        let userOAuth2Grants: any[] = [];
+        try {
+          // Get delegated permission grants for this user
+          console.log(`  🔑 Fetching OAuth permission grants for ${userEmail}...`);
+          // First, get user-specific permission grants
+          const userOauthResponse = await this.client.api('/oauth2PermissionGrants')
+            .filter(`principalId eq '${user.id}'`)
+            .get();
+          let userSpecificGrants = userOauthResponse?.value || [];
+          console.log(`  ✅ Found ${userSpecificGrants.length} user-specific permission grants`);
+          // Next, get admin consent permission grants (AllPrincipals) that apply to all users
+          const adminOauthResponse = await this.client.api('/oauth2PermissionGrants')
+            .filter(`consentType eq 'AllPrincipals'`)
+            .get();
+          let adminGrants = adminOauthResponse?.value || [];
+          console.log(`  ✅ Found ${adminGrants.length} admin consent permission grants that apply to this user`);
+          // Combine both types of grants
+          userOAuth2Grants = [...userSpecificGrants, ...adminGrants];
+          console.log(`  📊 Total permission grants to process: ${userOAuth2Grants.length}`);
+        } catch (error) {
+          console.warn(`  ⚠️ Could not fetch OAuth2 grants for user ${userEmail}:`, error);
+          userOAuth2Grants = [];
         }
-        
-        // 3. Construct final tokens for this user
-        for (const [appId, accessDetails] of userAppAccessDetails.entries()) {
-          const appDisplayName = spAppIdToDisplayNameMap.get(appId) || 'Unknown App';
-          const effectiveUserScopes = new Set([...accessDetails.userScopes, ...accessDetails.appRoleScopes]);
-          const appOverallAdminScopes = Array.from(appAdminConsents.get(appId) || new Set<string>());
-          
-          const allPermissionsForUserInApp = Array.from(effectiveUserScopes);
-          const highRiskPermissions = allPermissionsForUserInApp.filter(p => classifyPermissionRisk(p) === 'high');
-          const mediumRiskPermissions = allPermissionsForUserInApp.filter(p => classifyPermissionRisk(p) === 'medium');
 
-          console.log(`  🔹 Finalizing token for user ${userEmail} & app ${appDisplayName} (${appId})`);
-          console.log(`    User-specific scopes (delegated + roles): ${allPermissionsForUserInApp.join(', ')}`);
-          console.log(`    App's tenant-wide admin scopes: ${appOverallAdminScopes.join(', ')}`);
+        // Track which apps this user actually has a relationship with
+        const processedApps = new Set<string>();
 
-          finalTokens.push({
+        // --- Only create tokens for real user-app relationships ---
+        // 1. App Role Assignments
+        if (appRoleResponse && appRoleResponse.value) {
+          for (const assignment of appRoleResponse.value) {
+            const resourceId = assignment.resourceId;
+            const servicePrincipal = filteredServicePrincipals.find((sp: any) => sp.id === resourceId);
+            if (!servicePrincipal) continue;
+            const appId = servicePrincipal.appId;
+            if (processedApps.has(appId)) continue;
+            processedApps.add(appId);
+            // Find the assigned role from the service principal's appRoles
+            const assignedRole = servicePrincipal.appRoles?.find((role: any) => role.id === assignment.appRoleId);
+            // Gather all scopes for this user-app pair
+            let delegatedScopes: string[] = [];
+            let adminScopes: string[] = [];
+            for (const grant of userOAuth2Grants) {
+              if (!grant.scope) continue;
+              const scopes = grant.scope.split(' ').filter((s: string) => s.trim() !== '');
+              if (scopes.length === 0) continue;
+              const isForThisApp = grant.clientId === resourceId;
+              const isAdminConsent = grant.consentType === 'AllPrincipals';
+              if (isForThisApp) {
+                if (isAdminConsent) {
+                  adminScopes = [...new Set([...adminScopes, ...scopes])];
+                } else {
+                  delegatedScopes = [...new Set([...delegatedScopes, ...scopes])];
+                }
+              } else if (grant.resourceId === resourceId) {
+                if (isAdminConsent) {
+                  adminScopes = [...new Set([...adminScopes, ...scopes])];
+                } else if (grant.principalId === user.id) {
+                  delegatedScopes = [...new Set([...delegatedScopes, ...scopes])];
+                }
+              }
+            }
+            const allPermissions = Array.from(new Set([
+              ...(delegatedScopes || []),
+              ...(adminScopes || []),
+              ...(assignedRole?.value ? [assignedRole.value] : [])
+            ]));
+            const highRiskPermissions = allPermissions.filter(p => classifyPermissionRisk(p) === 'high');
+            const mediumRiskPermissions = allPermissions.filter(p => classifyPermissionRisk(p) === 'medium');
+            tokens.push({
+              clientId: appId,
+              displayText: servicePrincipal.displayName,
+              userKey: user.id,
+              userEmail: userEmail,
+              scopes: allPermissions,
+              adminScopes: adminScopes,
+              userScopes: delegatedScopes,
+              appRoleScopes: assignedRole?.value ? [assignedRole.value] : [],
+              permissionCount: allPermissions.length,
+              highRiskPermissions: highRiskPermissions,
+              mediumRiskPermissions: mediumRiskPermissions,
+              lastTimeUsed: assignment.createdDateTime || new Date().toISOString(),
+              assignedDate: assignment.createdDateTime || new Date().toISOString(),
+              assignmentType: 'AppRole',
+              lastSignInDateTime: user.lastSignInDateTime || undefined
+            });
+          }
+        }
+        // 2. OAuth2 Permission Grants (not covered by app role assignments)
+        for (const grant of userOAuth2Grants) {
+          const clientId = grant.clientId;
+          // Only process if not already processed for this user
+          if (processedApps.has(clientId)) continue;
+          const servicePrincipal = filteredServicePrincipals.find((sp: any) => sp.id === clientId || sp.appId === clientId);
+          if (!servicePrincipal) continue;
+          const appId = servicePrincipal.appId;
+          processedApps.add(appId);
+          const userScopes = grant.scope ? grant.scope.split(' ').filter((s: string) => s.trim() !== '') : [];
+          let adminScopes: string[] = [];
+          // Only include admin scopes for this app
+          if (grant.consentType === 'AllPrincipals') {
+            adminScopes = userScopes;
+          }
+          const allScopes = [...new Set([...userScopes, ...adminScopes])];
+          const highRiskPermissions = allScopes.filter(p => classifyPermissionRisk(p) === 'high');
+          const mediumRiskPermissions = allScopes.filter(p => classifyPermissionRisk(p) === 'medium');
+          tokens.push({
             clientId: appId,
-            displayText: appDisplayName,
+            displayText: servicePrincipal.displayName || appIdToNameMap.get(appId) || appId,
             userKey: user.id,
             userEmail: userEmail,
-            scopes: allPermissionsForUserInApp, // User's actual scopes for this app
-            adminScopes: appOverallAdminScopes, // App's tenant-wide admin-consented scopes
-            userScopes: Array.from(accessDetails.userScopes),
-            appRoleScopes: Array.from(accessDetails.appRoleScopes),
-            permissionCount: allPermissionsForUserInApp.length,
+            scopes: allScopes,
+            adminScopes: adminScopes,
+            userScopes: userScopes,
+            appRoleScopes: [],
+            permissionCount: allScopes.length,
             highRiskPermissions: highRiskPermissions,
             mediumRiskPermissions: mediumRiskPermissions,
-            lastTimeUsed: accessDetails.lastTimeUsed || user.lastSignInDateTime || new Date().toISOString(),
-            assignedDate: accessDetails.assignedDate || new Date().toISOString(),
-            assignmentType: Array.from(accessDetails.assignmentType).join(', '),
-            lastSignInDateTime: user.lastSignInDateTime || undefined,
+            lastTimeUsed: grant.startTime || grant.createdTime || new Date().toISOString(),
+            assignedDate: grant.startTime || grant.createdTime || new Date().toISOString(),
+            assignmentType: 'DelegatedPermission',
+            lastSignInDateTime: user.lastSignInDateTime || undefined
           });
         }
       }
 
-      console.log(`🎉 Successfully processed ${finalTokens.length} application tokens across ${processedUserCount} users`);
-      if (finalTokens.length > 0) {
-        console.log('📝 Sample final token structure:');
-        const sample = finalTokens[0];
+      console.log(`🎉 Successfully processed ${tokens.length} application tokens across ${processedUserCount} users`);
+      
+      // Log a sample token for debugging
+      if (tokens.length > 0) {
+        console.log('📝 Sample token structure:');
         console.log(JSON.stringify({
-          clientId: sample.clientId,
-          displayText: sample.displayText,
-          userEmail: sample.userEmail,
-          userSpecificScopes: sample.scopes, // Corrected field name for clarity
-          appTenantAdminScopes: sample.adminScopes, // Corrected field name
-          userDelegatedScopes: sample.userScopes,
-          userAppRoleScopes: sample.appRoleScopes,
-          assignmentType: sample.assignmentType,
-          permissionCount: sample.permissionCount,
+          clientId: tokens[0].clientId,
+          displayText: tokens[0].displayText,
+          userEmail: tokens[0].userEmail,
+          scopes: tokens[0].scopes,
+          adminScopes: tokens[0].adminScopes,
+          userScopes: tokens[0].userScopes, 
+          assignmentType: tokens[0].assignmentType
         }, null, 2));
       }
-      return finalTokens;
+      
+      return tokens;
 
     } catch (error) {
       console.error('❌ Error fetching OAuth tokens:', error);
