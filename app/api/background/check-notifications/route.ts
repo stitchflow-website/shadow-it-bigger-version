@@ -1066,9 +1066,9 @@ async function processMicrosoftEntra(org: any) {
     // Initialize Microsoft Entra service
     console.log(`Initializing Microsoft Entra service for org ${org.id}...`);
     const microsoftService = new MicrosoftWorkspaceService({
-      client_id: process.env.MICROSOFT_CLIENT_ID,
-      client_secret: process.env.MICROSOFT_CLIENT_SECRET,
-      redirect_uri: process.env.MICROSOFT_REDIRECT_URI,
+      clientId: process.env.MICROSOFT_CLIENT_ID!,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
+      tenantId: process.env.MICROSOFT_TENANT_ID!,
     });
     
     // Set the credentials from the latest sync

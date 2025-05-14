@@ -114,9 +114,9 @@ export async function GET(request: NextRequest) {
     // Initialize Microsoft service with credentials
     console.log('🔑 Initializing Microsoft service...');
     const microsoftService = new MicrosoftWorkspaceService({
-      client_id: process.env.MICROSOFT_CLIENT_ID!,
-      client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-      tenant_id: process.env.MICROSOFT_TENANT_ID!
+      clientId: process.env.MICROSOFT_CLIENT_ID!,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
+      tenantId: process.env.MICROSOFT_TENANT_ID!
     });
 
     await microsoftService.setCredentials({

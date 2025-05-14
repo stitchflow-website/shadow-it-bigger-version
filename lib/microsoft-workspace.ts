@@ -74,6 +74,15 @@ export class MicrosoftWorkspaceService {
     this.clientSecret = credentials.clientSecret;
     this.tenantId = credentials.tenantId;
     
+    // Default to 'common' if no tenant ID is provided or it's empty/undefined
+    if (!this.tenantId) {
+      console.warn('No tenant ID provided, defaulting to "organizations"');
+      this.tenantId = 'organizations';
+    }
+    
+    // Log tenant ID for debugging
+    console.log(`Creating Microsoft client with tenant ID: "${this.tenantId}"`);
+    
     this.credential = new ClientSecretCredential(
       this.tenantId,
       this.clientId,
@@ -764,7 +773,8 @@ export class MicrosoftWorkspaceService {
           console.log(`✅ Successfully updated app-user relationship with ${mergedScopes.length} permissions`);
         }
       } else {
-        // If no relationship exists, create a new one
+        console.log(`   ℹ️ Creating new user-application relationship`);
+        // Create new relationship
         const { error: insertError } = await supabaseAdmin
           .from('user_applications')
           .upsert({
@@ -779,8 +789,10 @@ export class MicrosoftWorkspaceService {
 
         if (insertError) {
           console.error('❌ Error creating user-application relationship:', insertError);
+          console.error('   Details:', insertError.details);
+          console.error('   Message:', insertError.message);
         } else {
-          console.log(`✅ Successfully linked app to user with ${token.scopes?.length || 0} permissions`);
+          console.log(`✅ Successfully created app-user relationship with ${token.scopes?.length || 0} permissions`);
         }
       }
     } catch (error) {
@@ -843,4 +855,4 @@ function classifyPermissionRisk(permission: string): 'high' | 'medium' | 'low' {
 
   // Default to low risk
   return 'low';
-} 
+}
