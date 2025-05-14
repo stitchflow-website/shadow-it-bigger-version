@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
     const state = searchParams.get('state');
+    const isFreshSyncFlow = searchParams.get('fresh_sync') === 'true';
     
     if (!code) {
       console.error('No authorization code received from Microsoft');
@@ -490,13 +491,36 @@ export async function GET(request: NextRequest) {
         recentFailedSync.message.includes('failed')))
     );
 
-    // If the user needs a fresh sync, we now need to force fresh consent to ensure
-    // we have all the required permissions, especially if data was deleted
-    if (needsFreshSync) {
-      console.log('Returning user with missing or corrupt data detected, forcing fresh consent');
-      
-      // Return a special error code that will be handled in the frontend
-      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
+    // If we detected missing / corrupt data AND we haven't already started a fresh-sync
+    // consent round-trip, redirect straight to Microsoft consent here (avoids the
+    // dashboard bounce).  When the user comes back we recognise the flow via the
+    // fresh_sync flag and continue normally.
+    if (needsFreshSync && !isFreshSyncFlow) {
+      console.log('Returning user with missing or corrupt data detected – requesting new consent to refresh data');
+
+      const fullScopes = [
+        'User.Read',
+        'offline_access',
+        'openid',
+        'profile',
+        'email',
+        'Directory.Read.All',
+        'Application.Read.All',
+        'DelegatedPermissionGrant.ReadWrite.All',
+        'AppRoleAssignment.ReadWrite.All'
+      ].join(' ');
+
+      const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+      authUrl.searchParams.append('client_id', clientId);
+      authUrl.searchParams.append('redirect_uri', redirectUri);
+      authUrl.searchParams.append('response_type', 'code');
+      authUrl.searchParams.append('scope', fullScopes);
+      authUrl.searchParams.append('response_mode', 'query');
+      authUrl.searchParams.append('prompt', 'consent');
+      authUrl.searchParams.append('state', state || crypto.randomUUID());
+      authUrl.searchParams.append('fresh_sync', 'true');
+
+      return NextResponse.redirect(authUrl);
     }
 
     // If the user and organization already exist with completed sync and no data issues, 
