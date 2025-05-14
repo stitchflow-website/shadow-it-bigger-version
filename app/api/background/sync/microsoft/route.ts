@@ -177,10 +177,8 @@ export async function GET(request: NextRequest) {
     
     // Track unique applications and their users with scopes
     const processedApps = new Map();
-    const userAppScopes = new Map(); // Map to track user-app pairs and their scopes
-    const processedUserApps = new Set(); // Track unique user-app combinations
 
-    // First pass: Group tokens by app and collect all users with their scopes
+    // First pass: Collect all unique apps and their total scopes from tokens
     for (const token of tokens) {
       if (!token.clientId || !token.userEmail) {
         console.log('⚠️ Skipping invalid token:', token);
@@ -188,64 +186,46 @@ export async function GET(request: NextRequest) {
       }
       
       const appId = token.clientId;
-      const userAppKey = `${token.userEmail}-${appId}`;
       
-      // Skip if we've already processed this user-app combination
-      if (processedUserApps.has(userAppKey)) {
-        console.log(`⚠️ Skipping duplicate user-app combination: ${userAppKey}`);
-        continue;
-      }
-      
-      processedUserApps.add(userAppKey);
-      
-      // Initialize or update user-app scopes
-      if (!userAppScopes.has(userAppKey)) {
-        console.log(`📝 Creating new user-app mapping: ${userAppKey}`);
-        userAppScopes.set(userAppKey, {
-          userEmail: token.userEmail,
-          appId: appId,
-          scopes: new Set()
-        });
-      }
-      
-      // Add all scopes (including admin and user consented)
-      const userApp = userAppScopes.get(userAppKey);
-      let scopeCount = 0;
-      token.scopes?.forEach(scope => {
-        userApp.scopes.add(scope);
-        scopeCount++;
-      });
-      token.adminScopes?.forEach(scope => {
-        userApp.scopes.add(scope);
-        scopeCount++;
-      });
-      token.userScopes?.forEach(scope => {
-        userApp.scopes.add(scope);
-        scopeCount++;
-      });
-      token.appRoleScopes?.forEach(scope => {
-        userApp.scopes.add(scope);
-        scopeCount++;
-      });
-
-      console.log(`📊 Added ${scopeCount} scopes for ${userAppKey}`);
-
       // Track unique applications
       if (!processedApps.has(appId)) {
         processedApps.set(appId, {
           id: appId,
           displayText: token.displayText,
-          userCount: 0,
+          users: new Map(), // Map of userEmail -> {scopes, highRiskCount, mediumRiskCount}
           allScopes: new Set()
         });
       }
       
-      // Update app scopes
+      // Update app scopes with all possible scopes
       const app = processedApps.get(appId);
       token.scopes?.forEach(scope => app.allScopes.add(scope));
-      token.adminScopes?.forEach(scope => app.allScopes.add(scope));
-      token.userScopes?.forEach(scope => app.allScopes.add(scope));
-      token.appRoleScopes?.forEach(scope => app.allScopes.add(scope));
+      
+      // Add user to this app with their specific permissions
+      if (!app.users.has(token.userEmail)) {
+        app.users.set(token.userEmail, {
+          scopes: new Set(),
+          highRiskCount: 0,
+          mediumRiskCount: 0
+        });
+      }
+      
+      // Add the specific scopes this user has for this app
+      const userScopes = app.users.get(token.userEmail);
+      
+      if (token.scopes && Array.isArray(token.scopes)) {
+        token.scopes.forEach(scope => {
+          userScopes.scopes.add(scope);
+          
+          // Count risk levels for this user's permissions
+          const riskLevel = classifyPermissionRisk(scope);
+          if (riskLevel === 'high') {
+            userScopes.highRiskCount++;
+          } else if (riskLevel === 'medium') {
+            userScopes.mediumRiskCount++;
+          }
+        });
+      }
     }
 
     // Second pass: Process each application
@@ -289,7 +269,7 @@ export async function GET(request: NextRequest) {
             management_status: existingApp?.management_status || 'NEEDS_REVIEW',
             total_permissions: allAppScopes.length,
             all_scopes: allAppScopes,
-            user_count: Array.from(userAppScopes.values()).filter(ua => ua.appId === appId).length,
+            user_count: appInfo.users.size,
             updated_at: new Date().toISOString()
           } as Application)
           .select()
@@ -300,13 +280,25 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        // Create user-application relationships
-        const appUsers = Array.from(userAppScopes.values()).filter(ua => ua.appId === appId);
-        for (const userApp of appUsers) {
-          await createUserAppRelationship(newApp.id, {
-            userEmail: userApp.userEmail,
-            scopes: Array.from(userApp.scopes)
-          }, syncRecord.organization_id);
+        // Create user-application relationships with accurate risk levels
+        for (const [userEmail, userInfo] of appInfo.users.entries()) {
+          // Determine user-specific risk level based on their actual permissions
+          let userRiskLevel = 'LOW';
+          if (userInfo.highRiskCount > 0) {
+            userRiskLevel = 'HIGH';
+          } else if (userInfo.mediumRiskCount > 0) {
+            userRiskLevel = 'MEDIUM';
+          }
+          
+          await createUserAppRelationship(
+            newApp.id, 
+            {
+              userEmail: userEmail,
+              scopes: Array.from(userInfo.scopes),
+              riskLevel: userRiskLevel // Pass the user's specific risk level
+            }, 
+            syncRecord.organization_id
+          );
         }
 
         // Handle categorization if needed
@@ -484,6 +476,7 @@ async function createUserAppRelationship(appId: string, token: any, organization
     // Store the user-application relationship with permissions (scopes)
     console.log(`📝 Storing permissions for user ${token.userEmail} and app ${token.displayText || appId}`);
     console.log(`   Scopes: ${token.scopes ? JSON.stringify(token.scopes) : 'None'}`);
+    console.log(`   Risk Level: ${token.riskLevel || 'Not specified'}`);
     
     if (existingRelationship) {
       console.log(`   ℹ️ Found existing relationship, updating scopes`);
@@ -495,6 +488,7 @@ async function createUserAppRelationship(appId: string, token: any, organization
         .from('user_applications')
         .update({
           scopes: mergedScopes,
+          risk_level: token.riskLevel || 'LOW', // Store the user-specific risk level
           updated_at: new Date().toISOString()
         })
         .eq('id', existingRelationship.id);
@@ -502,7 +496,7 @@ async function createUserAppRelationship(appId: string, token: any, organization
       if (updateError) {
         console.error('❌ Error updating user-application relationship:', updateError);
       } else {
-        console.log(`✅ Successfully updated app-user relationship with ${mergedScopes.length} permissions`);
+        console.log(`✅ Successfully updated app-user relationship with ${mergedScopes.length} permissions and risk level ${token.riskLevel || 'LOW'}`);
       }
     } else {
       console.log(`   ℹ️ Creating new user-application relationship`);
@@ -513,6 +507,7 @@ async function createUserAppRelationship(appId: string, token: any, organization
           user_id: userData.id,
           application_id: appId,
           scopes: token.scopes || [],
+          risk_level: token.riskLevel || 'LOW', // Store the user-specific risk level
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'user_id,application_id',
@@ -524,7 +519,7 @@ async function createUserAppRelationship(appId: string, token: any, organization
         console.error('   Details:', insertError.details);
         console.error('   Message:', insertError.message);
       } else {
-        console.log(`✅ Successfully created app-user relationship with ${token.scopes?.length || 0} permissions`);
+        console.log(`✅ Successfully created app-user relationship with ${token.scopes?.length || 0} permissions and risk level ${token.riskLevel || 'LOW'}`);
       }
     }
   } catch (error) {
