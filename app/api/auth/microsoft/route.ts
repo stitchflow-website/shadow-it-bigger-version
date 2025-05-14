@@ -172,7 +172,6 @@ export async function GET(request: NextRequest) {
           email: userData.userPrincipalName,
           started_at: new Date().toISOString(),
           completed_consent: false,
-          auth_provider: 'microsoft'
         }, { 
           onConflict: 'email' 
         })
