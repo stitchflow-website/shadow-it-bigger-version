@@ -129,21 +129,29 @@ export async function GET(request: NextRequest) {
       .single();
 
     // Check if we've already processed this user in an auth flow (to prevent loops)
-    const { data: flowState } = await supabaseAdmin
+    const { data: flowState, error: flowStateError } = await supabaseAdmin
       .from('auth_flow_state')
       .select('completed_consent')
       .eq('email', userData.userPrincipalName)
       .single();
+      
+    if (flowStateError && flowStateError.code !== 'PGRST116') { // PGRST116 is "not found" error
+      console.error('Error checking auth flow state:', flowStateError);
+    }
 
     // If flowState is null, it means this user doesn't exist in auth_flow_state table
     const hasCompletedConsent = flowState?.completed_consent === true;
     const needsFullConsent = !flowState || !hasCompletedConsent;
+    
+    // Check if this is a redirect back from Microsoft after requesting consent
+    const wasConsentRequested = consentRequested || searchParams.get('consent_complete') === 'true';
     
     console.log('7. Auth flow check:', { 
       email: userData.userPrincipalName, 
       hasCompletedConsent, 
       needsFullConsent,
       flowStateExists: !!flowState,
+      wasConsentRequested,
       hasRefreshToken: !!refresh_token,
       isNewUser: !existingUser
     });
@@ -154,11 +162,11 @@ export async function GET(request: NextRequest) {
     // 2. User doesn't exist in auth_flow_state OR hasn't completed consent flow AND
     // 3. Either no refresh token OR force_reconsent parameter is present
     const forceReconsent = searchParams.get('force_reconsent') === 'true';
-    if (((!existingUser || needsFullConsent) && !refresh_token) || forceReconsent || !flowState) {
-      console.log('8. Requesting full permissions - New user:', !existingUser, 'Needs full consent:', needsFullConsent, 'Force reconsent:', forceReconsent);
+    if (((!existingUser || needsFullConsent) && !refresh_token) || forceReconsent || (!flowState && !wasConsentRequested)) {
+      console.log('8. Requesting full permissions - New user:', !existingUser, 'Needs full consent:', needsFullConsent, 'Force reconsent:', forceReconsent, 'Consent requested:', wasConsentRequested);
       
       // First, mark that we've started the consent flow for this user
-      await supabaseAdmin
+      const { data: flowStateData, error: flowStateError } = await supabaseAdmin
         .from('auth_flow_state')
         .upsert({
           email: userData.userPrincipalName,
@@ -167,7 +175,14 @@ export async function GET(request: NextRequest) {
           auth_provider: 'microsoft'
         }, { 
           onConflict: 'email' 
-        });
+        })
+        .select();
+        
+      if (flowStateError) {
+        console.error('Error creating auth flow state record:', flowStateError);
+      } else {
+        console.log('Created auth flow state record for:', userData.userPrincipalName);
+      }
 
       // Define full permission scopes needed for the application
       const fullScopes = [
@@ -196,14 +211,28 @@ export async function GET(request: NextRequest) {
       authUrl.searchParams.append('state', state || crypto.randomUUID());
       // Add flag to indicate we've requested consent
       authUrl.searchParams.append('consent_requested', 'true');
+      authUrl.searchParams.append('consent_complete', 'true');
 
       console.log('9. Redirecting for full permissions with URL:', authUrl.toString());
       return NextResponse.redirect(authUrl);
     }
 
     // If we got this far with a refresh token, mark the consent as completed
-    if (refresh_token && !hasCompletedConsent) {
-      await supabaseAdmin
+    if (refresh_token && (needsFullConsent || wasConsentRequested)) {
+      // Double-check if the auth flow state exists after being redirected from Microsoft
+      if (!flowState) {
+        console.log('Auth flow state not found, creating new record before marking as completed');
+        await supabaseAdmin
+          .from('auth_flow_state')
+          .insert({
+            email: userData.userPrincipalName,
+            started_at: new Date().toISOString(),
+            auth_provider: 'microsoft'
+          });
+      }
+      
+      // Now update/mark it as completed
+      const { data: updatedFlow, error: updateError } = await supabaseAdmin
         .from('auth_flow_state')
         .upsert({
           email: userData.userPrincipalName,
@@ -212,9 +241,14 @@ export async function GET(request: NextRequest) {
           auth_provider: 'microsoft'
         }, { 
           onConflict: 'email' 
-        });
+        })
+        .select();
       
-      console.log('10. Marked consent flow as completed for:', userData.userPrincipalName);
+      if (updateError) {
+        console.error('Error updating auth flow state:', updateError);
+      } else {
+        console.log('10. Marked consent flow as completed for:', userData.userPrincipalName, updatedFlow);
+      }
     }
 
     // Check if it's a work/school account by looking for onPremisesSamAccountName
