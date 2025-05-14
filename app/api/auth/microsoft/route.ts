@@ -46,7 +46,9 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
     const state = searchParams.get('state');
-    const isFreshSyncFlow = searchParams.get('fresh_sync') === 'true';
+    // If the state string contains "|freshsync" it means we are returning from a
+    // consent round-trip that was triggered to refresh corrupted/missing data.
+    const isFreshSyncFlow = (state && state.includes('|freshsync'));
     
     if (!code) {
       console.error('No authorization code received from Microsoft');
@@ -140,7 +142,9 @@ export async function GET(request: NextRequest) {
       authUrl.searchParams.append('scope', fullScopes);
       authUrl.searchParams.append('response_mode', 'query');
       authUrl.searchParams.append('prompt', 'consent');
-      authUrl.searchParams.append('state', state || crypto.randomUUID());
+      // Append a marker to the state so we can recognise the return leg.
+      const newState = `${state || crypto.randomUUID()}|freshsync`;
+      authUrl.searchParams.append('state', newState);
       authUrl.searchParams.append('consent_requested', 'true');
 
       return NextResponse.redirect(authUrl);
@@ -517,8 +521,9 @@ export async function GET(request: NextRequest) {
       authUrl.searchParams.append('scope', fullScopes);
       authUrl.searchParams.append('response_mode', 'query');
       authUrl.searchParams.append('prompt', 'consent');
-      authUrl.searchParams.append('state', state || crypto.randomUUID());
-      authUrl.searchParams.append('fresh_sync', 'true');
+      // Append a marker to the state so we can recognise the return leg.
+      const newState = `${state || crypto.randomUUID()}|freshsync`;
+      authUrl.searchParams.append('state', newState);
 
       return NextResponse.redirect(authUrl);
     }
