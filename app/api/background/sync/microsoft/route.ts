@@ -476,7 +476,7 @@ async function createUserAppRelationship(appId: string, token: any, organization
     // Store the user-application relationship with permissions (scopes)
     console.log(`📝 Storing permissions for user ${token.userEmail} and app ${token.displayText || appId}`);
     console.log(`   Scopes: ${token.scopes ? JSON.stringify(token.scopes) : 'None'}`);
-    console.log(`   Risk Level: ${token.riskLevel || 'Not specified'}`);
+    console.log(`   Risk Level: ${token.riskLevel || 'Not specified'} (for tracking only, not stored)`);
     
     if (existingRelationship) {
       console.log(`   ℹ️ Found existing relationship, updating scopes`);
@@ -488,7 +488,6 @@ async function createUserAppRelationship(appId: string, token: any, organization
         .from('user_applications')
         .update({
           scopes: mergedScopes,
-          risk_level: token.riskLevel || 'LOW', // Store the user-specific risk level
           updated_at: new Date().toISOString()
         })
         .eq('id', existingRelationship.id);
@@ -496,7 +495,7 @@ async function createUserAppRelationship(appId: string, token: any, organization
       if (updateError) {
         console.error('❌ Error updating user-application relationship:', updateError);
       } else {
-        console.log(`✅ Successfully updated app-user relationship with ${mergedScopes.length} permissions and risk level ${token.riskLevel || 'LOW'}`);
+        console.log(`✅ Successfully updated app-user relationship with ${mergedScopes.length} permissions`);
       }
     } else {
       console.log(`   ℹ️ Creating new user-application relationship`);
@@ -507,7 +506,6 @@ async function createUserAppRelationship(appId: string, token: any, organization
           user_id: userData.id,
           application_id: appId,
           scopes: token.scopes || [],
-          risk_level: token.riskLevel || 'LOW', // Store the user-specific risk level
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'user_id,application_id',
@@ -519,7 +517,7 @@ async function createUserAppRelationship(appId: string, token: any, organization
         console.error('   Details:', insertError.details);
         console.error('   Message:', insertError.message);
       } else {
-        console.log(`✅ Successfully created app-user relationship with ${token.scopes?.length || 0} permissions and risk level ${token.riskLevel || 'LOW'}`);
+        console.log(`✅ Successfully created app-user relationship with ${token.scopes?.length || 0} permissions`);
       }
     }
   } catch (error) {
