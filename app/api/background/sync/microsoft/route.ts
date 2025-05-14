@@ -109,12 +109,29 @@ export async function GET(request: NextRequest) {
       status: syncRecord.status
     });
 
+    console.log(process.env.MICROSOFT_TENANT_ID)
     // Initialize Microsoft service with credentials
     console.log('🔑 Initializing Microsoft service...');
+
+    const tenantId = process.env.MICROSOFT_TENANT_ID;
+    if (!tenantId || tenantId === 'common') { // Also explicitly disallow 'common' for client secret flow
+      console.error('❌ CRITICAL: MICROSOFT_TENANT_ID is not set or is invalid for background sync. Please provide a specific tenant ID.');
+      // Optionally, update sync status to reflect this critical configuration error
+      if (syncRecord?.id) {
+        await updateSyncStatus(
+          syncRecord.id,
+          0,
+          'Configuration error: MICROSOFT_TENANT_ID is missing or invalid for background sync.',
+          'FAILED'
+        );
+      }
+      return NextResponse.json({ error: 'Configuration error: MICROSOFT_TENANT_ID is missing for background sync.' }, { status: 500 });
+    }
+
     const microsoftService = new MicrosoftWorkspaceService({
       client_id: process.env.MICROSOFT_CLIENT_ID!,
       client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-      tenant_id: process.env.MICROSOFT_TENANT_ID || 'common'
+      tenant_id: tenantId // Use the validated tenantId
     });
 
     await microsoftService.setCredentials({
