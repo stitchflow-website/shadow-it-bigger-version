@@ -220,7 +220,7 @@ export default function ShadowITDashboard() {
     if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1'))) {
       redirectURI = `${window.location.origin}/tools/shadow-it-scan/api/auth/microsoft/callback`;
     } else {
-      redirectURI = `https://stitchflow.com/tools/shadow-it-scan/api/auth/microsoft`;
+      redirectURI = `https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft`;
     }
     
     const scopes = [
