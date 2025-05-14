@@ -109,29 +109,39 @@ export async function GET(request: NextRequest) {
       status: syncRecord.status
     });
 
-    console.log(process.env.MICROSOFT_TENANT_ID)
-    // Initialize Microsoft service with credentials
-    console.log('🔑 Initializing Microsoft service...');
-
-    const tenantId = process.env.MICROSOFT_TENANT_ID;
-    if (!tenantId || tenantId === 'common') { // Also explicitly disallow 'common' for client secret flow
-      console.error('❌ CRITICAL: MICROSOFT_TENANT_ID is not set or is invalid for background sync. Please provide a specific tenant ID.');
-      // Optionally, update sync status to reflect this critical configuration error
-      if (syncRecord?.id) {
-        await updateSyncStatus(
-          syncRecord.id,
-          0,
-          'Configuration error: MICROSOFT_TENANT_ID is missing or invalid for background sync.',
-          'FAILED'
-        );
+    // Check if user has completed the consent flow
+    const userEmail = syncRecord.user_email;
+    if (userEmail) {
+      const { data: flowState } = await supabaseAdmin
+        .from('auth_flow_state')
+        .select('completed_consent')
+        .eq('email', userEmail)
+        .eq('auth_provider', 'microsoft')
+        .single();
+        
+      if (!flowState?.completed_consent) {
+        console.log('⚠️ User has not completed consent flow yet. Waiting for full permissions.');
+        
+        // Update sync message but keep status as IN_PROGRESS to try again later
+        await updateSyncStatus(syncRecord.id, 5, 'Waiting for complete permissions from Microsoft...');
+        
+        // Return non-error response but indicate we're waiting
+        return NextResponse.json({ 
+          message: 'Waiting for user to complete permission consent flow',
+          sync_id: syncRecord.id,
+          status: 'WAITING_FOR_CONSENT'
+        });
       }
-      return NextResponse.json({ error: 'Configuration error: MICROSOFT_TENANT_ID is missing for background sync.' }, { status: 500 });
+      
+      console.log('✅ User has completed consent flow with full permissions');
     }
 
+    // Initialize Microsoft service with credentials
+    console.log('🔑 Initializing Microsoft service...');
     const microsoftService = new MicrosoftWorkspaceService({
       client_id: process.env.MICROSOFT_CLIENT_ID!,
       client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-      tenant_id: tenantId // Use the validated tenantId
+      tenant_id: process.env.MICROSOFT_TENANT_ID || 'common'
     });
 
     await microsoftService.setCredentials({

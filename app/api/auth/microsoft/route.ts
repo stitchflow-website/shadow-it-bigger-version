@@ -42,10 +42,12 @@ async function isValidSession(sessionId: string | undefined): Promise<boolean> {
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('1. Starting Microsoft OAuth callback...');
     // Get authorization code from query params
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
     const state = searchParams.get('state');
+    const consentRequested = searchParams.get('consent_requested') === 'true';
     
     if (!code) {
       console.error('No authorization code received from Microsoft');
@@ -71,9 +73,9 @@ export async function GET(request: NextRequest) {
       redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
     }
     
-    console.log('Using redirect URI for token exchange:', redirectUri);
+    console.log('2. Using redirect URI for token exchange:', redirectUri);
 
-    console.log('Exchanging code for tokens...');
+    console.log('3. Exchanging code for tokens...');
     // Exchange authorization code for tokens
     const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
       method: 'POST',
@@ -97,10 +99,14 @@ export async function GET(request: NextRequest) {
 
     const tokenData = await tokenResponse.json();
     const { access_token, refresh_token, id_token } = tokenData;
-    console.log('Tokens received successfully');
+    console.log('4. Tokens received successfully:', {
+      access_token: access_token ? 'present' : 'missing',
+      refresh_token: refresh_token ? 'present' : 'missing',
+      id_token: id_token ? 'present' : 'missing'
+    });
     
     // Get user info using the access token
-    console.log('Fetching user data...');
+    console.log('5. Fetching user data...');
     const userResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
       headers: {
         'Authorization': `Bearer ${access_token}`,
@@ -113,116 +119,97 @@ export async function GET(request: NextRequest) {
     }
 
     const userData = await userResponse.json();
-    console.log('Microsoft user data:', userData);
+    console.log('6. Microsoft user data:', userData);
     
-    // === REFINED DYNAMIC SCOPE LOGIC START ===
+    // Check if user already exists in our system
+    const { data: existingUser } = await supabaseAdmin
+      .from('users_signedup')
+      .select('id, email')
+      .eq('email', userData.userPrincipalName)
+      .single();
 
-    const { data: flowStateBeforeThisCallback } = await supabaseAdmin
+    // Check if we've already processed this user in an auth flow (to prevent loops)
+    const { data: flowState } = await supabaseAdmin
       .from('auth_flow_state')
       .select('completed_consent')
       .eq('email', userData.userPrincipalName)
-      .eq('provider', 'microsoft')
       .single();
+
+    const hasCompletedConsent = flowState?.completed_consent === true;
     
-    const hasCompletedAdminConsentInDbInitially = flowStateBeforeThisCallback?.completed_consent === true;
-    let justCompletedAdminConsentRedirect = false;
-
-    // If we got a refresh token NOW, and the DB state from BEFORE this callback showed admin consent was NOT completed,
-    // it strongly implies the user just successfully came back from the admin consent redirect we initiated.
-    if (refresh_token && flowStateBeforeThisCallback?.completed_consent === false) {
-      await supabaseAdmin
-        .from('auth_flow_state')
-        .upsert({
-          email: userData.userPrincipalName,
-          provider: 'microsoft',
-          completed_consent: true, // Mark as fully completed
-          completed_at: new Date().toISOString()
-        }, { 
-          onConflict: 'email,provider' 
-        });
-      console.log('Marked Microsoft admin consent flow as completed in DB for:', userData.userPrincipalName);
-      justCompletedAdminConsentRedirect = true; // Flag that we just updated the consent state
-    }
-
-    // Now, re-evaluate if we still need to send for admin consent.
-    // This check should only trigger if the consent wasn't completed in a *previous* session AND we didn't *just* complete it.
-    const shouldRedirectForAdminConsent = !hasCompletedAdminConsentInDbInitially && !justCompletedAdminConsentRedirect;
-
-    console.log('Microsoft Auth flow check:', { 
+    console.log('7. Auth flow check:', { 
       email: userData.userPrincipalName, 
-      hasCompletedAdminConsentInDbInitially,
-      initialRefreshTokenPresentThisCallback: !!refresh_token,
-      justCompletedAdminConsentRedirect,
-      shouldRedirectForAdminConsent
+      hasCompletedConsent, 
+      hasRefreshToken: !!refresh_token,
+      isNewUser: !existingUser
     });
 
-    if (shouldRedirectForAdminConsent) {
-      console.log('Requesting Microsoft admin scopes - User needs to complete full admin consent flow as per DB (and did not just return from it).');
+    // If we don't have a refresh token or need to request admin permissions
+    // We check for:
+    // 1. New user (not in DB) OR
+    // 2. Haven't completed consent flow AND
+    // 3. Don't have a refresh token (which indicates limited permissions)
+    if ((!existingUser || !hasCompletedConsent) && !refresh_token && !consentRequested) {
+      console.log('8. Requesting full permissions - New user:', !existingUser, 'Has completed consent:', hasCompletedConsent);
       
-      // Update started_at or ensure the record exists if this is the first attempt
+      // First, mark that we've started the consent flow for this user
       await supabaseAdmin
         .from('auth_flow_state')
         .upsert({
           email: userData.userPrincipalName,
-          provider: 'microsoft',
           started_at: new Date().toISOString(),
-          completed_consent: false 
+          completed_consent: false,
+          auth_provider: 'microsoft'
         }, { 
-          onConflict: 'email,provider'
+          onConflict: 'email' 
         });
 
-      const adminScopes = [
-        'User.Read.All',
+      // Define full permission scopes needed for the application
+      const fullScopes = [
+        'User.Read',
         'Directory.Read.All',
         'Application.Read.All',
-        'AuditLog.Read.All',
+        'DelegatedPermissionGrant.ReadWrite.All',
+        'AppRoleAssignment.ReadWrite.All',
         'offline_access',
-        'openid', 'profile', 'email'
+        'openid',
+        'profile',
+        'email'
       ].join(' ');
 
-      let authRedirectUri = process.env.MICROSOFT_REDIRECT_URI;
-      if (process.env.NODE_ENV === 'development') {
-        authRedirectUri = `${request.nextUrl.origin}/api/auth/microsoft`;
-      } else {
-        authRedirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
-      }
-
+      // Create a direct URL to Microsoft's auth/consent endpoint for the full permissions
       const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
-      authUrl.searchParams.append('client_id', clientId!);
-      authUrl.searchParams.append('redirect_uri', authRedirectUri!);
+      authUrl.searchParams.append('client_id', clientId);
+      authUrl.searchParams.append('redirect_uri', redirectUri);
       authUrl.searchParams.append('response_type', 'code');
-      authUrl.searchParams.append('scope', adminScopes);
-      authUrl.searchParams.append('prompt', 'consent'); 
+      authUrl.searchParams.append('scope', fullScopes);
+      authUrl.searchParams.append('response_mode', 'query');
+      // Force consent to ensure we get refresh token
+      authUrl.searchParams.append('prompt', 'consent');
+      // Pre-select the account with the login_hint
       authUrl.searchParams.append('login_hint', userData.userPrincipalName);
       authUrl.searchParams.append('state', state || crypto.randomUUID());
-      
-      console.log('Redirecting for Microsoft admin scopes with URL:', authUrl.toString());
+      // Add flag to indicate we've requested consent
+      authUrl.searchParams.append('consent_requested', 'true');
+
+      console.log('9. Redirecting for full permissions with URL:', authUrl.toString());
       return NextResponse.redirect(authUrl);
     }
-    
-    // === REFINED DYNAMIC SCOPE LOGIC END ===
 
-    // Fallback check for missing refresh token AFTER consent should have been completed.
-    // `hasCompletedAdminConsentInDbInitially` reflects state from before this callback.
-    // `justCompletedAdminConsentRedirect` tells us if we just set it to true.
-    // So, if (hasCompletedAdminConsentInDbInitially || justCompletedAdminConsentRedirect) is true, consent *should* be complete.
-    if ((hasCompletedAdminConsentInDbInitially || justCompletedAdminConsentRedirect) && !refresh_token) {
-      console.warn('Admin consent should be completed, but no refresh token received. Checking valid session.');
+    // If we got this far with a refresh token, mark the consent as completed
+    if (refresh_token && !hasCompletedConsent) {
+      await supabaseAdmin
+        .from('auth_flow_state')
+        .upsert({
+          email: userData.userPrincipalName,
+          completed_consent: true,
+          completed_at: new Date().toISOString(),
+          auth_provider: 'microsoft'
+        }, { 
+          onConflict: 'email' 
+        });
       
-      const sessionIdFromCookie = request.cookies.get('shadow_session_id')?.value;
-      const hasValidSession = await isValidSession(sessionIdFromCookie);
-      
-      if (hasValidSession) {
-        console.log('Found valid Microsoft session. Proceeding, but background sync might fail if refresh token is truly unobtainable.');
-      } else {
-        console.log('No valid Microsoft session and no refresh token, despite consent completion. Data refresh likely required.');
-        return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=data_refresh_required', request.url));
-      }
-    } else if (!refresh_token) {
-        // This case implies consent was not completed and we still don't have a refresh token,
-        // and for some reason, the redirect logic above didn't trigger.
-        console.warn('No refresh token and admin consent not marked as completed. This path should be rare if redirect logic is correct.');
-        return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=auth_flow_error_unexpected', request.url));
+      console.log('10. Marked consent flow as completed for:', userData.userPrincipalName);
     }
 
     // Check if it's a work/school account by looking for onPremisesSamAccountName
@@ -262,6 +249,8 @@ export async function GET(request: NextRequest) {
     }
     
     // Check if user is an admin by checking directory roles
+    // This check should only be performed after we've obtained proper permissions
+    console.log('11. Checking if user is an admin...');
     let isAdmin = false;
     
     try {
@@ -300,6 +289,8 @@ export async function GET(request: NextRequest) {
         // If we can successfully list users, the user is an admin
         isAdmin = listUsersResponse.ok;
       }
+      
+      console.log('12. Admin check result:', isAdmin ? 'User is an admin' : 'User is not an admin');
     } catch (err: unknown) {
       console.error('Error checking admin status:', err);
     }
@@ -337,18 +328,18 @@ export async function GET(request: NextRequest) {
     }
 
     // First check if user exists
-    const { data: existingUser } = await supabaseAdmin
+    const { data: existingUserCheck } = await supabaseAdmin
       .from('users_signedup')
       .select('id')
       .eq('email', userData.userPrincipalName)
       .single();
       
     // Flag to track if this is a new user
-    const isNewUser = !existingUser;
+    const isNewUser = !existingUserCheck;
 
     // Create or update user in users_signedup
     const userToUpsert = {
-      id: existingUser?.id, // Include ID if user exists
+      id: existingUserCheck?.id, // Include ID if user exists
       email: userData.userPrincipalName,
       name: userData.displayName,
       avatar_url: userData.photo || null,

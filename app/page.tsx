@@ -2002,12 +2002,13 @@ export default function ShadowITDashboard() {
         
         console.log('Using redirectUri:', redirectUri);
         
+        // Use minimal scopes initially - just enough to identify the user
         const scopes = [
           'User.Read',
+          'offline_access',
           'openid',
           'profile',
-          'email',
-          'offline_access'
+          'email'
         ].join(' ');
 
         // Generate a state parameter to verify the response and enable cross-browser detection
