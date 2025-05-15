@@ -1526,10 +1526,81 @@ export default function ShadowITDashboard() {
     )
   }
 
-  // Update the RiskBadge component to handle uppercase and lowercase 
-  function RiskBadge({ level }: { level: string }) {
+  // Update RiskBadge component to determine correct risk level from the user's scopes
+  function RiskBadge({ level, scopes }: { level: string, scopes?: string[] }) {
+    // If scopes are provided, recalculate the risk level directly
+    let calculatedLevel = level;
+    
+    if (scopes && Array.isArray(scopes) && scopes.length > 0) {
+      // Check for high risk scopes first
+      const hasHighRiskScope = scopes.some(scope => {
+        return [
+          // Google high risk scopes
+          'https://www.googleapis.com/auth/admin.directory.user',
+          'https://www.googleapis.com/auth/admin.directory.group',
+          'https://www.googleapis.com/auth/admin.directory.user.security',
+          'https://mail.google.com/',
+          'https://www.googleapis.com/auth/gmail',
+          'https://www.googleapis.com/auth/drive',
+          'https://www.googleapis.com/auth/cloud-platform',
+          // Microsoft high risk scopes - exact matches
+          'Application.ReadWrite.All',
+          'User.ReadWrite.All',
+          'Group.ReadWrite.All',
+          'Directory.ReadWrite.All',
+          'Mail.ReadWrite',
+          'Mail.ReadWrite.All',
+          'Mail.Send',
+          'Files.ReadWrite.All',
+          'Sites.ReadWrite.All',
+          'MailboxSettings.ReadWrite'
+        ].includes(scope) ||
+        // Check for Microsoft patterns
+        scope.endsWith('.ReadWrite.All') || 
+        scope.endsWith('.ReadWrite') ||
+        scope.includes('FullControl') ||
+        scope.includes('Write.All')
+      });
+
+      if (hasHighRiskScope) {
+        calculatedLevel = 'High';
+      } else {
+        // Check for medium risk scopes
+        const hasMediumRiskScope = scopes.some(scope => {
+          return [
+            // Google medium risk scopes
+            'https://www.googleapis.com/auth/admin.directory.user.readonly',
+            'https://www.googleapis.com/auth/admin.directory.group.readonly',
+            'https://www.googleapis.com/auth/calendar',
+            'https://www.googleapis.com/auth/contacts',
+            // Microsoft medium risk scopes
+            'Application.Read.All',
+            'Directory.Read.All',
+            'Group.Read.All',
+            'User.Read.All',
+            'Files.Read.All',
+            'Mail.Read',
+            'Mail.Read.All',
+            'Sites.Read.All',
+            'AuditLog.Read.All',
+            'Reports.Read.All'
+          ].includes(scope) ||
+          // Check for Microsoft patterns
+          scope.endsWith('.Read.All') ||
+          scope.includes('Reports.Read') ||
+          scope.includes('AuditLog.Read')
+        });
+
+        if (hasMediumRiskScope) {
+          calculatedLevel = 'Medium';
+        } else {
+          calculatedLevel = 'Low';
+        }
+      }
+    }
+    
     // Normalize the level to ensure consistent casing
-    const normalizedLevel = level.charAt(0).toUpperCase() + level.slice(1).toLowerCase();
+    const normalizedLevel = calculatedLevel.charAt(0).toUpperCase() + calculatedLevel.slice(1).toLowerCase();
     
     const iconMap: Record<string, JSX.Element> = {
       Low: <CheckCircle className="h-5 w-5 mr-1 text-green-700" />,
@@ -3465,7 +3536,7 @@ export default function ShadowITDashboard() {
                                         <Tooltip delayDuration={300}>
                                           <TooltipTrigger asChild>
                                             <div className="flex items-center ml-4">
-                                              <RiskBadge level={user.riskLevel} />
+                                              <RiskBadge level={user.riskLevel} scopes={user.scopes} />
                                             </div>
                                           </TooltipTrigger>
                                           <TooltipContent side="right" className="p-2">
