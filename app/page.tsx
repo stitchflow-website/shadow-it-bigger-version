@@ -2092,6 +2092,73 @@ export default function ShadowITDashboard() {
     // No action needed - just having this dependency will cause charts to re-render
   }, [appCategories, mainView]);
 
+  // Helper function to determine risk level based on scopes
+  function determineRiskLevel(scopes: string[] | null | undefined): 'HIGH' | 'MEDIUM' | 'LOW' {
+    // If no scopes provided, default to LOW
+    if (!scopes || !Array.isArray(scopes) || scopes.length === 0) {
+      return 'LOW';
+    }
+
+    const highRiskScopes = [
+      // Google high risk scopes
+      'https://www.googleapis.com/auth/admin.directory.user',
+      'https://www.googleapis.com/auth/admin.directory.group',
+      'https://www.googleapis.com/auth/admin.directory.user.security',
+      'https://mail.google.com/',
+      'https://www.googleapis.com/auth/gmail',
+      'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/cloud-platform',
+      // Microsoft high risk scopes
+      'ReadWrite.All',
+      'Write.All',
+      '.ReadWrite',
+      '.Write',
+      'FullControl.All',
+      'AccessAsUser.All',
+      'Directory.ReadWrite',
+      'Files.ReadWrite',
+      'Mail.ReadWrite',
+      'Mail.Send',
+      'Group.ReadWrite',
+      'User.ReadWrite',
+      'Application.ReadWrite',
+      'Sites.FullControl',
+      'User.Export',
+      'User.Invite',
+      'User.ManageIdentities',
+      'User.EnableDisableAccount',
+      'DelegatedPermissionGrant.ReadWrite'
+    ];
+
+    const mediumRiskScopes = [
+      // Google medium risk scopes
+      'https://www.googleapis.com/auth/admin.directory.user.readonly',
+      'https://www.googleapis.com/auth/admin.directory.group.readonly',
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/contacts',
+      // Microsoft medium risk scopes
+      'Read.All',
+      '.Read',
+      'Directory.Read',
+      'Files.Read',
+      'User.Read.All',
+      'Mail.Read',
+      'AuditLog.Read',
+      'Reports.Read',
+      'Sites.Read'
+    ];
+
+    if (scopes.some(scope => highRiskScopes.some(highRiskScope => scope.includes(highRiskScope)))) {
+      return 'HIGH';
+    }
+
+    if (scopes.some(scope => mediumRiskScopes.some(mediumRiskScope => scope.includes(mediumRiskScope)))) {
+      return 'MEDIUM';
+    }
+
+    return 'LOW';
+  }
+
   return (
     <div className="mx-auto font-sans text-gray-900 bg-[#FAF8FA]">
 
@@ -3404,23 +3471,55 @@ export default function ShadowITDashboard() {
                                           let riskColor = "#81C784"; // Default green for low risk
                                           let riskStatus = "Low-Risk Scopes";
                                           
-                                          // Check for high risk scopes first (from HIGH_RISK_SCOPES in risk-assessment.ts)
+                                          // Check for high risk scopes first (both Google and Microsoft)
                                           const isHighRisk = [
+                                            // Google high risk scopes
                                             'admin',
                                             'admin.directory.user',
                                             'admin.directory.group',
                                             'admin.directory.user.security',
                                             'gmail',
                                             'drive',
-                                            'cloud-platform'
+                                            'cloud-platform',
+                                            // Microsoft high risk scopes
+                                            'ReadWrite.All',
+                                            'Write.All',
+                                            '.ReadWrite',
+                                            '.Write',
+                                            'FullControl.All',
+                                            'AccessAsUser.All',
+                                            'Directory.ReadWrite',
+                                            'Files.ReadWrite',
+                                            'Mail.ReadWrite',
+                                            'Mail.Send',
+                                            'Group.ReadWrite',
+                                            'User.ReadWrite',
+                                            'Application.ReadWrite',
+                                            'Sites.FullControl',
+                                            'User.Export',
+                                            'User.Invite',
+                                            'User.ManageIdentities',
+                                            'User.EnableDisableAccount',
+                                            'DelegatedPermissionGrant.ReadWrite'
                                           ].some(highRiskScope => scope.includes(highRiskScope));
                                           
-                                          // Check for medium risk scopes (from MEDIUM_RISK_SCOPES in risk-assessment.ts)
+                                          // Check for medium risk scopes (both Google and Microsoft)
                                           const isMediumRisk = [
+                                            // Google medium risk scopes
                                             'admin.directory.user.readonly',
                                             'admin.directory.group.readonly',
                                             'calendar',
-                                            'contacts'
+                                            'contacts',
+                                            // Microsoft medium risk scopes
+                                            'Read.All',
+                                            '.Read',
+                                            'Directory.Read',
+                                            'Files.Read',
+                                            'User.Read.All',
+                                            'Mail.Read',
+                                            'AuditLog.Read',
+                                            'Reports.Read',
+                                            'Sites.Read'
                                           ].some(mediumRiskScope => scope.includes(mediumRiskScope));
                                           
                                           if (isHighRisk) {
@@ -3553,16 +3652,30 @@ export default function ShadowITDashboard() {
                                       <div className="max-h-60 overflow-y-auto">
                                         {selectedApp?.scopes.map((scope, scopeIndex) => {
                                           // Determine risk level for the scope
-                                          const isHighRisk = ['admin', 'admin.directory.user', 'admin.directory.group', 
-                                                            'admin.directory.user.security', 'gmail', 'drive', 
-                                                            'cloud-platform'].some(highRiskScope => 
-                                                              scope.includes(highRiskScope));
+                                          const isHighRisk = [
+                                            // Google high risk scopes
+                                            'admin', 'admin.directory.user', 'admin.directory.group', 
+                                            'admin.directory.user.security', 'gmail', 'drive', 
+                                            'cloud-platform',
+                                            // Microsoft high risk scopes
+                                            'ReadWrite.All', 'Write.All', '.ReadWrite', '.Write',
+                                            'FullControl.All', 'AccessAsUser.All', 'Directory.ReadWrite',
+                                            'Files.ReadWrite', 'Mail.ReadWrite', 'Mail.Send', 
+                                            'Group.ReadWrite', 'User.ReadWrite', 'Application.ReadWrite',
+                                            'Sites.FullControl', 'User.Export', 'User.Invite', 
+                                            'User.ManageIdentities', 'User.EnableDisableAccount',
+                                            'DelegatedPermissionGrant.ReadWrite'
+                                          ].some(highRiskScope => scope.includes(highRiskScope));
                                           
-                                          const isMediumRisk = ['admin.directory.user.readonly',
-                                                              'admin.directory.group.readonly',
-                                                              'calendar',
-                                                              'contacts'].some(mediumRiskScope => 
-                                                                scope.includes(mediumRiskScope));
+                                          const isMediumRisk = [
+                                            // Google medium risk scopes
+                                            'admin.directory.user.readonly', 'admin.directory.group.readonly',
+                                            'calendar', 'contacts',
+                                            // Microsoft medium risk scopes
+                                            'Read.All', '.Read', 'Directory.Read', 'Files.Read',
+                                            'User.Read.All', 'Mail.Read', 'AuditLog.Read',
+                                            'Reports.Read', 'Sites.Read'
+                                          ].some(mediumRiskScope => scope.includes(mediumRiskScope));
 
                                           let riskColor = "#81C784"; // Default green for low risk
                                           if (isHighRisk) {
@@ -3597,18 +3710,32 @@ export default function ShadowITDashboard() {
                                     .map((group, groupIndex) => {
                                       // Determine highest risk level in this group
                                       const hasHighRisk = group.scopes.some(scope => 
-                                        ['admin', 'admin.directory.user', 'admin.directory.group', 
+                                        [
+                                          // Google high risk scopes
+                                          'admin', 'admin.directory.user', 'admin.directory.group', 
                                           'admin.directory.user.security', 'gmail', 'drive', 
-                                          'cloud-platform'].some(highRiskScope => 
-                                          scope.includes(highRiskScope))
+                                          'cloud-platform',
+                                          // Microsoft high risk scopes
+                                          'ReadWrite.All', 'Write.All', '.ReadWrite', '.Write',
+                                          'FullControl.All', 'AccessAsUser.All', 'Directory.ReadWrite',
+                                          'Files.ReadWrite', 'Mail.ReadWrite', 'Mail.Send', 
+                                          'Group.ReadWrite', 'User.ReadWrite', 'Application.ReadWrite',
+                                          'Sites.FullControl', 'User.Export', 'User.Invite', 
+                                          'User.ManageIdentities', 'User.EnableDisableAccount',
+                                          'DelegatedPermissionGrant.ReadWrite'
+                                        ].some(highRiskScope => scope.includes(highRiskScope))
                                       );
                                       
                                       const hasMediumRisk = !hasHighRisk && group.scopes.some(scope => 
-                                        ['admin.directory.user.readonly',
-                                          'admin.directory.group.readonly',
-                                          'calendar',
-                                          'contacts'].some(mediumRiskScope => 
-                                          scope.includes(mediumRiskScope))
+                                        [
+                                          // Google medium risk scopes
+                                          'admin.directory.user.readonly', 'admin.directory.group.readonly',
+                                          'calendar', 'contacts',
+                                          // Microsoft medium risk scopes
+                                          'Read.All', '.Read', 'Directory.Read', 'Files.Read',
+                                          'User.Read.All', 'Mail.Read', 'AuditLog.Read',
+                                          'Reports.Read', 'Sites.Read'
+                                        ].some(mediumRiskScope => scope.includes(mediumRiskScope))
                                       );
 
                                       return (
@@ -3639,16 +3766,30 @@ export default function ShadowITDashboard() {
                                             <div className="max-h-60 overflow-y-auto">
                                               {group.scopes.map((scope, scopeIndex) => {
                                                 // Determine risk level for each scope
-                                                const isHighRisk = ['admin', 'admin.directory.user', 'admin.directory.group', 
-                                                                  'admin.directory.user.security', 'gmail', 'drive', 
-                                                                  'cloud-platform'].some(highRiskScope => 
-                                                                    scope.includes(highRiskScope));
+                                                const isHighRisk = [
+                                                  // Google high risk scopes
+                                                  'admin', 'admin.directory.user', 'admin.directory.group', 
+                                                  'admin.directory.user.security', 'gmail', 'drive', 
+                                                  'cloud-platform',
+                                                  // Microsoft high risk scopes
+                                                  'ReadWrite.All', 'Write.All', '.ReadWrite', '.Write',
+                                                  'FullControl.All', 'AccessAsUser.All', 'Directory.ReadWrite',
+                                                  'Files.ReadWrite', 'Mail.ReadWrite', 'Mail.Send', 
+                                                  'Group.ReadWrite', 'User.ReadWrite', 'Application.ReadWrite',
+                                                  'Sites.FullControl', 'User.Export', 'User.Invite', 
+                                                  'User.ManageIdentities', 'User.EnableDisableAccount',
+                                                  'DelegatedPermissionGrant.ReadWrite'
+                                                ].some(highRiskScope => scope.includes(highRiskScope));
                                                 
-                                                const isMediumRisk = ['admin.directory.user.readonly',
-                                                                    'admin.directory.group.readonly',
-                                                                    'calendar',
-                                                                    'contacts'].some(mediumRiskScope => 
-                                                                      scope.includes(mediumRiskScope));
+                                                const isMediumRisk = [
+                                                  // Google medium risk scopes
+                                                  'admin.directory.user.readonly', 'admin.directory.group.readonly',
+                                                  'calendar', 'contacts',
+                                                  // Microsoft medium risk scopes
+                                                  'Read.All', '.Read', 'Directory.Read', 'Files.Read',
+                                                  'User.Read.All', 'Mail.Read', 'AuditLog.Read',
+                                                  'Reports.Read', 'Sites.Read'
+                                                ].some(mediumRiskScope => scope.includes(mediumRiskScope));
 
                                                 let riskColor = "#81C784"; // Default green for low risk
                                                 if (isHighRisk) {

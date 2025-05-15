@@ -678,6 +678,8 @@ async function processGoogleWorkspace(org: any) {
             scopes: allScopes,
             users: new Set(),
             riskLevel: determineRiskLevel(token.scopes),
+            // Track which users have access to this app and with what permissions
+            userPermissions: new Map<string, string[]>()
           });
         } else {
           // Update existing app entry
@@ -693,9 +695,15 @@ async function processGoogleWorkspace(org: any) {
           }
         }
         
-        // Add user to this app
+        // Add user to this app with their specific permissions
         if (token.userEmail) {
           appMap.get(token.clientId).users.add(token.userEmail);
+          
+          // Store this user's specific permissions for this app
+          appMap.get(token.clientId).userPermissions.set(
+            token.userEmail, 
+            token.scopes || []
+          );
         }
       }
       
@@ -840,7 +848,7 @@ async function processGoogleWorkspace(org: any) {
         return;
       }
       
-      // Create a map of email to user ID and name
+      // Create maps for quick lookups
       const userEmailMap = new Map<string, { id: string, name: string }>();
       dbUsers?.forEach(user => {
         userEmailMap.set(user.email, { id: user.id, name: user.name || user.email });
@@ -896,6 +904,9 @@ async function processGoogleWorkspace(org: any) {
           const userId = userEmailMap.get(userEmail)!.id;
           const userName = userEmailMap.get(userEmail)!.name;
           
+          // Get this user's specific permissions for this app
+          const userPermissions = appInfo.userPermissions?.get(userEmail) || [];
+          
           // Check if this user-app relationship already exists
           if (!existingUserEmailSet.has(userEmail)) {
             // This is a new user-app relationship
@@ -909,6 +920,7 @@ async function processGoogleWorkspace(org: any) {
                   application_id: dbApp.id,
                   user_id: userId,
                   organization_id: org.id,
+                  scopes: userPermissions,
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString()
                 });
@@ -934,7 +946,25 @@ async function processGoogleWorkspace(org: any) {
               console.error(`Error processing new user-app relationship:`, error);
             }
           } else {
-            console.log(`User ${userEmail} already exists for app ${dbApp.name}`);
+            // Update existing relationship with current permissions
+            console.log(`User ${userEmail} already exists for app ${dbApp.name}, updating permissions`);
+            
+            const userAppId = userIdsByEmail.get(userEmail);
+            if (userAppId) {
+              const { error: updateError } = await supabaseAdmin
+                .from('user_applications')
+                .update({
+                  scopes: userPermissions,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', userAppId);
+                
+              if (updateError) {
+                console.error(`Error updating user-app relationship:`, updateError);
+              } else {
+                console.log(`Updated existing user-app relationship: ${userEmail} - ${dbApp.name}`);
+              }
+            }
           }
         }
         
@@ -1154,6 +1184,8 @@ async function processMicrosoftEntra(org: any) {
             scopes: allScopes,
             users: new Set(),
             riskLevel: determineRiskLevel(token.scopes),
+            // Track which users have access to this app and with what permissions
+            userPermissions: new Map<string, string[]>()
           });
         } else {
           // Update existing app entry
@@ -1169,9 +1201,15 @@ async function processMicrosoftEntra(org: any) {
           }
         }
         
-        // Add user to this app
+        // Add user to this app with their specific permissions
         if (token.userEmail) {
           appMap.get(token.clientId).users.add(token.userEmail);
+          
+          // Store this user's specific permissions for this app
+          appMap.get(token.clientId).userPermissions.set(
+            token.userEmail, 
+            token.scopes || []
+          );
         }
       }
       
