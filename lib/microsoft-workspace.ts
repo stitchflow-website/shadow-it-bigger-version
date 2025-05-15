@@ -431,11 +431,25 @@ export class MicrosoftWorkspaceService {
 
         // 4. Get appRoleAssignments for each user (applications assigned to users)
         console.log(`  📋 Fetching app role assignments for ${userEmail}...`);
+
+        // We'll track direct app assignments explicitly to ensure better mapping
+        const userDirectAssignedApps = new Set<string>();
+
         const appRoleResponse = await this.client.api(`/users/${user.id}/appRoleAssignments`)
           .get();
 
         const appRolesCount = appRoleResponse?.value?.length || 0;
         console.log(`  ✅ Found ${appRolesCount} app role assignments`);
+
+        // Track all directly assigned applications for this user
+        if (appRoleResponse && appRoleResponse.value && appRoleResponse.value.length > 0) {
+          for (const role of appRoleResponse.value) {
+            if (role.resourceId) {
+              userDirectAssignedApps.add(role.resourceId);
+            }
+          }
+          console.log(`  📝 User has direct assignments to ${userDirectAssignedApps.size} applications`);
+        }
 
         // 5. Get OAuth2PermissionGrants for each user (delegated permissions)
         let userOAuth2Grants: any[] = [];
@@ -486,6 +500,16 @@ export class MicrosoftWorkspaceService {
           for (const assignment of appRoleResponse.value) {
             // Get the service principal for this app
             const resourceId = assignment.resourceId;
+            
+            // Skip null or undefined resource IDs
+            if (!resourceId) {
+              console.log(`  ⚠️ Skipping assignment with missing resource ID`);
+              continue;
+            }
+            
+            // Explicitly add to direct assigned apps set
+            userDirectAssignedApps.add(resourceId);
+            
             const servicePrincipal = filteredServicePrincipals.find((sp: any) => sp.id === resourceId);
             
             if (!servicePrincipal) {
@@ -535,14 +559,14 @@ export class MicrosoftWorkspaceService {
               // Skip if this grant doesn't apply to this app or user
               if (!isForThisApp || !isForThisUser) continue;
               
-              if (isAdminConsent) {
-                // Combine with existing admin scopes to avoid duplicates
-                adminScopes = [...new Set([...adminScopes, ...scopes])];
-                console.log(`    🛡️ Admin consent permissions: ${scopes.join(', ')}`);
-              } else {
-                // Combine with existing user scopes to avoid duplicates
-                delegatedScopes = [...new Set([...delegatedScopes, ...scopes])];
-                console.log(`    🔑 User consent permissions: ${scopes.join(', ')}`);
+                if (isAdminConsent) {
+                // Only add admin-consented scopes for apps this user actually has access to
+                  adminScopes = [...new Set([...adminScopes, ...scopes])];
+                  console.log(`    🛡️ Admin consent permissions: ${scopes.join(', ')}`);
+                } else {
+                  // Combine with existing user scopes to avoid duplicates
+                  delegatedScopes = [...new Set([...delegatedScopes, ...scopes])];
+                  console.log(`    🔑 User consent permissions: ${scopes.join(', ')}`);
               }
             }
             
@@ -618,12 +642,26 @@ export class MicrosoftWorkspaceService {
           // Skip if this grant doesn't apply to this user
           if (!isForThisUser) continue;
           
+          // For admin consents, only include if the user has a specific assignment
+          // We should only include admin consents for users who have an assignment to the app
+          if (isAdminConsent) {
+            // Use our pre-built set of directly assigned apps to check if user has access
+            const hasDirectAssignment = userDirectAssignedApps.has(clientId);
+            
+            // Skip if this is an admin consent without a direct user assignment
+            // This prevents all users from appearing to have access to all admin-consented apps
+            if (!hasDirectAssignment && !userScopes.length) {
+              console.log(`    ⏭️ Skipping admin-consented app without direct user assignment`);
+              continue;
+            }
+          }
+          
           // Only use admin consents when they apply to this specific app
           let adminScopes: string[] = [];
           if (isAdminConsent && grant.scope) {
             adminScopes = grant.scope.split(' ').filter((s: string) => s.trim() !== '');
-            if (adminScopes.length > 0) {
-              console.log(`    🛡️ Admin consent permissions: ${adminScopes.join(', ')}`);
+          if (adminScopes.length > 0) {
+            console.log(`    🛡️ Admin consent permissions: ${adminScopes.join(', ')}`);
             }
           }
           
@@ -846,4 +884,4 @@ function classifyPermissionRisk(permission: string): 'high' | 'medium' | 'low' {
 
   // Default to low risk
   return 'low';
-}
+} 

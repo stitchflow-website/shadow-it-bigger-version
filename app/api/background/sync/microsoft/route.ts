@@ -196,6 +196,13 @@ export async function GET(request: NextRequest) {
         continue;
       }
       
+      // Make sure this represents a valid user-app assignment
+      // We only want to track users who actually have access to the app
+      if (!token.scopes || token.scopes.length === 0) {
+        console.log(`⚠️ Skipping token with no scopes for ${userAppKey}`);
+        continue;
+      }
+      
       processedUserApps.add(userAppKey);
       
       // Initialize or update user-app scopes
