@@ -534,6 +534,36 @@ export async function GET(request: NextRequest) {
       console.log('Returning user with healthy completed sync detected, skipping loading page');
       const dashboardUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/');
       
+      // Generate a unique session ID for the user
+      const sessionId = crypto.randomUUID();
+      
+      // Set session expiry (30 days from now)
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+      
+      // Create the session record
+      const { data: sessionData, error: sessionError } = await supabaseAdmin
+        .from('user_sessions')
+        .insert({
+          id: sessionId,
+          user_id: user.id,
+          user_email: userData.userPrincipalName,
+          auth_provider: 'microsoft',
+          expires_at: expiresAt.toISOString(),
+          refresh_token: refresh_token,
+          access_token: access_token,
+          user_agent: request.headers.get('user-agent') || '',
+          ip_address: request.headers.get('x-forwarded-for') || ''
+        })
+        .select()
+        .single();
+      
+      if (sessionError) {
+        console.error('Error creating session:', sessionError);
+      } else {
+        console.log('Session created successfully:', sessionId);
+      }
+      
       // Create HTML response with localStorage setting and redirect
       const existingUserHtmlResponse = `
         <!DOCTYPE html>
@@ -541,6 +571,13 @@ export async function GET(request: NextRequest) {
         <head>
           <title>Redirecting...</title>
           <script>
+            // Log session info for debugging
+            console.log("Microsoft auth returning user: Setting up session", {
+              email: "${userData.userPrincipalName}",
+              sessionId: "${sessionId}",
+              orgId: "${org.id}"
+            });
+            
             // Store email in localStorage for cross-browser session awareness
             localStorage.setItem('userEmail', "${userData.userPrincipalName}");
             localStorage.setItem('lastLogin', "${new Date().getTime()}");
@@ -549,6 +586,12 @@ export async function GET(request: NextRequest) {
             localStorage.setItem('userOrgId', "${org.id}");
             localStorage.setItem('userDomain', "${emailDomain || ''}");
             localStorage.setItem('authProvider', "microsoft");
+            localStorage.setItem('sessionId', "${sessionId}");
+            localStorage.setItem('sessionCreatedAt', "${new Date().toISOString()}");
+            
+            // Store user profile info
+            localStorage.setItem('userName', "${userData.displayName}");
+            localStorage.setItem('userAvatarUrl', "${userData.photo || ''}");
             
             // Check if this is a different browser than the one that initiated auth
             const stateFromStorage = localStorage.getItem('oauthState');
@@ -557,11 +600,15 @@ export async function GET(request: NextRequest) {
               localStorage.setItem('sameDeviceAuth', 'true');
             }
             
-            window.location.href = "${dashboardUrl.toString()}";
+            // Explicitly calling redirect after all localStorage items are set
+            console.log("Session established, redirecting to dashboard");
+            setTimeout(function() {
+              window.location.href = "${dashboardUrl.toString()}";
+            }, 100);
           </script>
         </head>
         <body>
-          <p>Redirecting to dashboard...</p>
+          <p>Session established! Redirecting to dashboard...</p>
         </body>
         </html>
       `;
@@ -579,52 +626,20 @@ export async function GET(request: NextRequest) {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax' as const,
         domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined,
-        path: '/'
+        path: '/',
+        expires: expiresAt // Make sure cookies have expiration date
       };
       
-      existingUserResponse.cookies.set('orgId', org.id, existingUserCookieOptions);
-      existingUserResponse.cookies.set('userEmail', userData.userPrincipalName, existingUserCookieOptions);
-      
-      // Create a session in user_sessions table
-      try {
-        // Generate a unique session ID
-        const sessionId = crypto.randomUUID();
-        
-        // Set session expiry (30 days from now)
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 30);
-        
-        // Create the session record
-        const { data: sessionData, error: sessionError } = await supabaseAdmin
-          .from('user_sessions')
-          .insert({
-            id: sessionId,
-            user_id: user.id,
-            user_email: userData.userPrincipalName,
-            auth_provider: 'microsoft',
-            expires_at: expiresAt.toISOString(),
-            refresh_token: refresh_token,
-            access_token: access_token,
-            user_agent: request.headers.get('user-agent') || '',
-            ip_address: request.headers.get('x-forwarded-for') || ''
-          })
-          .select()
-          .single();
-        
-        if (sessionError) {
-          console.error('Error creating session:', sessionError);
-        } else {
-          console.log('Session created successfully:', sessionId);
-          
-          // Set the session ID cookie with the same cookie options
-          existingUserResponse.cookies.set('shadow_session_id', sessionId, {
-            ...existingUserCookieOptions,
-            expires: expiresAt // Set the expiry date
-          });
-        }
-      } catch (error) {
-        console.error('Error creating session:', error);
-      }
+      // Set cookies before any potential redirects
+      existingUserResponse.cookies.set('orgId', org.id, {
+        ...existingUserCookieOptions,
+        httpOnly: false // Allow JavaScript access to this cookie
+      });
+      existingUserResponse.cookies.set('userEmail', userData.userPrincipalName, {
+        ...existingUserCookieOptions,
+        httpOnly: false // Allow JavaScript access to this cookie
+      });
+      existingUserResponse.cookies.set('shadow_session_id', sessionId, existingUserCookieOptions);
       
       return existingUserResponse;
     }
@@ -657,6 +672,13 @@ export async function GET(request: NextRequest) {
 
     console.log('Setting cookies and redirecting to:', redirectUrl.toString());
     
+    // Generate a unique session ID for the user
+    const sessionId = crypto.randomUUID();
+    
+    // Set session expiry (30 days from now)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+    
     // Create HTML response with localStorage setting and redirect
     const loadingHtmlResponse = `
       <!DOCTYPE html>
@@ -664,6 +686,13 @@ export async function GET(request: NextRequest) {
       <head>
         <title>Redirecting...</title>
         <script>
+          // Log session info for debugging
+          console.log("Microsoft auth: Setting up session", {
+            email: "${userData.userPrincipalName}",
+            sessionId: "${sessionId}",
+            orgId: "${org.id}"
+          });
+          
           // Store email in localStorage for cross-browser session awareness
           localStorage.setItem('userEmail', "${userData.userPrincipalName}");
           localStorage.setItem('lastLogin', "${new Date().getTime()}");
@@ -672,6 +701,13 @@ export async function GET(request: NextRequest) {
           localStorage.setItem('userOrgId', "${org.id}");
           localStorage.setItem('userDomain', "${emailDomain || ''}");
           localStorage.setItem('authProvider', "microsoft");
+          localStorage.setItem('sessionId', "${sessionId}");
+          localStorage.setItem('sessionCreatedAt', "${new Date().toISOString()}");
+          ${syncStatus?.id ? `localStorage.setItem('syncId', "${syncStatus.id}");` : ''}
+          
+          // Store user profile info
+          localStorage.setItem('userName', "${userData.displayName}");
+          localStorage.setItem('userAvatarUrl', "${userData.photo || ''}");
           
           // Check if this is a different browser than the one that initiated auth
           const stateFromStorage = localStorage.getItem('oauthState');
@@ -680,11 +716,15 @@ export async function GET(request: NextRequest) {
             localStorage.setItem('sameDeviceAuth', 'true');
           }
           
-          window.location.href = "${redirectUrl.toString()}";
+          // Explicitly calling redirect after all localStorage items are set
+          console.log("Session established, redirecting to loading page");
+          setTimeout(function() {
+            window.location.href = "${redirectUrl.toString()}";
+          }, 100);
         </script>
       </head>
       <body>
-        <p>Redirecting to dashboard...</p>
+        <p>Session established! Redirecting...</p>
       </body>
       </html>
     `;
@@ -702,53 +742,44 @@ export async function GET(request: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax' as const,
       domain: process.env.NODE_ENV === 'production' ? '.stitchflow.com' : undefined,
-      path: '/'
+      path: '/',
+      expires: expiresAt // Add expiration date
     };
     
-    loadingResponse.cookies.set('orgId', org.id, loadingCookieOptions);
-    loadingResponse.cookies.set('userEmail', userData.userPrincipalName, loadingCookieOptions);
+    // Set necessary cookies
+    loadingResponse.cookies.set('orgId', org.id, {
+      ...loadingCookieOptions,
+      httpOnly: false // Allow JavaScript access to this cookie
+    });
+    loadingResponse.cookies.set('userEmail', userData.userPrincipalName, {
+      ...loadingCookieOptions,
+      httpOnly: false // Allow JavaScript access to this cookie
+    });
+    loadingResponse.cookies.set('shadow_session_id', sessionId, loadingCookieOptions);
     
-    // Create a session in user_sessions table
-    try {
-      // Generate a unique session ID
-      const sessionId = crypto.randomUUID();
-      
-      // Set session expiry (30 days from now)
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
-      
-      // Create the session record
-      const { data: sessionData, error: sessionError } = await supabaseAdmin
-        .from('user_sessions')
-        .insert({
-          id: sessionId,
-          user_id: user.id,
-          user_email: userData.userPrincipalName,
-          auth_provider: 'microsoft',
-          expires_at: expiresAt.toISOString(),
-          refresh_token: refresh_token,
-          access_token: access_token,
-          user_agent: request.headers.get('user-agent') || '',
-          ip_address: request.headers.get('x-forwarded-for') || ''
-        })
-        .select()
-        .single();
-      
-      if (sessionError) {
-        console.error('Error creating session:', sessionError);
-      } else {
-        console.log('Session created successfully:', sessionId);
-        
-        // Set the session ID cookie with the same cookie options
-        loadingResponse.cookies.set('shadow_session_id', sessionId, {
-          ...loadingCookieOptions,
-          expires: expiresAt // Set the expiry date
-        });
-      }
-    } catch (error) {
-      console.error('Error creating session:', error);
+    // Create the session record
+    const { data: sessionData, error: sessionError } = await supabaseAdmin
+      .from('user_sessions')
+      .insert({
+        id: sessionId,
+        user_id: user.id,
+        user_email: userData.userPrincipalName,
+        auth_provider: 'microsoft',
+        expires_at: expiresAt.toISOString(),
+        refresh_token: refresh_token,
+        access_token: access_token,
+        user_agent: request.headers.get('user-agent') || '',
+        ip_address: request.headers.get('x-forwarded-for') || ''
+      })
+      .select()
+      .single();
+    
+    if (sessionError) {
+      console.error('Error creating session:', sessionError);
+    } else {
+      console.log('Session created successfully:', sessionId);
     }
-
+    
     // Create default notification preferences for the user
     try {
       await fetch(`https://www.stitchflow.com/tools/shadow-it-scan/api/auth/create-default-preferences`, {
