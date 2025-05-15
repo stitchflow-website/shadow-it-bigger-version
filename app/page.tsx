@@ -1533,9 +1533,20 @@ export default function ShadowITDashboard() {
     };
 
     return (
-      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryBadgeColor(currentCategory)}`}>
-        {currentCategory}
-      </div>
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div 
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryBadgeColor(currentCategory)} overflow-hidden text-ellipsis whitespace-nowrap max-w-[200px] group-hover:max-w-none`}
+            >
+              {currentCategory}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="p-2 bg-gray-900 text-white rounded-md shadow-lg">
+            <p className="text-xs">{currentCategory}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     )
   }
 
@@ -2765,9 +2776,7 @@ export default function ShadowITDashboard() {
                                                 onClick={() => handleSeeUsers(app.id)}
                                               >
                                                 {app.users.filter(user => user.riskLevel === "High").length}
-                                                {app.users.filter(user => user.riskLevel === "High").length > 0 && (
-                                                  <span className="ml-1.5 w-2 h-2 rounded-full bg-red-500"></span>
-                                                )}
+                                                
                                               </div>
                                             </TooltipTrigger>
                                             <TooltipContent side="right" className="p-2">
