@@ -2608,7 +2608,11 @@ export default function ShadowITDashboard() {
                                         {getSortIcon("totalPermissions")}
                                       </div>
                                     </TableHead>
-                                  
+                                    <TableHead className="text-center">
+                                      <div className="flex items-center justify-center">
+                                        High Risk Users
+                                      </div>
+                                    </TableHead>
                                 
                                 <TableHead className={`cursor-pointer`} onClick={() => handleSort("managementStatus")}>
                                   <div className="flex items-center">
@@ -2721,7 +2725,29 @@ export default function ShadowITDashboard() {
                                               </TooltipContent>
                                             </Tooltip>
                                           </TooltipProvider>
-                                      </TableCell>    
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        <TooltipProvider>
+                                          <Tooltip delayDuration={300}>
+                                            <TooltipTrigger asChild>
+                                              <div 
+                                                className="text-center cursor-pointer flex items-center justify-center" 
+                                                onClick={() => handleSeeUsers(app.id)}
+                                              >
+                                                {app.users.filter(user => user.riskLevel === "High").length}
+                                                {app.users.filter(user => user.riskLevel === "High").length > 0 && (
+                                                  <span className="ml-1.5 w-2 h-2 rounded-full bg-red-500"></span>
+                                                )}
+                                              </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="right" className="p-2">
+                                              <p className="text-sm">
+                                                {app.users.filter(user => user.riskLevel === "High").length} users with high risk level
+                                              </p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      </TableCell>
                                     
 
                                   <TableCell>
