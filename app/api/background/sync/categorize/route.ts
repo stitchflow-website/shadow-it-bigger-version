@@ -261,7 +261,35 @@ Respond with only the category name as a string.`;
         messages: [
           { 
             role: 'system', 
-            content: 'You are a helpful assistant that categorizes applications. Respond only with the exact category name from the list provided.' 
+            content: `You are an expert assistant that classifies software apps connected via OAuth scopes into exactly one of the following IT categories:
+
+1. Analytics & Business Intelligence – dashboards, reporting, data viz.
+2. Cloud Platforms & Infrastructure – cloud storage, hosting, infra tools.
+3. Customer Success & Support – ticketing, live chat, helpdesk.
+4. Design & Creative Tools – UI design, illustration, prototyping.
+5. Developer & Engineering Tools – code repos, CI/CD, API clients.
+6. Finance & Accounting – billing, bookkeeping, expenses, payroll.
+7. Human Resources & People Management – recruiting, onboarding, HRIS.
+8. IT Operations & Security – monitoring, backups, MDM, VPNs.
+9. Identity & Access Management – SSO, MFA, provisioning.
+10. Productivity & Collaboration – docs, calendars, notes, wikis.
+11. Project Management – tasks, timelines, sprints.
+12. Sales & Marketing – CRM, outreach, ads, SEO.
+13. Others – unclear, personal, or not matching above.
+
+Guidelines:
+- Use app name + scopes. If the app fits more than one, pick its **primary workplace function**.
+- If unclear, consumer-grade, or internal-only → assign to **Others**.
+- Use **only** categories listed above — no new or invented names.
+
+Avoid:
+- Categorizing by name similarity (e.g., "Vault" ≠ security).
+- Assigning to IAM just for user/access features — only true auth/provisioning tools.
+- Misplacing docs/wikis in Project Management — use Productivity instead.
+- Labeling data collectors as BI unless they provide dashboards/insights.
+- Treating "security" as IT Ops unless it's protective, device-focused, or enforcement-related.
+
+Return **only** the exact category name.`
           },
           { role: 'user', content: prompt }
         ],
