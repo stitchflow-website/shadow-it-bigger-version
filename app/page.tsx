@@ -746,12 +746,20 @@ export default function ShadowITDashboard() {
         throw new Error('Failed to fetch applications');
       }
 
-      const data: Application[] = await response.json();
-      setApplications(data);
+      const rawData: Application[] = await response.json();
+      // Process data to calculate user risk levels client-side
+      const processedData = rawData.map(app => ({
+        ...app,
+        users: app.users.map(user => ({
+          ...user,
+          riskLevel: determineRiskLevel(user.scopes) // Calculate risk level for each user
+        }))
+      }));
+      setApplications(processedData);
       
       // Track apps still uncategorized
       const unknownIds = new Set<string>();
-      data.forEach((app: Application) => {
+      processedData.forEach((app: Application) => { // Use processedData here
         if (app.category === 'Unknown') unknownIds.add(app.id);
       });
       setUncategorizedApps(unknownIds);
@@ -1872,7 +1880,7 @@ export default function ShadowITDashboard() {
     name,
     email: `${name.toLowerCase().replace(' ', '.')}@example.com`,
     scopes,
-    riskLevel: Math.random() > 0.7 ? "High" : Math.random() > 0.4 ? "Medium" : "Low",
+    riskLevel: determineRiskLevel(scopes),
     riskReason: "Based on scope permissions and usage patterns",
   });
 
@@ -1954,12 +1962,26 @@ export default function ShadowITDashboard() {
       
       const id = generateId();
       const logoUrls = getAppLogoUrl(item.Apps);
+      let appUsers = item.Users.map((user: string) => transformUser(user, id, item.Scopes));
+
+      // Ensure some prominent dummy apps have high-risk users for UI demonstration
+      if (item.Apps === "Slack" && appUsers.length > 0) {
+        if (appUsers[0]) appUsers[0].riskLevel = "High";
+        if (appUsers[1]) appUsers[1].riskLevel = "High"; // Ensure at least two for Slack if possible
+      }
+      if (item.Apps === "HubSpot" && appUsers.length > 0) {
+        if (appUsers[0]) appUsers[0].riskLevel = "High";
+      }
+      if (item.Apps === "Looker Studio" && appUsers.length > 0) { // Another app that has "High" app risk
+        if (appUsers[0]) appUsers[0].riskLevel = "High";
+      }
+
       return {
         id,
         name: item.Apps,
         category: item.Category,
-        userCount: item.Users.length,
-        users: item.Users.map((user: string) => transformUser(user, id, item.Scopes)),
+        userCount: appUsers.length,
+        users: appUsers, // use the potentially modified appUsers
         riskLevel: item.Risk as "Low" | "Medium" | "High",
         riskReason: "Based on scope permissions and usage patterns",
         totalPermissions: item["Total Scopes"],
@@ -1967,6 +1989,7 @@ export default function ShadowITDashboard() {
         managementStatus: item.Status as "Managed" | "Unmanaged" | "Needs Review",
         ownerEmail: "",
         logoUrl: logoUrls.primary,
+        logoUrlFallback: logoUrls.fallback, // Assign fallback logo URL
         notes: "",
         scopes: item.Scopes,
         isInstalled: true,
@@ -2169,10 +2192,10 @@ export default function ShadowITDashboard() {
   }, [appCategories, mainView]);
 
   // Helper function to determine risk level based on scopes
-  function determineRiskLevel(scopes: string[] | null | undefined): 'HIGH' | 'MEDIUM' | 'LOW' {
+  function determineRiskLevel(scopes: string[] | null | undefined): "High" | "Medium" | "Low" {
     // If no scopes provided, default to LOW
     if (!scopes || !Array.isArray(scopes) || scopes.length === 0) {
-      return 'LOW';
+      return 'Low';
     }
 
     // High risk permissions include permissions that can modify data or access sensitive info
@@ -2185,7 +2208,7 @@ export default function ShadowITDashboard() {
       'https://www.googleapis.com/auth/gmail',
       'https://www.googleapis.com/auth/drive',
       'https://www.googleapis.com/auth/cloud-platform',
-      // Microsoft high risk scopes - full patterns to match exactly 
+      // Microsoft high risk scopes - exact matches
       'Application.ReadWrite.All',
       'User.ReadWrite.All',
       'Group.ReadWrite.All',
@@ -2228,7 +2251,7 @@ export default function ShadowITDashboard() {
       scope.endsWith('.ReadWrite') ||
       scope.includes('FullControl') ||
       scope.includes('Write.All'))) {
-      return 'HIGH';
+      return 'High';
     }
 
     // Check if any scope exactly matches a medium risk scope or contains a medium risk pattern
@@ -2239,10 +2262,10 @@ export default function ShadowITDashboard() {
       scope.endsWith('.Read.All') ||
       scope.includes('Reports.Read') ||
       scope.includes('AuditLog.Read'))) {
-      return 'MEDIUM';
+      return 'Medium';
     }
 
-    return 'LOW';
+    return 'Low';
   }
 
   return (
