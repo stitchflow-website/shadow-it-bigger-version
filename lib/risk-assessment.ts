@@ -10,15 +10,18 @@ export const HIGH_RISK_SCOPES = [
   'https://www.googleapis.com/auth/gmail',
   'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/cloud-platform',
+  'https://mail.google.com/',
 ];
 
 export const MEDIUM_RISK_SCOPES = [
   // Read-only admin access
   'https://www.googleapis.com/auth/admin.directory.user.readonly',
   'https://www.googleapis.com/auth/admin.directory.group.readonly',
+  'https://www.googleapis.com/auth/admin.directory.member.readonly',
   // Moderate data access
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/contacts',
+  'https://www.googleapis.com/auth/spreadsheets',
 ];
 
 export type RiskLevel = 'HIGH' | 'MEDIUM' | 'LOW' | 'High' | 'Medium' | 'Low';

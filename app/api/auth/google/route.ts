@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { supabaseAdmin } from '@/lib/supabase';
 import { sendSuccessSignupWebhook, sendFailedSignupWebhook } from '@/lib/webhook';
+import { determineRiskLevel } from '@/lib/risk-assessment';
 import crypto from 'crypto';
 
 // Helper function to safely format date
@@ -559,32 +560,4 @@ export async function GET(request: Request) {
     console.error('Auth error:', error);
     return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=unknown', request.url));
   }
-}
-
-function determineRiskLevel(scopes: string[] | null | undefined): 'HIGH' | 'MEDIUM' | 'LOW' {
-  // If no scopes provided, default to LOW
-  if (!scopes || !Array.isArray(scopes) || scopes.length === 0) {
-    return 'LOW';
-  }
-
-  const highRiskScopes = [
-    'https://www.googleapis.com/auth/admin.directory.user',
-    'https://www.googleapis.com/auth/admin.directory.group',
-    'https://www.googleapis.com/auth/admin.directory.user.security',
-  ];
-
-  const mediumRiskScopes = [
-    'https://www.googleapis.com/auth/admin.directory.user.readonly',
-    'https://www.googleapis.com/auth/admin.directory.group.readonly',
-  ];
-
-  if (scopes.some(scope => highRiskScopes.includes(scope))) {
-    return 'HIGH';
-  }
-
-  if (scopes.some(scope => mediumRiskScopes.includes(scope))) {
-    return 'MEDIUM';
-  }
-
-  return 'LOW';
 } 

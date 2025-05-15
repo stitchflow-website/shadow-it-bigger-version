@@ -117,40 +117,40 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
 
 export async function POST(request: Request) {
+  // Declare requestData here to make sync_id available in catch
+  let requestData; 
   try {
-    console.log('Starting token fetch processing');
-    
-    const requestData = await request.json();
+    requestData = await request.json();
     const { organization_id, sync_id, access_token, refresh_token, users } = requestData;
-
+    
+    console.log(`[Tokens API ${sync_id}] Starting token fetch processing`);
+    
     // Validate required fields
     if (!organization_id || !sync_id || !access_token || !refresh_token) {
+      console.error(`[Tokens API ${sync_id}] Missing required fields`);
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Send immediate response
-    const response = NextResponse.json({ message: 'Token fetch started' });
+    // Await the processTokens function
+    await processTokens(organization_id, sync_id, access_token, refresh_token, users, request);
     
-    // Process in the background - pass the request object
-    processTokens(organization_id, sync_id, access_token, refresh_token, users, request)
-      .catch(async (error) => {
-        console.error('Token processing failed:', error);
-        await updateSyncStatus(
-          sync_id,
-          -1,
-          `Token fetch failed: ${error.message}`,
-          'FAILED'
-        );
-      });
-    
-    return response;
+    console.log(`[Tokens API ${sync_id}] Token fetch completed successfully`);
+    return NextResponse.json({ 
+      message: 'Token fetch completed successfully',
+      syncId: sync_id,
+      organizationId: organization_id
+    });
+
   } catch (error: any) {
-    console.error('Error in token fetch API:', error);
+    const sync_id_for_error = requestData?.sync_id; // Use optional chaining
+    console.error(`[Tokens API ${sync_id_for_error || 'unknown'}] Error:`, error);
+    // processTokens is responsible for updating sync_status to FAILED.
+    // This handler just ensures a 500 response is sent.
     return NextResponse.json(
-      { error: 'Failed to process tokens' },
+      { error: 'Failed to process tokens', details: error.message },
       { status: 500 }
     );
   }
@@ -443,19 +443,39 @@ async function processTokens(
     console.log(`[Tokens ${sync_id}] Triggering app categorization at: ${categorizeUrl}`);
     
     // Fire and forget - don't await the response
-    fetch(categorizeUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        organization_id,
-        sync_id
-      }),
-    }).catch(error => {
-      console.warn(`[Tokens ${sync_id}] Error triggering categorization:`, error);
-      // Continue with main sync process even if categorization fails
-    });
+    // fetch(categorizeUrl, {
+    // method: 'POST',
+    // headers: {
+    // 'Content-Type': 'application/json',
+    // },
+    // body: JSON.stringify({
+    // organization_id,
+    // sync_id
+    // }),
+    // }).catch(error => {
+    // console.warn(`[Tokens ${sync_id}] Error triggering categorization:`, error);
+    // // Continue with main sync process even if categorization fails
+    // });
+    
+    try {
+      console.log(`[Tokens ${sync_id}] Triggering and awaiting app categorization at: ${categorizeUrl}`);
+      const categorizeResponse = await fetch(categorizeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organization_id, sync_id }),
+      });
+
+      if (!categorizeResponse.ok) {
+        const errorText = await categorizeResponse.text();
+        console.error(`[Tokens ${sync_id}] App categorization call failed: ${categorizeResponse.status} ${errorText}`);
+        throw new Error(`App categorization step failed: ${errorText}`);
+      }
+      console.log(`[Tokens ${sync_id}] App categorization call completed successfully.`);
+    } catch (categorizationError: any) {
+      console.warn(`[Tokens ${sync_id}] Error during app categorization:`, categorizationError);
+      // Rethrow to fail the token processing, which will update status to FAILED via the main catch block
+      throw new Error(`App categorization failed: ${categorizationError.message}`);
+    }
     
     // Prepare user app relationships for the next phase
     await updateSyncStatus(sync_id, 80, `Preparing user-application relationships`);
@@ -526,6 +546,13 @@ async function processTokens(
     }
   } catch (error: any) {
     console.error(`[Tokens ${sync_id}] Error in token processing:`, error);
-    throw error;
+    // Ensure sync_status is updated to FAILED
+    await updateSyncStatus(
+      sync_id,
+      -1,
+      `Token processing failed: ${error.message}`,
+      'FAILED'
+    );
+    throw error; // Rethrow to be caught by the POST handler's catch for HTTP response
   }
 }

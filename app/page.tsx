@@ -60,6 +60,8 @@ import { Share } from "@/components/ui/share";
 import SettingsModal from "@/app/components/SettingsModal";
 // Import risk assessment utilities
 import { HIGH_RISK_SCOPES, MEDIUM_RISK_SCOPES } from "@/lib/risk-assessment";
+import { supabaseAdmin } from '@/lib/supabase';
+import { determineRiskLevel as assessGoogleScopeRisk, RiskLevel as GoogleRiskLevelType } from '@/lib/risk-assessment'; // Corrected import alias and added type import
 
 // Type definitions
 type Application = {
@@ -176,6 +178,9 @@ export default function ShadowITDashboard() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginError, setLoginError] = useState<string>('');
   
+  // State for the "Top Apps by User Count" chart's managed status filter
+  const [chartManagedStatusFilter, setChartManagedStatusFilter] = useState<string | null>(null);
+
   // Helper function to redirect to Google consent screen
   const redirectToGoogleConsent = () => {
     let redirectURI;
@@ -1552,79 +1557,23 @@ export default function ShadowITDashboard() {
 
   // Update RiskBadge component to determine correct risk level from the user's scopes
   function RiskBadge({ level, scopes }: { level: string, scopes?: string[] }) {
-    // If scopes are provided, recalculate the risk level directly
-    let calculatedLevel = level;
-    
+    let calculatedLevelString: "High" | "Medium" | "Low";
+
     if (scopes && Array.isArray(scopes) && scopes.length > 0) {
-      // Check for high risk scopes first
-      const hasHighRiskScope = scopes.some(scope => {
-        return [
-          // Google high risk scopes
-          'https://www.googleapis.com/auth/admin.directory.user',
-          'https://www.googleapis.com/auth/admin.directory.group',
-          'https://www.googleapis.com/auth/admin.directory.user.security',
-          'https://mail.google.com/',
-          'https://www.googleapis.com/auth/gmail',
-          'https://www.googleapis.com/auth/drive',
-          'https://www.googleapis.com/auth/cloud-platform',
-          // Microsoft high risk scopes - exact matches
-          'Application.ReadWrite.All',
-          'User.ReadWrite.All',
-          'Group.ReadWrite.All',
-          'Directory.ReadWrite.All',
-          'Mail.ReadWrite',
-          'Mail.ReadWrite.All',
-          'Mail.Send',
-          'Files.ReadWrite.All',
-          'Sites.ReadWrite.All',
-          'MailboxSettings.ReadWrite'
-        ].includes(scope) ||
-        // Check for Microsoft patterns
-        scope.endsWith('.ReadWrite.All') || 
-        scope.endsWith('.ReadWrite') ||
-        scope.includes('FullControl') ||
-        scope.includes('Write.All')
-      });
-
-      if (hasHighRiskScope) {
-        calculatedLevel = 'High';
+      // Use the main determineRiskLevel helper function from this file
+      calculatedLevelString = determineRiskLevel(scopes);
+    } else {
+      // Fallback to the provided level, ensuring correct casing for consistency
+      const upperLevel = level.toUpperCase();
+      if (upperLevel === 'HIGH' || upperLevel === 'MEDIUM' || upperLevel === 'LOW') {
+        calculatedLevelString = upperLevel as "High" | "Medium" | "Low";
       } else {
-        // Check for medium risk scopes
-        const hasMediumRiskScope = scopes.some(scope => {
-          return [
-            // Google medium risk scopes
-            'https://www.googleapis.com/auth/admin.directory.user.readonly',
-            'https://www.googleapis.com/auth/admin.directory.group.readonly',
-            'https://www.googleapis.com/auth/calendar',
-            'https://www.googleapis.com/auth/contacts',
-            // Microsoft medium risk scopes
-            'Application.Read.All',
-            'Directory.Read.All',
-            'Group.Read.All',
-            'User.Read.All',
-            'Files.Read.All',
-            'Mail.Read',
-            'Mail.Read.All',
-            'Sites.Read.All',
-            'AuditLog.Read.All',
-            'Reports.Read.All'
-          ].includes(scope) ||
-          // Check for Microsoft patterns
-          scope.endsWith('.Read.All') ||
-          scope.includes('Reports.Read') ||
-          scope.includes('AuditLog.Read')
-        });
-
-        if (hasMediumRiskScope) {
-          calculatedLevel = 'Medium';
-        } else {
-          calculatedLevel = 'Low';
-        }
+        calculatedLevelString = 'Low'; // Default for unknown levels
       }
     }
     
-    // Normalize the level to ensure consistent casing
-    const normalizedLevel = calculatedLevel.charAt(0).toUpperCase() + calculatedLevel.slice(1).toLowerCase();
+    // Normalize for display (e.g., "High", "Medium", "Low")
+    const normalizedLevel = calculatedLevelString.charAt(0).toUpperCase() + calculatedLevelString.slice(1).toLowerCase();
     
     const iconMap: Record<string, JSX.Element> = {
       Low: <CheckCircle className="h-5 w-5 mr-1 text-green-700" />,
@@ -1639,8 +1588,8 @@ export default function ShadowITDashboard() {
     }
 
     return (
-      <div className={`flex items-center px-2 py-1 rounded-full ${colorMap[normalizedLevel]}`}>
-        {iconMap[normalizedLevel]}
+      <div className={`flex items-center px-2 py-1 rounded-full ${colorMap[normalizedLevel] || colorMap.Low}`}>
+        {iconMap[normalizedLevel] || iconMap.Low}
         <span>{normalizedLevel}</span>
       </div>
     )
@@ -2204,80 +2153,72 @@ export default function ShadowITDashboard() {
 
   // Helper function to determine risk level based on scopes
   function determineRiskLevel(scopes: string[] | null | undefined): "High" | "Medium" | "Low" {
-    // If no scopes provided, default to LOW
     if (!scopes || !Array.isArray(scopes) || scopes.length === 0) {
       return 'Low';
     }
 
-    // High risk permissions include permissions that can modify data or access sensitive info
-    const highRiskScopes = [
-      // Google high risk scopes
-      'https://www.googleapis.com/auth/admin.directory.user',
-      'https://www.googleapis.com/auth/admin.directory.group',
-      'https://www.googleapis.com/auth/admin.directory.user.security',
-      'https://mail.google.com/',
-      'https://www.googleapis.com/auth/gmail',
-      'https://www.googleapis.com/auth/drive',
-      'https://www.googleapis.com/auth/cloud-platform',
-      // Microsoft high risk scopes - exact matches
-      'Application.ReadWrite.All',
-      'User.ReadWrite.All',
-      'Group.ReadWrite.All',
-      'Directory.ReadWrite.All',
-      'Mail.ReadWrite',
-      'Mail.ReadWrite.All',
-      'Mail.Send',
-      'Files.ReadWrite.All',
-      'Sites.ReadWrite.All',
-      'MailboxSettings.ReadWrite'
+    const googleScopes = scopes.filter(s => s.startsWith('https://www.googleapis.com/auth/'));
+    const microsoftScopes = scopes.filter(s => !s.startsWith('https://www.googleapis.com/auth/'));
+
+    // 1. Assess Google Scopes
+    const googleRisk: GoogleRiskLevelType = assessGoogleScopeRisk(googleScopes);
+
+    // 2. Assess Microsoft Scopes
+    let microsoftRisk: "High" | "Medium" | "Low" = 'Low';
+    const microsoftHighRiskList = [
+      'Application.ReadWrite.All', 'User.ReadWrite.All', 'Group.ReadWrite.All',
+      'Directory.ReadWrite.All', 'Mail.ReadWrite', 'Mail.ReadWrite.All', 'Mail.Send',
+      'Files.ReadWrite.All', 'Sites.ReadWrite.All', 'MailboxSettings.ReadWrite'
+    ];
+    const microsoftMediumRiskList = [
+      'Application.Read.All', 'Directory.Read.All', 'Group.Read.All', 'User.Read.All',
+      'Files.Read.All', 'Mail.Read', 'Mail.Read.All', 'Sites.Read.All',
+      'AuditLog.Read.All', 'Reports.Read.All'
     ];
 
-    // Medium risk permissions include permissions that can read sensitive data but not modify
-    const mediumRiskScopes = [
-      // Google medium risk scopes
-      'https://www.googleapis.com/auth/admin.directory.user.readonly',
-      'https://www.googleapis.com/auth/admin.directory.group.readonly',
-      'https://www.googleapis.com/auth/calendar',
-      'https://www.googleapis.com/auth/contacts',
-      // Microsoft medium risk scopes - full patterns to match exactly
-      'Application.Read.All',
-      'Directory.Read.All',
-      'Group.Read.All',
-      'User.Read.All',
-      'Files.Read.All',
-      'Mail.Read',
-      'Mail.Read.All',
-      'Sites.Read.All',
-      'AuditLog.Read.All',
-      'Reports.Read.All'
-    ];
+    const hasMicrosoftHighRisk = microsoftScopes.some(scope =>
+      microsoftHighRiskList.includes(scope) || // Ensure this uses microsoftHighRiskList
+      scope.endsWith('.ReadWrite.All') || scope.endsWith('.ReadWrite') ||
+      scope.includes('FullControl') || scope.includes('Write.All')
+    );
 
-    // Check if any scope exactly matches a high risk scope or contains a high risk pattern
-    // Microsoft permissions can be exact matches (like "Mail.ReadWrite.All") or patterns (like ".ReadWrite.All")
-    if (scopes.some(scope => 
-      // Check for exact matches
-      highRiskScopes.includes(scope) ||
-      // Check for Microsoft patterns
-      scope.endsWith('.ReadWrite.All') || 
-      scope.endsWith('.ReadWrite') ||
-      scope.includes('FullControl') ||
-      scope.includes('Write.All'))) {
+    if (hasMicrosoftHighRisk) {
+      microsoftRisk = 'High';
+    } else {
+      const hasMicrosoftMediumRisk = microsoftScopes.some(scope =>
+        microsoftMediumRiskList.includes(scope) ||
+        scope.endsWith('.Read.All') || scope.includes('Reports.Read') ||
+        scope.includes('AuditLog.Read')
+      );
+      if (hasMicrosoftMediumRisk) {
+        microsoftRisk = 'Medium';
+      }
+    }
+
+    // 3. Combine Risks (High > Medium > Low)
+    if (googleRisk === 'HIGH' || microsoftRisk === 'High') {
       return 'High';
     }
-
-    // Check if any scope exactly matches a medium risk scope or contains a medium risk pattern
-    if (scopes.some(scope => 
-      // Check for exact matches
-      mediumRiskScopes.includes(scope) ||
-      // Check for Microsoft patterns
-      scope.endsWith('.Read.All') ||
-      scope.includes('Reports.Read') ||
-      scope.includes('AuditLog.Read'))) {
+    if (googleRisk === 'MEDIUM' || microsoftRisk === 'Medium') {
       return 'Medium';
     }
-
+    // If neither is High or Medium, the risk is Low (covers googleRisk === 'LOW' and microsoftRisk === 'Low')
     return 'Low';
   }
+
+  // Apps by User Count - modified to show all apps and filter by managed status
+  const getAppsByUsersChartData = () => {
+    let filteredByStatus = applications;
+    if (chartManagedStatusFilter) {
+      filteredByStatus = applications.filter(app => app.managementStatus === chartManagedStatusFilter);
+    }
+    const sorted = [...filteredByStatus].sort((a, b) => b.userCount - a.userCount);
+    return sorted.map((app) => ({
+      name: app.name,
+      value: app.userCount,
+      color: getCategoryColor(appCategories[app.id] || app.category),
+    }));
+  };
 
   return (
     <div className="mx-auto font-sans text-gray-900 bg-[#FAF8FA]">
@@ -3612,74 +3553,18 @@ export default function ShadowITDashboard() {
                                     <TableCell>
                                       <div className="max-h-24 overflow-y-auto text-sm">
                                         {user.scopes.map((scope, i) => {
-                                          // Determine risk level color based on the predefined risk assessment logic
-                                          let riskColor = "#81C784"; // Default green for low risk
-                                          let riskStatus = "Low-Risk Scopes";
+                                          // Determine risk level for the single scope using the main helper
+                                          const singleScopeRisk = determineRiskLevel([scope]);
                                           
-                                          // Check for high risk scopes using the same patterns as determineRiskLevel
-                                          const isHighRisk = (
-                                            // Check for exact matches with high risk scopes
-                                            [
-                                              // Google high risk scopes
-                                              'https://www.googleapis.com/auth/admin.directory.user',
-                                              'https://www.googleapis.com/auth/admin.directory.group',
-                                              'https://www.googleapis.com/auth/admin.directory.user.security',
-                                              'https://mail.google.com/',
-                                              'https://www.googleapis.com/auth/gmail',
-                                              'https://www.googleapis.com/auth/drive',
-                                              'https://www.googleapis.com/auth/cloud-platform',
-                                              // Microsoft high risk scopes - exact matches
-                                              'Application.ReadWrite.All',
-                                              'User.ReadWrite.All',
-                                              'Group.ReadWrite.All',
-                                              'Directory.ReadWrite.All',
-                                              'Mail.ReadWrite',
-                                              'Mail.ReadWrite.All',
-                                              'Mail.Send',
-                                              'Files.ReadWrite.All',
-                                              'Sites.ReadWrite.All',
-                                              'MailboxSettings.ReadWrite'
-                                            ].includes(scope) ||
-                                            // Check for Microsoft patterns
-                                            scope.endsWith('.ReadWrite.All') || 
-                                            scope.endsWith('.ReadWrite') ||
-                                            scope.includes('FullControl') ||
-                                            scope.includes('Write.All')
-                                          );
-                                          
-                                          // Check for medium risk scopes using the same patterns as determineRiskLevel
-                                          const isMediumRisk = !isHighRisk && (
-                                            // Check for exact matches with medium risk scopes  
-                                            [
-                                              // Google medium risk scopes
-                                              'https://www.googleapis.com/auth/admin.directory.user.readonly',
-                                              'https://www.googleapis.com/auth/admin.directory.group.readonly',
-                                              'https://www.googleapis.com/auth/calendar',
-                                              'https://www.googleapis.com/auth/contacts',
-                                              // Microsoft medium risk scopes - exact matches
-                                              'Application.Read.All',
-                                              'Directory.Read.All',
-                                              'Group.Read.All',
-                                              'User.Read.All',
-                                              'Files.Read.All',
-                                              'Mail.Read',
-                                              'Mail.Read.All',
-                                              'Sites.Read.All',
-                                              'AuditLog.Read.All',
-                                              'Reports.Read.All'
-                                            ].includes(scope) ||
-                                            // Check for Microsoft patterns
-                                            scope.endsWith('.Read.All') ||
-                                            scope.includes('Reports.Read') ||
-                                            scope.includes('AuditLog.Read')
-                                          );
-                                          
-                                          if (isHighRisk) {
+                                          let riskColor = "#81C784"; // Default green for Low risk
+                                          let riskStatus = "Low-Risk Scope";
+
+                                          if (singleScopeRisk === 'High') {
                                             riskColor = "#EF5350"; // Red for high risk
-                                            riskStatus = "High-Risk Scopes";
-                                          } else if (isMediumRisk) {
+                                            riskStatus = "High-Risk Scope";
+                                          } else if (singleScopeRisk === 'Medium') {
                                             riskColor = "#FFD54F"; // Yellow for medium risk
-                                            riskStatus = "Medium-Risk Scopes";
+                                            riskStatus = "Medium-Risk Scope";
                                           }
                                           
                                           return (

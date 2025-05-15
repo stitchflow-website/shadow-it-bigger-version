@@ -92,8 +92,11 @@ export async function POST(request: Request) {
       appMap 
     } = requestData;
 
+    console.log(`[Relations API ${sync_id}] Received request`);
+
     // Validate required fields
     if (!organization_id || !sync_id) {
+      console.error(`[Relations API ${sync_id}] Missing organization_id or sync_id`);
       return NextResponse.json(
         { error: 'Missing organization_id or sync_id' },
         { status: 400 }
@@ -104,44 +107,59 @@ export async function POST(request: Request) {
     const relations = userAppRelations || [];
     const apps = appMap || [];
 
-    console.log(`Received ${relations.length} relations and ${apps.length} apps for processing`);
+    console.log(`[Relations API ${sync_id}] Processing ${relations.length} relations and ${apps.length} apps for processing`);
 
     // Send immediate response
-    const response = NextResponse.json({ message: 'Relations processing started' });
+    // const response = NextResponse.json({ message: 'Relations processing started' });
     
     // Only process if we have data
     if (relations.length > 0 && apps.length > 0) {
       // Process in the background
-      processRelations(organization_id, sync_id, relations, apps)
-        .catch(async (error) => {
-          console.error('Relations processing failed:', error);
-          await updateSyncStatus(
-            sync_id,
-            -1,
-            `Relations processing failed: ${error.message}`,
-            'FAILED'
-          );
-        });
+      // processRelations(organization_id, sync_id, relations, apps)
+      // .catch(async (error) => {
+      // console.error('Relations processing failed:', error);
+      // await updateSyncStatus(
+      // sync_id,
+      // -1,
+      // `Relations processing failed: ${error.message}`,
+      // 'FAILED'
+      // );
+      // });
+      await processRelations(organization_id, sync_id, relations, apps);
     } else {
       // If no data to process, just update the status
-      console.log(`No relations or apps to process for sync ${sync_id}`);
+      console.log(`[Relations API ${sync_id}] No relations or apps to process for sync ${sync_id}`);
       
       // Still mark as completed since this is expected in the flow
-      updateSyncStatus(
+      // updateSyncStatus(
+      // sync_id, 
+      // 100, 
+      // `Relations processing completed - no data to process`,
+      // 'COMPLETED'
+      // ).catch(err => {
+      // console.error('Error updating sync status:', err);
+      // });
+      await updateSyncStatus(
         sync_id, 
-        100, 
-        `Relations processing completed - no data to process`,
-        'COMPLETED'
-      ).catch(err => {
-        console.error('Error updating sync status:', err);
-      });
+        89, // Consistent progress point indicating this step is done
+        `Relations processing skipped - no data provided`,
+        'IN_PROGRESS' // Keep IN_PROGRESS as this is not the final overall step
+      );
     }
     
-    return response;
+    // return response;
+    console.log(`[Relations API ${sync_id}] Relations processing completed successfully`);
+    return NextResponse.json({ 
+      message: 'Relations processing completed successfully',
+      syncId: sync_id 
+    });
+
   } catch (error: any) {
-    console.error('Error in relations API:', error);
+    const sync_id_for_error = requestData?.sync_id;
+    console.error(`[Relations API ${sync_id_for_error || 'unknown'}] Error:`, error);
+    // processRelations is responsible for updating sync_status to FAILED.
     return NextResponse.json(
-      { error: 'Failed to process relations' },
+      { error: 'Failed to process relations', details: error.message },
       { status: 500 }
     );
   }
@@ -305,31 +323,32 @@ async function processRelations(
     }
     
     // Finalize (100% progress)
-    let finalMessage = `Sync completed successfully - Processed all data`;
+    let finalMessage = `User-application relationships processed.`;
     if (!insertSuccess) {
       finalMessage = `Sync completed with some issues - User and application data was saved, but some relationships may be incomplete`;
     }
     
     await updateSyncStatus(
       sync_id, 
-      100, 
+      89, // Adjusted progress: Tokens step will take it to 90%
       finalMessage,
-      'COMPLETED'
+      'IN_PROGRESS' // Changed from COMPLETED
     );
     
-    console.log(`[Relations ${sync_id}] Relations processing completed successfully`);
+    console.log(`[Relations ${sync_id}] Relations processing completed successfully (within processRelations)`);
     
   } catch (error: any) {
     console.error(`[Relations ${sync_id}] Error in relations processing:`, error);
     
     // Even if there was an error, mark as completed with partial data
-    await updateSyncStatus(
+    await updateSyncStatus( // Ensure await
       sync_id, 
-      95, 
-      `Sync completed with partial data - Some user-application relationships could not be processed: ${error.message}`,
-      'COMPLETED'
+      88, // Adjusted progress for failure at this stage
+      `Relations processing failed: ${error.message}`,
+      'FAILED' // Status is FAILED
     );
     
     // Don't rethrow the error - we've handled it
+    throw error; // Rethrow so POST handler can return 500
   }
 } 

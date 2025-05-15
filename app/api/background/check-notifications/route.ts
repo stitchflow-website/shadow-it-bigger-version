@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { EmailService } from '@/app/lib/services/email-service';
 import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { MicrosoftWorkspaceService } from '@/lib/microsoft-workspace';
+import { determineRiskLevel } from '@/lib/risk-assessment';
 
 // Helper function to safely refresh OAuth tokens with retry logic
 async function safelyRefreshTokens(
@@ -1015,40 +1016,6 @@ async function processGoogleWorkspace(org: any) {
   } catch (error) {
     console.error(`Error in Google Workspace processing for org ${org.id}:`, error);
   }
-}
-
-// Helper function to determine risk level based on scopes
-function determineRiskLevel(scopes: string[] | null | undefined): 'HIGH' | 'MEDIUM' | 'LOW' {
-  // If no scopes provided, default to LOW
-  if (!scopes || !Array.isArray(scopes) || scopes.length === 0) {
-    return 'LOW';
-  }
-
-  const highRiskScopes = [
-    'https://www.googleapis.com/auth/admin.directory.user',
-    'https://www.googleapis.com/auth/admin.directory.group',
-    'https://www.googleapis.com/auth/admin.directory.user.security',
-    'https://mail.google.com/',
-    'https://www.googleapis.com/auth/gmail',
-    'https://www.googleapis.com/auth/drive',
-  ];
-
-  const mediumRiskScopes = [
-    'https://www.googleapis.com/auth/admin.directory.user.readonly',
-    'https://www.googleapis.com/auth/admin.directory.group.readonly',
-    'https://www.googleapis.com/auth/calendar',
-    'https://www.googleapis.com/auth/spreadsheets',
-  ];
-
-  if (scopes.some(scope => highRiskScopes.includes(scope))) {
-    return 'HIGH';
-  }
-
-  if (scopes.some(scope => mediumRiskScopes.includes(scope))) {
-    return 'MEDIUM';
-  }
-
-  return 'LOW';
 }
 
 async function processMicrosoftEntra(org: any) {

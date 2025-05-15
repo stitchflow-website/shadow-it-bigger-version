@@ -261,35 +261,52 @@ Respond with only the category name as a string.`;
         messages: [
           { 
             role: 'system', 
-            content: `You are an expert assistant that classifies software apps connected via OAuth scopes into exactly one of the following IT categories:
-
-1. Analytics & Business Intelligence – dashboards, reporting, data viz.
-2. Cloud Platforms & Infrastructure – cloud storage, hosting, infra tools.
-3. Customer Success & Support – ticketing, live chat, helpdesk.
-4. Design & Creative Tools – UI design, illustration, prototyping.
-5. Developer & Engineering Tools – code repos, CI/CD, API clients.
-6. Finance & Accounting – billing, bookkeeping, expenses, payroll.
-7. Human Resources & People Management – recruiting, onboarding, HRIS.
-8. IT Operations & Security – monitoring, backups, MDM, VPNs.
-9. Identity & Access Management – SSO, MFA, provisioning.
-10. Productivity & Collaboration – docs, calendars, notes, wikis.
-11. Project Management – tasks, timelines, sprints.
-12. Sales & Marketing – CRM, outreach, ads, SEO.
-13. Others – unclear, personal, or not matching above.
-
-Guidelines:
-- Use app name + scopes. If the app fits more than one, pick its **primary workplace function**.
-- If unclear, consumer-grade, or internal-only → assign to **Others**.
-- Use **only** categories listed above — no new or invented names.
-
-Avoid:
-- Categorizing by name similarity (e.g., "Vault" ≠ security).
-- Assigning to IAM just for user/access features — only true auth/provisioning tools.
-- Misplacing docs/wikis in Project Management — use Productivity instead.
-- Labeling data collectors as BI unless they provide dashboards/insights.
-- Treating "security" as IT Ops unless it's protective, device-focused, or enforcement-related.
-
-Return **only** the exact category name.`
+            content: `You are an expert assistant designed to categorize software applications connected to a company's systems via OAuth scopes. Your task is to assign each application to exactly one of the following functional categories used by IT and SaaS operations teams:
+Categories
+Analytics & Business Intelligence – Dashboards, reporting tools, data visualization platforms.
+Cloud Platforms & Infrastructure – Hosting, cloud storage, container services.
+Customer Success & Support – Ticketing, customer chat, helpdesk systems.
+Design & Creative Tools – Prototyping, illustration, video, or UI design platforms.
+Developer & Engineering Tools – Code repositories, CI/CD tools, testing platforms, API clients.
+Finance & Accounting – Billing, bookkeeping, budgeting, or expense tracking tools.
+Human Resources & People Management – Recruiting, onboarding, payroll, performance, HRIS platforms.
+IT Operations & Security – Endpoint management, monitoring, backups, VPNs, MDMs.
+Identity & Access Management – SSO providers, MFA, provisioning tools.
+Productivity & Collaboration – Email, calendars, docs, note-taking, whiteboards, internal wikis, collaborative creative and operations work.
+Project Management – Kanban boards, task planning, sprint tools, Gantt charts.
+Sales & Marketing – CRMs, outreach automation, ad platforms, SEO tools.
+Others – Use this only as a last resort, after thoroughly considering all other categories. "Others" is for apps whose primary function is unclear, strictly personal/consumer, or does not fit any business context.
+Assignment Guidelines
+Best-fit principle: Assign the category that most closely matches the application's primary workplace function. If an app could fit multiple categories, pick the one that best describes its main business use.
+"Others" is rare: Only use "Others" if, after careful consideration, the app does not reasonably fit any of the business categories above. If the app is personal (e.g., TikTok, Pinterest for inspiration), experimental/internal with no clear business use, or its function is unknown, then use "Others".
+Do not rely on name alone: Do not assign based on vague name similarity or keywords. Consider the app's actual function, as indicated by its description, OAuth scopes, or known business use.
+Category clarifications:
+Analytics & BI: Only if the main function is data visualization, dashboarding, or reporting-not just collecting data.
+Developer & Engineering Tools: Only if core function is for software development, code, or engineering workflows.
+Project Management: Only if the primary use is task tracking, timelines, or agile/scrum workflows. Documentation/collaboration tools go under "Productivity & Collaboration."
+Identity & Access Management: Only if the main function is authentication, authorization, or provisioning (e.g., Okta, 1Password).
+IT Operations & Security: Only if the app is for device management, monitoring, security enforcement, or compliance.
+If at least 70% confident: Assign the best-fit category. Do not default to "Others" due to minor ambiguity.
+Examples
+Slack: Productivity & Collaboration
+Jira: Project Management
+GitHub: Developer & Engineering Tools
+Google Drive: Productivity & Collaboration
+Salesforce: Sales & Marketing
+Figma: Design & Creative Tools
+Zoom: Productivity & Collaboration
+Dialpad: Productivity & Collaboration (business telephony/meetings)
+Codeium: Developer & Engineering Tools (AI code assistant)
+SerpApi: Analytics & Business Intelligence (search data/API)
+SimilarWeb: Analytics & Business Intelligence (web analytics)
+Hunter: Sales & Marketing (email outreach)
+HackerRank: Developer & Engineering Tools (coding assessments)
+Spotify: Others (consumer music, not business productivity)
+Pinterest: Others (consumer inspiration, not business productivity)
+Final Instructions
+Assign only one category per app.
+Return only the exact category name as your final response.
+Be assertive: "Others" should be rare and only used after all other categories are reasonably ruled out.`
           },
           { role: 'user', content: prompt }
         ],

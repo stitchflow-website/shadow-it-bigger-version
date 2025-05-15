@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GoogleWorkspaceService } from '@/lib/google-workspace';
 import { createClient } from '@supabase/supabase-js';
+import { determineRiskLevel } from '@/lib/risk-assessment';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -190,30 +191,4 @@ async function processApplications(tokens: any[], orgId: string) {
       }
     }
   }
-}
-
-// Helper function to determine risk level based on scopes
-function determineRiskLevel(scopes: string[]): string {
-  if (!scopes || scopes.length === 0) return 'Low';
-  
-  const highRiskScopes = [
-    'https://www.googleapis.com/auth/admin.directory.user',
-    'https://www.googleapis.com/auth/admin.directory.group',
-    'https://www.googleapis.com/auth/admin.directory.user.security',
-  ];
-
-  const mediumRiskScopes = [
-    'https://www.googleapis.com/auth/admin.directory.user.readonly',
-    'https://www.googleapis.com/auth/admin.directory.group.readonly',
-  ];
-
-  if (scopes.some(scope => highRiskScopes.includes(scope))) {
-    return 'High';
-  }
-
-  if (scopes.some(scope => mediumRiskScopes.includes(scope))) {
-    return 'Medium';
-  }
-
-  return 'Low';
 } 
