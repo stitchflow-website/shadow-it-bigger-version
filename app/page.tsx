@@ -105,6 +105,7 @@ type SortColumn =
   | "totalPermissions"
   // | "lastLogin" // Removed
   | "managementStatus"
+  | "highRiskUserCount" // Added for the new column
 type SortDirection = "asc" | "desc"
 
 // User table sort types
@@ -949,6 +950,10 @@ export default function ShadowITDashboard() {
         return compareNumeric(a.totalPermissions, b.totalPermissions)
       case "managementStatus":
         return compareString(a.managementStatus, b.managementStatus)
+      case "highRiskUserCount":
+        const highRiskA = a.users.filter(u => u.riskLevel === "High").length;
+        const highRiskB = b.users.filter(u => u.riskLevel === "High").length;
+        return compareNumeric(highRiskA, highRiskB);
       default:
         // Default to sorting by risk level and then user count
         const riskDiff = compareNumeric(getRiskValue(a.riskLevel), getRiskValue(b.riskLevel))
@@ -2608,9 +2613,10 @@ export default function ShadowITDashboard() {
                                         {getSortIcon("totalPermissions")}
                                       </div>
                                     </TableHead>
-                                    <TableHead className="text-center">
+                                    <TableHead className="text-center cursor-pointer" onClick={() => handleSort("highRiskUserCount")}>
                                       <div className="flex items-center justify-center">
                                         High Risk Users
+                                        {getSortIcon("highRiskUserCount")}
                                       </div>
                                     </TableHead>
                                 
@@ -2626,7 +2632,7 @@ export default function ShadowITDashboard() {
                           <TableBody>
                               {currentApps.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                                <TableCell colSpan={9} className="text-center py-6 text-muted-foreground">
                                   No applications found matching your filters
                                 </TableCell>
                               </TableRow>
@@ -2725,7 +2731,8 @@ export default function ShadowITDashboard() {
                                               </TooltipContent>
                                             </Tooltip>
                                           </TooltipProvider>
-                                      </TableCell>
+                                      </TableCell>    
+                                    
                                       <TableCell className="text-center">
                                         <TooltipProvider>
                                           <Tooltip delayDuration={300}>
@@ -2748,7 +2755,6 @@ export default function ShadowITDashboard() {
                                           </Tooltip>
                                         </TooltipProvider>
                                       </TableCell>
-                                    
 
                                   <TableCell>
                                     <select
@@ -3852,9 +3858,9 @@ export default function ShadowITDashboard() {
                                   {/* User Group boxes - skip the first "All Scopes" group */}
                                   {currentScopeGroups
                                     .filter(group => !group.isAllScopes)
-                                    .map((group, groupIndex) => {
+                                    .map((group, groupIndex: number) => {
                                       // Determine highest risk level in this group
-                                      const hasHighRisk = group.scopes.some(scope => 
+                                      const hasHighRisk = group.scopes.some((scope: string) => 
                                         [
                                           // Google high risk scopes
                                           'https://www.googleapis.com/auth/admin.directory.user',
@@ -3934,7 +3940,7 @@ export default function ShadowITDashboard() {
                                           <div className="p-3 border-b">
                                             <h5 className="text-sm font-medium mb-2">Permissions:</h5>
                                             <div className="max-h-60 overflow-y-auto">
-                                              {group.scopes.map((scope, scopeIndex) => {
+                                              {group.scopes.map((scope: string, scopeIndex: number) => {
                                                 // Determine risk level for each scope
                                                 const isHighRisk = [
                                                   // Google high risk scopes
@@ -4002,7 +4008,7 @@ export default function ShadowITDashboard() {
                                               Users with this permission set:
                                             </h5>
                                             <div className="flex flex-wrap gap-2">
-                                              {group.users.map((user, userIndex) => (
+                                              {group.users.map((user: AppUser, userIndex: number) => (
                                                 <div
                                                   key={userIndex}
                                                   className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
@@ -4010,7 +4016,7 @@ export default function ShadowITDashboard() {
                                                   <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-200 text-xs font-medium text-gray-800">
                                                     {user.name
                                                       .split(" ")
-                                                      .map((n) => n[0])
+                                                      .map((n: string) => n[0])
                                                       .join("")}
                                                   </div>
                                                   <span className="text-sm">{user.name}</span>
