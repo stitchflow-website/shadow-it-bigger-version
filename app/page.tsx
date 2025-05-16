@@ -62,6 +62,7 @@ import SettingsModal from "@/app/components/SettingsModal";
 import { HIGH_RISK_SCOPES, MEDIUM_RISK_SCOPES } from "@/lib/risk-assessment";
 import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel, transformRiskLevel, getRiskLevelColor, evaluateSingleScopeRisk, RiskLevel } from '@/lib/risk-assessment'; // Corrected import alias and added type import
+import { useSearchParams } from "next/navigation"
 
 // Type definitions
 type Application = {
@@ -186,6 +187,8 @@ export default function ShadowITDashboard() {
 
   // State for the "Apps by Scope Permissions" chart's managed status filter
   const [scopePermissionsManagedStatusFilter, setScopePermissionsManagedStatusFilter] = useState<string>('Any Status');
+
+  const searchParams = useSearchParams(); // Import and use useSearchParams
 
   // Helper function to redirect to Google consent screen
   const redirectToGoogleConsent = () => {
@@ -1980,12 +1983,58 @@ export default function ShadowITDashboard() {
     const [isLoading, setIsLoading] = useState(false);
     const [loginProvider, setLoginProvider] = useState<'google' | 'microsoft' | null>(null);
     const [loginError, setLoginError] = useState('');
+    const searchParams = useSearchParams(); // Import and use useSearchParams
+
+    useEffect(() => {
+      const errorParam = searchParams.get('error');
+      if (errorParam) {
+        let friendlyMessage = '';
+        switch (errorParam) {
+          case 'admin_required':
+            friendlyMessage = "Admin access required. Please sign in with an administrator account for your organization. Check you mail for detailed error message.";
+            break;
+          case 'not_workspace_account':
+            friendlyMessage = "Please use a Google Workspace account. Personal Gmail accounts are not supported. Check you mail for detailed error message.";
+            break;
+          case 'not_work_account':
+            friendlyMessage = "Please use a Microsoft work or school account. Personal Microsoft accounts are not supported. Check you mail for detailed error message.";
+            break;
+          case 'no_code':
+            friendlyMessage = "Authentication failed: Authorization code missing. Please try again. Check you mail for detailed error message.";
+            break;
+          case 'auth_failed':
+            friendlyMessage = "Authentication failed. Please try again or contact support if the issue persists. Check you mail for detailed error message";
+            break;
+          case 'user_data_failed':
+            friendlyMessage = "Failed to fetch user data after authentication. Please try again. Check you mail for detailed error message";
+            break;
+          case 'config_missing':
+            friendlyMessage = "OAuth configuration is missing. Please contact support. Check you mail for detailed error message";
+            break;
+          case 'data_refresh_required':
+            friendlyMessage = "We need to refresh your account permissions. Please sign in again to grant access. Check you mail for detailed error message";
+            break;
+          case 'unknown':
+          default:
+            friendlyMessage = "An unknown authentication error occurred. Please try again. Check you mail for detailed error message";
+            break;
+        }
+        setLoginError(friendlyMessage);
+
+        // Clean the error from URL after displaying it
+        const cleanUrl = new URL(window.location.href);
+        if (cleanUrl.searchParams.has('error')) {
+          cleanUrl.searchParams.delete('error');
+          window.history.replaceState({}, document.title, cleanUrl.toString());
+        }
+      }
+    }, [searchParams]);
     
     const handleGoogleLogin = async () => {
       try {
         setIsLoading(true);
         setLoginProvider('google');
-        setLoginError('');
+        setLoginError(''); // Clear previous errors specifically for a new login attempt
 
         const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
         let redirectUri;
@@ -2053,7 +2102,7 @@ export default function ShadowITDashboard() {
       try {
         setIsLoading(true);
         setLoginProvider('microsoft');
-        setLoginError('');
+        setLoginError(''); // Clear previous errors specifically for a new login attempt
 
         const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
         let redirectUri = process.env.NEXT_PUBLIC_MICROSOFT_REDIRECT_URI;
