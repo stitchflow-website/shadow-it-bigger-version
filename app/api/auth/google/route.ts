@@ -119,6 +119,53 @@ async function storeUserSession(email: string, googleId: string, refreshToken: s
   }
 }
 
+async function sendFailedSignupEmail(userEmail: string, reason: string, name?: string) {
+  const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID_FAILED_SIGNUP;
+  const loopsApiKey = process.env.LOOPS_API_KEY;
+
+  if (!transactionalId) {
+    console.error(`[Google Auth] LOOPS_TRANSACTIONAL_ID_FAILED_SIGNUP is not set. Cannot send failed signup email.`);
+    return;
+  }
+  if (!loopsApiKey) {
+    console.warn(`[Google Auth] LOOPS_API_KEY is not set. Failed signup email might not send if API key is required.`);
+  }
+  if (!userEmail) {
+    console.error(`[Google Auth] User email is not available. Cannot send failed signup email.`);
+    return;
+  }
+
+  const dataVariables: { reason: string; name?: string } = { reason };
+  if (name) {
+    dataVariables.name = name;
+  }
+
+  try {
+    const response = await fetch('https://app.loops.so/api/v1/transactional', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${loopsApiKey}`,
+      },
+      body: JSON.stringify({
+        transactionalId: transactionalId,
+        email: userEmail,
+        dataVariables: dataVariables
+      }),
+    });
+
+    if (response.ok) {
+      const responseData = await response.json();
+      console.log(`[Google Auth] Failed signup email sent successfully to ${userEmail} for reason: ${reason}:`, responseData);
+    } else {
+      const errorData = await response.text();
+      console.error(`[Google Auth] Failed to send failed signup email to ${userEmail}. Status: ${response.status}, Response: ${errorData}`);
+    }
+  } catch (error) {
+    console.error(`[Google Auth] Error sending failed signup email to ${userEmail}:`, error);
+  }
+}
+
 export async function GET(request: Request) {
   try {
     console.log('1. Starting Google OAuth callback...');
@@ -319,6 +366,7 @@ export async function GET(request: Request) {
         
         // Send webhook notification for failed signup
         await sendFailedSignupWebhook(userInfo.email, userInfo.name, 'not_admin');
+        await sendFailedSignupEmail(userInfo.email, 'Google Workspace Admin account required', userInfo.name);
       } catch (err) {
         console.error('Error recording failed signup:', err);
       }
@@ -345,6 +393,7 @@ export async function GET(request: Request) {
         
         // Send webhook notification for failed signup
         await sendFailedSignupWebhook(userInfo.email, userInfo.name, 'not_workspace_account');
+        await sendFailedSignupEmail(userInfo.email, 'Google Workspace account required (personal Gmail not supported)', userInfo.name);
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
@@ -572,6 +621,16 @@ export async function GET(request: Request) {
       
     if (userError) {
       console.error('Error upserting user profile:', userError);
+    }
+
+    // If this is a new user, send webhook notification
+    if (!existingUser) {
+      try {
+        const webhookResult = await sendSuccessSignupWebhook(userInfo.email, userInfo.name, 'google');
+        console.log(`[Google Auth] Success signup webhook result: ${webhookResult ? 'Success' : 'Failed'}`);
+      } catch (webhookError) {
+        console.error('[Google Auth] Error sending success signup webhook:', webhookError);
+      }
     }
 
     return response;

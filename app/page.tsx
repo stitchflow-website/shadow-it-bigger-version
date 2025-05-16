@@ -3122,7 +3122,6 @@ export default function ShadowITDashboard() {
                                   strokeWidth={1}
                                   stroke="#fff"
                                   cursor="pointer"
-                                  fill="#EF5350" 
                                   onClick={(data) => {
                                     const app = applications.find(a => a.name === data.name);
                                     if (app) {
@@ -3135,7 +3134,7 @@ export default function ShadowITDashboard() {
                                   {getHighRiskUsersByApp().filter(app => app.value > 0).map((entry, index) => (
                                     <Cell 
                                       key={`cell-${index}`} 
-                                      fill="#EF5350"  
+                                      fill={entry.color}  
                                       fillOpacity={1}
                                     />
                                   ))}
@@ -3184,64 +3183,76 @@ export default function ShadowITDashboard() {
                           </div>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
-                        <div className="h-96">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={getTop10AppsByPermissions()} layout="vertical" margin={{ left: 150 }}>
-                              <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                              <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                              <YAxis
-                                dataKey="name"
-                                type="category"
-                                axisLine={false}
-                                tickLine={false}
-                                width={140}
-                                tick={{ fill: '#111827', fontSize: 12 }}
-                              />
-                              <Bar 
-                                dataKey="value" 
-                                name="Permissions" 
-                                radius={[0, 4, 4, 0]} 
-                                barSize={20}
-                                strokeWidth={1}
-                                stroke="#fff"
-                                cursor="pointer"
-                                onClick={(data) => {
-                                  const app = applications.find(a => a.name === data.name);
-                                  if (app) {
-                                    setMainView("list");
-                                    setSelectedAppId(app.id);
-                                    setIsUserModalOpen(true);
-                                  }
-                                }}
-                              >
-                                {getTop10AppsByPermissions().map((entry, index) => (
-                                  <Cell 
-                                    key={`cell-${index}`} 
-                                    fill={entry.color} 
-                                    fillOpacity={1}
+                        <div className="h-96 overflow-y-auto">
+                          {(() => {
+                            const chartData = getTop10AppsByPermissions();
+                            if (chartData.length === 0) {
+                              return (
+                                <div className="h-full flex items-center justify-center text-gray-500">
+                                  No apps that match this criteria
+                                </div>
+                              );
+                            }
+                            return (
+                              <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
+                                <BarChart data={chartData} layout="vertical" margin={{ left: 150 }}>
+                                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
+                                  <YAxis
+                                    dataKey="name"
+                                    type="category"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    width={140}
+                                    tick={{ fill: '#111827', fontSize: 12 }}
                                   />
-                                ))}
-                              </Bar>
-                              <RechartsTooltip
-                                formatter={(value) => [`${value} permissions`, ""]}
-                                contentStyle={{ 
-                                  backgroundColor: 'white', 
-                                  border: '1px solid #e5e7eb', 
-                                  borderRadius: '8px', 
-                                  padding: '4px 12px',
-                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                  fontFamily: 'inherit',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px'
-                                }}
-                                labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                                itemStyle={{ color: '#111827', fontWeight: 600 }}
-                                separator=": "
-                                cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                              />
-                            </BarChart>
-                          </ResponsiveContainer>
+                                  <Bar 
+                                    dataKey="value" 
+                                    name="Permissions" 
+                                    radius={[0, 4, 4, 0]} 
+                                    barSize={20}
+                                    strokeWidth={1}
+                                    stroke="#fff"
+                                    cursor="pointer"
+                                    onClick={(data) => {
+                                      const app = applications.find(a => a.name === data.name);
+                                      if (app) {
+                                        setMainView("list");
+                                        setSelectedAppId(app.id);
+                                        setIsUserModalOpen(true);
+                                      }
+                                    }}
+                                  >
+                                    {chartData.map((entry, index) => (
+                                      <Cell 
+                                        key={`cell-${index}`} 
+                                        fill={entry.color} 
+                                        fillOpacity={1}
+                                      />
+                                    ))}
+                                  </Bar>
+                                  <RechartsTooltip
+                                    formatter={(value) => [`${value} permissions`, ""]}
+                                    contentStyle={{ 
+                                      backgroundColor: 'white', 
+                                      border: '1px solid #e5e7eb', 
+                                      borderRadius: '8px', 
+                                      padding: '4px 12px',
+                                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                      fontFamily: 'inherit',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px'
+                                    }}
+                                    labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                    itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                    separator=": "
+                                    cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                  />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            );
+                          })()}
                         </div>
                       </div>
                     

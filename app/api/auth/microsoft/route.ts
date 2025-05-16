@@ -40,6 +40,53 @@ async function isValidSession(sessionId: string | undefined): Promise<boolean> {
   }
 }
 
+async function sendFailedSignupEmail(userEmail: string, reason: string, name?: string) {
+  const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID_FAILED_SIGNUP;
+  const loopsApiKey = process.env.LOOPS_API_KEY;
+
+  if (!transactionalId) {
+    console.error(`[Microsoft Auth] LOOPS_TRANSACTIONAL_ID_FAILED_SIGNUP is not set. Cannot send failed signup email.`);
+    return;
+  }
+  if (!loopsApiKey) {
+    console.warn(`[Microsoft Auth] LOOPS_API_KEY is not set. Failed signup email might not send if API key is required.`);
+  }
+  if (!userEmail) {
+    console.error(`[Microsoft Auth] User email is not available. Cannot send failed signup email.`);
+    return;
+  }
+
+  const dataVariables: { reason: string; name?: string } = { reason };
+  if (name) {
+    dataVariables.name = name;
+  }
+
+  try {
+    const response = await fetch('https://app.loops.so/api/v1/transactional', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${loopsApiKey}`,
+      },
+      body: JSON.stringify({
+        transactionalId: transactionalId,
+        email: userEmail,
+        dataVariables: dataVariables
+      }),
+    });
+
+    if (response.ok) {
+      const responseData = await response.json();
+      console.log(`[Microsoft Auth] Failed signup email sent successfully to ${userEmail} for reason: ${reason}:`, responseData);
+    } else {
+      const errorData = await response.text();
+      console.error(`[Microsoft Auth] Failed to send failed signup email to ${userEmail}. Status: ${response.status}, Response: ${errorData}`);
+    }
+  } catch (error) {
+    console.error(`[Microsoft Auth] Error sending failed signup email to ${userEmail}:`, error);
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Get authorization code from query params
@@ -288,6 +335,7 @@ export async function GET(request: NextRequest) {
         } catch (webhookError) {
           console.error('Error sending failed signup webhook:', webhookError);
         }
+        await sendFailedSignupEmail(userData.userPrincipalName, 'Microsoft work or school account required (personal accounts not supported)', userData.displayName);
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }
@@ -363,6 +411,7 @@ export async function GET(request: NextRequest) {
         } catch (webhookError) {
           console.error('Error sending failed signup webhook (not_admin):', webhookError);
         }
+        await sendFailedSignupEmail(userData.userPrincipalName, 'Microsoft 365 Admin account required', userData.displayName);
       } catch (err: unknown) {
         console.error('Error recording failed signup:', err);
       }

@@ -73,6 +73,48 @@ interface Application {
   updated_at: string;
 }
 
+async function sendSyncCompletedEmail(userEmail: string, syncId?: string) {
+  const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID_SYNC_COMPLETED;
+  const loopsApiKey = process.env.LOOPS_API_KEY;
+
+  if (!transactionalId) {
+    console.error(`[Microsoft Sync ${syncId || ''}] LOOPS_TRANSACTIONAL_ID_SYNC_COMPLETED is not set. Cannot send email.`);
+    return;
+  }
+  if (!loopsApiKey) {
+    console.warn(`[Microsoft Sync ${syncId || ''}] LOOPS_API_KEY is not set. Email might not send if API key is required.`);
+    // Depending on Loops API, you might want to return here if key is strictly required
+  }
+  if (!userEmail) {
+    console.error(`[Microsoft Sync ${syncId || ''}] User email is not available. Cannot send completion email.`);
+    return;
+  }
+
+  try {
+    const response = await fetch('https://app.loops.so/api/v1/transactional', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${loopsApiKey}`,
+      },
+      body: JSON.stringify({
+        transactionalId: transactionalId,
+        email: userEmail,
+      }),
+    });
+
+    if (response.ok) {
+      const responseData = await response.json();
+      console.log(`[Microsoft Sync ${syncId || ''}] Sync completed email sent successfully to ${userEmail}:`, responseData);
+    } else {
+      const errorData = await response.text();
+      console.error(`[Microsoft Sync ${syncId || ''}] Failed to send sync completed email to ${userEmail}. Status: ${response.status}, Response: ${errorData}`);
+    }
+  } catch (error) {
+    console.error(`[Microsoft Sync ${syncId || ''}] Error sending sync completed email to ${userEmail}:`, error);
+  }
+}
+
 export async function GET(request: NextRequest) {
   let syncRecord: any = null;
   
@@ -396,6 +438,12 @@ export async function GET(request: NextRequest) {
     // Mark sync as completed
     await updateSyncStatus(syncRecord.id, 100, 'Microsoft Entra ID sync completed', 'COMPLETED');
 
+    if (syncRecord.user_email) {
+      await sendSyncCompletedEmail(syncRecord.user_email, syncRecord.id);
+    } else {
+      console.warn(`[Microsoft Sync ${syncRecord.id}] User email not found in syncRecord. Cannot send completion email.`);
+    }
+
     console.log('🎉 Microsoft sync completed successfully');
     return NextResponse.json({ 
       success: true, 
@@ -427,10 +475,10 @@ async function updateSyncStatus(
   message: string, 
   status: string = 'IN_PROGRESS'
 ) {
-  console.log(`📊 Updating sync status: ${progress}% - ${message}`);
+  console.log(`📊 Updating sync status for ${syncId}: ${progress}% - ${message} - ${status}`);
   
   try {
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('sync_status')
       .update({
         progress,
@@ -439,6 +487,10 @@ async function updateSyncStatus(
         updated_at: new Date().toISOString()
       })
       .eq('id', syncId);
+
+    if (error) {
+      console.error(`❌ Error updating sync status in Supabase for ${syncId}:`, error);
+    }
   } catch (error) {
     console.error('❌ Error updating sync status:', error);
   }
@@ -448,14 +500,32 @@ async function updateSyncStatus(
 async function createUserAppRelationship(appId: string, token: any, organizationId: string) {
   try {
     // Get user by email or Microsoft user ID using proper parameterized query
+    // Ensure token.userEmail and token.userKey are sanitized if they come directly from external sources
+    // For now, assuming they are trustworthy internal variables.
+    const userEmailSafe = token.userEmail ? token.userEmail.replace(/"/g, '\"') : null;
+    const userKeySafe = token.userKey ? token.userKey.replace(/"/g, '\"') : null;
+
+    let orConditions = [];
+    if (userEmailSafe) {
+      orConditions.push(`email.eq."${userEmailSafe}"`);
+    }
+    if (userKeySafe) {
+      orConditions.push(`microsoft_user_id.eq."${userKeySafe}"`);
+    }
+    
+    if (orConditions.length === 0) {
+      console.error('❌ Cannot find user without email or userKey.');
+      return;
+    }
+
     let { data: userData, error: userError } = await supabaseAdmin
       .from('users')
       .select('id')
       .eq('organization_id', organizationId)
-      .or(`email.eq."${token.userEmail}",microsoft_user_id.eq."${token.userKey}"`)
+      .or(orConditions.join(','))
       .single();
 
-    if (userError) {
+    if (userError && userError.code !== 'PGRST116') { // PGRST116 means no rows found, which is handled
       console.error('❌ Error finding user:', userError);
       return;
     }

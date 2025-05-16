@@ -112,6 +112,47 @@ function extractScopesFromToken(token: any): string[] {
   return Array.from(scopes);
 }
 
+async function sendSyncCompletedEmail(userEmail: string, syncId?: string) {
+  const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID_SYNC_COMPLETED;
+  const loopsApiKey = process.env.LOOPS_API_KEY;
+
+  if (!transactionalId) {
+    console.error(`[Tokens Sync ${syncId || ''}] LOOPS_TRANSACTIONAL_ID_SYNC_COMPLETED is not set. Cannot send email.`);
+    return;
+  }
+  if (!loopsApiKey) {
+    console.warn(`[Tokens Sync ${syncId || ''}] LOOPS_API_KEY is not set. Email might not send if API key is required.`);
+  }
+  if (!userEmail) {
+    console.error(`[Tokens Sync ${syncId || ''}] User email is not available. Cannot send completion email.`);
+    return;
+  }
+
+  try {
+    const response = await fetch('https://app.loops.so/api/v1/transactional', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${loopsApiKey}`,
+      },
+      body: JSON.stringify({
+        transactionalId: transactionalId,
+        email: userEmail,
+      }),
+    });
+
+    if (response.ok) {
+      const responseData = await response.json();
+      console.log(`[Tokens Sync ${syncId || ''}] Sync completed email sent successfully to ${userEmail}:`, responseData);
+    } else {
+      const errorData = await response.text();
+      console.error(`[Tokens Sync ${syncId || ''}] Failed to send sync completed email to ${userEmail}. Status: ${response.status}, Response: ${errorData}`);
+    }
+  } catch (error) {
+    console.error(`[Tokens Sync ${syncId || ''}] Error sending sync completed email to ${userEmail}:`, error);
+  }
+}
+
 export const maxDuration = 300; // Set max duration to 300 seconds (5 minutes)
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
@@ -508,6 +549,22 @@ async function processTokens(
         `Token processing complete, finalizing data...`,
         'COMPLETED'
       );
+
+      // Fetch user_email and send email
+      const { data: syncInfo, error: syncInfoError } = await supabaseAdmin
+        .from('sync_status')
+        .select('user_email')
+        .eq('id', sync_id)
+        .single();
+
+      if (syncInfoError) {
+        console.error(`[Tokens ${sync_id}] Error fetching sync info for email:`, syncInfoError.message);
+      } else if (syncInfo && syncInfo.user_email) {
+        await sendSyncCompletedEmail(syncInfo.user_email, sync_id);
+      } else {
+        console.warn(`[Tokens ${sync_id}] User email not found for sync_id ${sync_id}. Cannot send completion email.`);
+      }
+
       // Fire-and-forget categorization (do not await)
       fetch(categorizeUrl, {
         method: 'POST',
