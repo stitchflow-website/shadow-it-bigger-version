@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import Link from 'next/link';
+import { Suspense } from 'react';
 
 export const metadata: Metadata = {
   title: 'Free Shadow IT Scanner for SaaS & AI Apps | Stitchflow',
@@ -15,8 +16,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-
-      <body>{children}</body>
+      <body>
+        <Suspense fallback={<div>Loading...</div>}>
+          {children}
+        </Suspense>
+      </body>
       {/* <footer className="bottom-0 left-0 right-0 flex justify-between items-center px-4 py-3 bg-[#1a1a2e] text-white">
         <div className="flex items-center gap-4">
           <Link href="/" className="hover:text-blue-500 transition-colors">
