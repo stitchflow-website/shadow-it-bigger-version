@@ -92,6 +92,22 @@ export async function POST(request: Request) {
       appUsers.get(appId).add(token.userEmail);
     }
 
+    // Create a map to track all scopes for each app
+    const appScopes = new Map();
+
+    // Collect all scopes for each application
+    for (const token of tokens) {
+      const appId = token.clientId;
+      if (!appScopes.has(appId)) {
+        appScopes.set(appId, new Set());
+      }
+      
+      // Add all scopes from this token to the app's scope set
+      if (token.scopes && token.scopes.length > 0) {
+        token.scopes.forEach((scope: string) => appScopes.get(appId).add(scope));
+      }
+    }
+
     // Second pass: Process apps and create relationships
     for (const token of tokens) {
       try {
@@ -108,6 +124,28 @@ export async function POST(request: Request) {
             .eq('organization_id', organization_id)
             .single();
 
+          // Get all unique scopes for this app
+          const allScopes = Array.from(appScopes.get(appId) || []);
+          
+          // Determine risk level based on scope content
+          let riskLevel = 'LOW';
+          if (allScopes.some((scope: unknown) => 
+            typeof scope === 'string' && (
+              scope.includes('manage') || 
+              scope.includes('admin') || 
+              scope.includes('full')
+            )
+          )) {
+            riskLevel = 'HIGH';
+          } else if (allScopes.some((scope: unknown) => 
+            typeof scope === 'string' && (
+              scope.includes('write') || 
+              scope.includes('edit')
+            )
+          )) {
+            riskLevel = 'MEDIUM';
+          }
+
           const { data: newApp, error: appError } = await supabaseAdmin
             .from('applications')
             .upsert({
@@ -116,10 +154,10 @@ export async function POST(request: Request) {
               name: token.displayText || 'Unknown App',
               google_app_id: appId,
               category: existingApp?.category || 'uncategorized',
-              risk_level: existingApp?.risk_level || 'LOW',
+              risk_level: existingApp?.risk_level || riskLevel,
               management_status: existingApp?.management_status || 'NEEDS_REVIEW',
-              total_permissions: token.scopes?.length || 0,
-              all_scopes: token.scopes || [],
+              total_permissions: allScopes.length,
+              all_scopes: allScopes,
               user_count: appUsers.get(appId).size,
               updated_at: new Date().toISOString()
             })
@@ -134,7 +172,7 @@ export async function POST(request: Request) {
           processedApps.set(appId, newApp);
           app = newApp;
           
-          console.log(`Processed app ${token.displayText} with ${appUsers.get(appId).size} users`);
+          console.log(`Processed app ${token.displayText} with ${appUsers.get(appId).size} users and ${allScopes.length} unique scopes`);
         } else {
           app = processedApps.get(appId);
         }

@@ -268,21 +268,17 @@ async function processTokens(
         );
       }
       
-      // Calculate total unique permissions
-      const allScopes = new Set<string>();
+      // Determine highest risk level based on ALL scopes combined
+      // This ensures app risk level properly reflects all scopes across all users
+      const allScopesForRiskEvaluation = new Set<string>();
       tokens.forEach((token: any) => {
         if (token.scopes && Array.isArray(token.scopes)) {
-          token.scopes.forEach((scope: string) => allScopes.add(scope));
+          token.scopes.forEach((scope: string) => allScopesForRiskEvaluation.add(scope));
         }
       });
-      
-      // Determine highest risk level
-      const highestRiskLevel = tokens.reduce((highest: string, token: any) => {
-        const tokenRisk = determineRiskLevel(token.scopes);
-        if (tokenRisk === 'HIGH') return 'HIGH';
-        if (tokenRisk === 'MEDIUM' && highest !== 'HIGH') return 'MEDIUM';
-        return highest;
-      }, 'LOW');
+
+      // Now evaluate risk based on the combined set of scopes
+      const highestRiskLevel = determineRiskLevel(Array.from(allScopesForRiskEvaluation));
       
       // Check if app already exists
       const { data: existingApp } = await supabaseAdmin
@@ -298,8 +294,8 @@ async function processTokens(
         name: appName,
         category: 'Unknown',
         risk_level: highestRiskLevel,
-        total_permissions: allScopes.size,
-        all_scopes: Array.from(allScopes),
+        total_permissions: allScopesForRiskEvaluation.size,
+        all_scopes: Array.from(allScopesForRiskEvaluation),
         organization_id: organization_id,
         updated_at: new Date().toISOString()
       };
@@ -442,67 +438,35 @@ async function processTokens(
     
     console.log(`[Tokens ${sync_id}] Triggering app categorization at: ${categorizeUrl}`);
     
-    // Fire and forget - don't await the response
-    // fetch(categorizeUrl, {
-    // method: 'POST',
-    // headers: {
-    // 'Content-Type': 'application/json',
-    // },
-    // body: JSON.stringify({
-    // organization_id,
-    // sync_id
-    // }),
-    // }).catch(error => {
-    // console.warn(`[Tokens ${sync_id}] Error triggering categorization:`, error);
-    // // Continue with main sync process even if categorization fails
-    // });
-    
-    try {
-      console.log(`[Tokens ${sync_id}] Triggering and awaiting app categorization at: ${categorizeUrl}`);
-      const categorizeResponse = await fetch(categorizeUrl, {
+    // Prepare user app relationships for the next phase
+    await updateSyncStatus(sync_id, 80, `Preparing user-application relationships`);
+    // Construct a data structure for relations processing
+    const appMap = Array.from(appNameToIdMap.entries()).map(([appName, appId]) => ({ appName, appId }));
+    // Trigger the final phase - the relationships processing
+    await updateSyncStatus(sync_id, 80, 'Saving application token relationships');
+    // Use the same URL variables defined earlier
+    const nextUrl = `${protocol}${selfUrl}/api/background/sync/relations`;
+    console.log(`Triggering relations processing at: ${nextUrl}`);
+    console.log(`Prepared ${userAppRelationsToProcess.length} user-app relations and ${appMap.length} app mappings`);
+    if (userAppRelationsToProcess.length === 0) {
+      console.warn(`[Tokens ${sync_id}] No user-application relations to process - check user mapping and token data`);
+      // Mark sync as completed even if no relations (fixes 'unknown' category issue)
+      await updateSyncStatus(
+        sync_id, 
+        100, 
+        `Processing complete. No user-application relations could be created - user IDs may not match.`,
+        'COMPLETED'
+      );
+      // Fire-and-forget categorization
+      fetch(categorizeUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ organization_id, sync_id }),
+      }).catch(error => {
+        console.warn(`[Tokens ${sync_id}] Error triggering categorization:`, error);
       });
-
-      if (!categorizeResponse.ok) {
-        const errorText = await categorizeResponse.text();
-        console.error(`[Tokens ${sync_id}] App categorization call failed: ${categorizeResponse.status} ${errorText}`);
-        throw new Error(`App categorization step failed: ${errorText}`);
-      }
-      console.log(`[Tokens ${sync_id}] App categorization call completed successfully.`);
-    } catch (categorizationError: any) {
-      console.warn(`[Tokens ${sync_id}] Error during app categorization:`, categorizationError);
-      // Rethrow to fail the token processing, which will update status to FAILED via the main catch block
-      throw new Error(`App categorization failed: ${categorizationError.message}`);
-    }
-    
-    // Prepare user app relationships for the next phase
-    await updateSyncStatus(sync_id, 80, `Preparing user-application relationships`);
-    
-    // Construct a data structure for relations processing
-    const appMap = Array.from(appNameToIdMap.entries()).map(([appName, appId]) => ({ appName, appId }));
-    
-    // Trigger the final phase - the relationships processing
-    await updateSyncStatus(sync_id, 80, 'Saving application token relationships');
-    
-    // Use the same URL variables defined earlier
-    const nextUrl = `${protocol}${selfUrl}/api/background/sync/relations`;
-    
-    console.log(`Triggering relations processing at: ${nextUrl}`);
-    console.log(`Prepared ${userAppRelationsToProcess.length} user-app relations and ${appMap.length} app mappings`);
-    
-    // Modified completion handling - don't mark as COMPLETED here
-    if (userAppRelationsToProcess.length === 0) {
-      console.warn(`[Tokens ${sync_id}] No user-application relations to process - check user mapping and token data`);
-      await updateSyncStatus(
-        sync_id, 
-        90, 
-        `Processing complete. No user-application relations could be created - user IDs may not match.`
-      );
       return;
     }
-
     try {
       const nextResponse = await fetch(nextUrl, {
         method: 'POST',
@@ -516,33 +480,60 @@ async function processTokens(
           appMap: appMap
         }),
       });
-      
       if (!nextResponse.ok) {
         const errorText = await nextResponse.text();
         console.error(`Failed to trigger relations processing: ${nextResponse.status} ${nextResponse.statusText}`);
         console.error(`Response details: ${errorText}`);
-        
+        // Mark sync as completed even if some relations failed
         await updateSyncStatus(
           sync_id, 
-          85, 
-          `Processing continuing with some issues. Some relationships could not be processed.`
+          100, 
+          `Processing continuing with some issues. Some relationships could not be processed.`,
+          'COMPLETED'
         );
+        // Fire-and-forget categorization
+        fetch(categorizeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organization_id, sync_id }),
+        }).catch(error => {
+          console.warn(`[Tokens ${sync_id}] Error triggering categorization:`, error);
+        });
         return;
       }
-      
-      console.log(`[Tokens ${sync_id}] Token processing completed successfully`);
+      // Mark sync as completed after user-app mapping, before categorization
       await updateSyncStatus(
         sync_id, 
-        90, 
-        `Token processing complete, finalizing data...`
+        100, 
+        `Token processing complete, finalizing data...`,
+        'COMPLETED'
       );
+      // Fire-and-forget categorization (do not await)
+      fetch(categorizeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organization_id, sync_id }),
+      }).catch(error => {
+        console.warn(`[Tokens ${sync_id}] Error triggering categorization:`, error);
+      });
+      console.log(`[Tokens ${sync_id}] Token processing completed successfully`);
     } catch (relationError) {
       console.error(`[Tokens ${sync_id}] Error triggering relations processing:`, relationError);
+      // Mark sync as completed even if some relations failed
       await updateSyncStatus(
         sync_id, 
-        85, 
-        `Processing continuing with some issues. Some relationships could not be processed.`
+        100, 
+        `Processing continuing with some issues. Some relationships could not be processed.`,
+        'COMPLETED'
       );
+      // Fire-and-forget categorization
+      fetch(categorizeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organization_id, sync_id }),
+      }).catch(error => {
+        console.warn(`[Tokens ${sync_id}] Error triggering categorization:`, error);
+      });
     }
   } catch (error: any) {
     console.error(`[Tokens ${sync_id}] Error in token processing:`, error);

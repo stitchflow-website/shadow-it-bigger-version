@@ -272,8 +272,13 @@ export async function GET(request: NextRequest) {
 
         // Determine risk level based on permissions
         let riskLevel = 'LOW';
-        const highRiskScopes = allAppScopes.filter(scope => classifyPermissionRisk(scope as string) === 'high');
-        const mediumRiskScopes = allAppScopes.filter(scope => classifyPermissionRisk(scope as string) === 'medium');
+        // Aggregate scopes to determine risk level
+        const highRiskScopes = allAppScopes.filter(scope => 
+          typeof scope === 'string' && classifyPermissionRisk(scope) === 'high'
+        );
+        const mediumRiskScopes = allAppScopes.filter(scope => 
+          typeof scope === 'string' && classifyPermissionRisk(scope) === 'medium'
+        );
         
         if (highRiskScopes.length > 0) {
           riskLevel = 'HIGH';

@@ -61,7 +61,7 @@ import SettingsModal from "@/app/components/SettingsModal";
 // Import risk assessment utilities
 import { HIGH_RISK_SCOPES, MEDIUM_RISK_SCOPES } from "@/lib/risk-assessment";
 import { supabaseAdmin } from '@/lib/supabase';
-import { determineRiskLevel as assessGoogleScopeRisk, RiskLevel as GoogleRiskLevelType } from '@/lib/risk-assessment'; // Corrected import alias and added type import
+import { determineRiskLevel, transformRiskLevel, getRiskLevelColor, evaluateSingleScopeRisk, RiskLevel } from '@/lib/risk-assessment'; // Corrected import alias and added type import
 
 // Type definitions
 type Application = {
@@ -70,7 +70,7 @@ type Application = {
   category: string | null // Modified to allow null
   userCount: number
   users: AppUser[]
-  riskLevel: "Low" | "Medium" | "High"
+  riskLevel: RiskLevel
   riskReason: string
   totalPermissions: number
   scopeVariance: { userGroups: number; scopeGroups: number }
@@ -94,7 +94,7 @@ type AppUser = {
   lastActive?: string
   created_at?: string
   scopes: string[]
-  riskLevel: "Low" | "Medium" | "High"
+  riskLevel: RiskLevel
   riskReason: string
 }
 
@@ -179,7 +179,7 @@ export default function ShadowITDashboard() {
   const [loginError, setLoginError] = useState<string>('');
   
   // State for the "Top Apps by User Count" chart's managed status filter
-  const [chartManagedStatusFilter, setChartManagedStatusFilter] = useState<string | null>(null);
+  const [chartManagedStatusFilter, setChartManagedStatusFilter] = useState<string>('Any Status');
 
   // Helper function to redirect to Google consent screen
   const redirectToGoogleConsent = () => {
@@ -964,8 +964,9 @@ export default function ShadowITDashboard() {
       case "managementStatus":
         return compareString(a.managementStatus, b.managementStatus)
       case "highRiskUserCount":
-        const highRiskA = a.users.filter(u => u.riskLevel === "High").length;
-        const highRiskB = b.users.filter(u => u.riskLevel === "High").length;
+        // Use transformRiskLevel to normalize the riskLevel values during comparison
+        const highRiskA = a.users.filter(u => transformRiskLevel(u.riskLevel) === "High").length;
+        const highRiskB = b.users.filter(u => transformRiskLevel(u.riskLevel) === "High").length;
         return compareNumeric(highRiskA, highRiskB);
       default:
         // Default to sorting by risk level and then user count
@@ -1059,10 +1060,17 @@ export default function ShadowITDashboard() {
         case "created":
           return compareDate(a.created_at, b.created_at)
         case "riskLevel": {
-          const riskOrder = { Low: 1, Medium: 2, High: 3 }
+          // Create a more comprehensive mapping to handle all possible RiskLevel values
+          const riskOrder: Record<string, number> = { 
+            'Low': 1, 'low': 1, 'LOW': 1,
+            'Medium': 2, 'medium': 2, 'MEDIUM': 2, 
+            'High': 3, 'high': 3, 'HIGH': 3
+          };
+          
+          // Use transformRiskLevel to normalize keys as needed
           return userSortDirection === "asc" 
-            ? riskOrder[a.riskLevel] - riskOrder[b.riskLevel]
-            : riskOrder[b.riskLevel] - riskOrder[a.riskLevel]
+            ? (riskOrder[transformRiskLevel(a.riskLevel)] || 0) - (riskOrder[transformRiskLevel(b.riskLevel)] || 0)
+            : (riskOrder[transformRiskLevel(b.riskLevel)] || 0) - (riskOrder[transformRiskLevel(a.riskLevel)] || 0);
         }
         default:
           return 0
@@ -1557,23 +1565,18 @@ export default function ShadowITDashboard() {
 
   // Update RiskBadge component to determine correct risk level from the user's scopes
   function RiskBadge({ level, scopes }: { level: string, scopes?: string[] }) {
-    let calculatedLevelString: "High" | "Medium" | "Low";
+    let riskLevel: RiskLevel;
 
     if (scopes && Array.isArray(scopes) && scopes.length > 0) {
-      // Use the main determineRiskLevel helper function from this file
-      calculatedLevelString = determineRiskLevel(scopes);
+      // Use the centralized risk assessment logic
+      riskLevel = determineRiskLevel(scopes);
     } else {
-      // Fallback to the provided level, ensuring correct casing for consistency
-      const upperLevel = level.toUpperCase();
-      if (upperLevel === 'HIGH' || upperLevel === 'MEDIUM' || upperLevel === 'LOW') {
-        calculatedLevelString = upperLevel as "High" | "Medium" | "Low";
-      } else {
-        calculatedLevelString = 'Low'; // Default for unknown levels
-      }
+      // For backward compatibility, transform the provided level
+      riskLevel = transformRiskLevel(level);
     }
     
     // Normalize for display (e.g., "High", "Medium", "Low")
-    const normalizedLevel = calculatedLevelString.charAt(0).toUpperCase() + calculatedLevelString.slice(1).toLowerCase();
+    const normalizedLevel = transformRiskLevel(riskLevel);
     
     const iconMap: Record<string, JSX.Element> = {
       Low: <CheckCircle className="h-5 w-5 mr-1 text-green-700" />,
@@ -1942,7 +1945,7 @@ export default function ShadowITDashboard() {
         category: item.Category,
         userCount: appUsers.length,
         users: appUsers, // use the potentially modified appUsers
-        riskLevel: item.Risk as "Low" | "Medium" | "High",
+        riskLevel: item.Risk as RiskLevel,
         riskReason: "Based on scope permissions and usage patterns",
         totalPermissions: item["Total Scopes"],
         scopeVariance: { userGroups: Math.floor(Math.random() * 5) + 1, scopeGroups: Math.floor(Math.random() * 3) + 1 },
@@ -2151,68 +2154,16 @@ export default function ShadowITDashboard() {
     // No action needed - just having this dependency will cause charts to re-render
   }, [appCategories, mainView]);
 
-  // Helper function to determine risk level based on scopes
-  function determineRiskLevel(scopes: string[] | null | undefined): "High" | "Medium" | "Low" {
-    if (!scopes || !Array.isArray(scopes) || scopes.length === 0) {
-      return 'Low';
+  // We're now using the centralized risk assessment functions from '@/lib/risk-assessment'
+  // instead of having duplicate risk assessment logic here
+
+  // Apps by User Count - show all apps and filter by managed status
+  const getAppsByUserCountChartData = () => {
+    let filtered = applications;
+    if (chartManagedStatusFilter && chartManagedStatusFilter !== 'Any Status') {
+      filtered = applications.filter(app => app.managementStatus === chartManagedStatusFilter);
     }
-
-    const googleScopes = scopes.filter(s => s.startsWith('https://www.googleapis.com/auth/'));
-    const microsoftScopes = scopes.filter(s => !s.startsWith('https://www.googleapis.com/auth/'));
-
-    // 1. Assess Google Scopes
-    const googleRisk: GoogleRiskLevelType = assessGoogleScopeRisk(googleScopes);
-
-    // 2. Assess Microsoft Scopes
-    let microsoftRisk: "High" | "Medium" | "Low" = 'Low';
-    const microsoftHighRiskList = [
-      'Application.ReadWrite.All', 'User.ReadWrite.All', 'Group.ReadWrite.All',
-      'Directory.ReadWrite.All', 'Mail.ReadWrite', 'Mail.ReadWrite.All', 'Mail.Send',
-      'Files.ReadWrite.All', 'Sites.ReadWrite.All', 'MailboxSettings.ReadWrite'
-    ];
-    const microsoftMediumRiskList = [
-      'Application.Read.All', 'Directory.Read.All', 'Group.Read.All', 'User.Read.All',
-      'Files.Read.All', 'Mail.Read', 'Mail.Read.All', 'Sites.Read.All',
-      'AuditLog.Read.All', 'Reports.Read.All'
-    ];
-
-    const hasMicrosoftHighRisk = microsoftScopes.some(scope =>
-      microsoftHighRiskList.includes(scope) || // Ensure this uses microsoftHighRiskList
-      scope.endsWith('.ReadWrite.All') || scope.endsWith('.ReadWrite') ||
-      scope.includes('FullControl') || scope.includes('Write.All')
-    );
-
-    if (hasMicrosoftHighRisk) {
-      microsoftRisk = 'High';
-    } else {
-      const hasMicrosoftMediumRisk = microsoftScopes.some(scope =>
-        microsoftMediumRiskList.includes(scope) ||
-        scope.endsWith('.Read.All') || scope.includes('Reports.Read') ||
-        scope.includes('AuditLog.Read')
-      );
-      if (hasMicrosoftMediumRisk) {
-        microsoftRisk = 'Medium';
-      }
-    }
-
-    // 3. Combine Risks (High > Medium > Low)
-    if (googleRisk === 'HIGH' || microsoftRisk === 'High') {
-      return 'High';
-    }
-    if (googleRisk === 'MEDIUM' || microsoftRisk === 'Medium') {
-      return 'Medium';
-    }
-    // If neither is High or Medium, the risk is Low (covers googleRisk === 'LOW' and microsoftRisk === 'Low')
-    return 'Low';
-  }
-
-  // Apps by User Count - modified to show all apps and filter by managed status
-  const getAppsByUsersChartData = () => {
-    let filteredByStatus = applications;
-    if (chartManagedStatusFilter) {
-      filteredByStatus = applications.filter(app => app.managementStatus === chartManagedStatusFilter);
-    }
-    const sorted = [...filteredByStatus].sort((a, b) => b.userCount - a.userCount);
+    const sorted = [...filtered].sort((a, b) => b.userCount - a.userCount);
     return sorted.map((app) => ({
       name: app.name,
       value: app.userCount,
@@ -2716,13 +2667,13 @@ export default function ShadowITDashboard() {
                                                 className="text-center cursor-pointer flex items-center justify-center" 
                                                 onClick={() => handleSeeUsers(app.id)}
                                               >
-                                                {app.users.filter(user => user.riskLevel === "High").length}
+                                                {app.users.filter(user => transformRiskLevel(user.riskLevel) === "High").length}
                                                 
                                               </div>
                                             </TooltipTrigger>
                                             <TooltipContent side="right" className="p-2">
                                               <p className="text-sm">
-                                                {app.users.filter(user => user.riskLevel === "High").length} users with high risk level
+                                                {app.users.filter(user => transformRiskLevel(user.riskLevel) === "High").length} users with high risk level
                                               </p>
                                             </TooltipContent>
                                           </Tooltip>
@@ -2909,11 +2860,27 @@ export default function ShadowITDashboard() {
 
                     {/* Apps by User Count */}
                     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-                      <h3 className="text-lg font-medium text-gray-900">Top Apps by User Count</h3>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-medium text-gray-900">Top Apps by User Count</h3>
+                        <div>
+                          <label htmlFor="managed-status-filter" className="mr-2 text-sm text-gray-700">Managed Status:</label>
+                          <select
+                            id="managed-status-filter"
+                            value={chartManagedStatusFilter}
+                            onChange={e => setChartManagedStatusFilter(e.target.value)}
+                            className="border rounded px-2 py-1 text-sm"
+                          >
+                            <option value="Any Status">Any Status</option>
+                            <option value="Managed">Managed</option>
+                            <option value="Unmanaged">Unmanaged</option>
+                            <option value="Needs Review">Needs Review</option>
+                          </select>
+                        </div>
+                      </div>
                       <p className="text-sm text-gray-500 mb-4">Applications ranked by number of users</p>
                       <div className="h-96">
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={getTop10AppsByUsers()} layout="vertical" margin={{ left: 150 }}>
+                          <BarChart data={getAppsByUserCountChartData()} layout="vertical" margin={{ left: 150 }}>
                             <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
                             <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
                             <YAxis
@@ -2941,7 +2908,7 @@ export default function ShadowITDashboard() {
                                 }
                               }}
                             >
-                              {getTop10AppsByUsers().map((entry, index) => (
+                              {getAppsByUserCountChartData().map((entry, index) => (
                                 <Cell 
                                   key={`cell-${index}`} 
                                   fill={entry.color} 
@@ -3553,19 +3520,12 @@ export default function ShadowITDashboard() {
                                     <TableCell>
                                       <div className="max-h-24 overflow-y-auto text-sm">
                                         {user.scopes.map((scope, i) => {
-                                          // Determine risk level for the single scope using the main helper
-                                          const singleScopeRisk = determineRiskLevel([scope]);
+                                          // Use the centralized risk assessment function
+                                          const scopeRiskLevel = evaluateSingleScopeRisk(scope);
                                           
-                                          let riskColor = "#81C784"; // Default green for Low risk
-                                          let riskStatus = "Low-Risk Scope";
-
-                                          if (singleScopeRisk === 'High') {
-                                            riskColor = "#EF5350"; // Red for high risk
-                                            riskStatus = "High-Risk Scope";
-                                          } else if (singleScopeRisk === 'Medium') {
-                                            riskColor = "#FFD54F"; // Yellow for medium risk
-                                            riskStatus = "Medium-Risk Scope";
-                                          }
+                                          // Use the centralized color function
+                                          const riskColor = getRiskLevelColor(scopeRiskLevel);
+                                          const riskStatus = `${transformRiskLevel(scopeRiskLevel)}-Risk Scope`;
                                           
                                           return (
                                             <div key={i} className="py-1 border-b border-muted last:border-0 flex items-center">
@@ -3688,69 +3648,11 @@ export default function ShadowITDashboard() {
                                     <div className="p-3 border-b">
                                       <div className="max-h-60 overflow-y-auto">
                                         {selectedApp?.scopes.map((scope, scopeIndex) => {
-                                          // Determine risk level for the scope using the same logic as determineRiskLevel
-                                          const isHighRisk = (
-                                            // Exact high risk scope matches
-                                            [
-                                              // Google high risk scopes
-                                              'https://www.googleapis.com/auth/admin.directory.user',
-                                              'https://www.googleapis.com/auth/admin.directory.group',
-                                              'https://www.googleapis.com/auth/admin.directory.user.security',
-                                              'https://mail.google.com/',
-                                              'https://www.googleapis.com/auth/gmail',
-                                              'https://www.googleapis.com/auth/drive',
-                                              'https://www.googleapis.com/auth/cloud-platform',
-                                              // Microsoft high risk scopes
-                                              'Application.ReadWrite.All',
-                                              'User.ReadWrite.All',
-                                              'Group.ReadWrite.All',
-                                              'Directory.ReadWrite.All',
-                                              'Mail.ReadWrite',
-                                              'Mail.ReadWrite.All',
-                                              'Mail.Send',
-                                              'Files.ReadWrite.All',
-                                              'Sites.ReadWrite.All',
-                                              'MailboxSettings.ReadWrite'
-                                            ].includes(scope) ||
-                                            // Check for Microsoft patterns
-                                            scope.endsWith('.ReadWrite.All') || 
-                                            scope.endsWith('.ReadWrite') ||
-                                            scope.includes('FullControl') ||
-                                            scope.includes('Write.All')
-                                          );
+                                          // Use the centralized risk assessment function
+                                          const scopeRiskLevel = evaluateSingleScopeRisk(scope);
                                           
-                                          const isMediumRisk = !isHighRisk && (
-                                            // Exact medium risk scope matches
-                                            [
-                                              // Google medium risk scopes
-                                              'https://www.googleapis.com/auth/admin.directory.user.readonly',
-                                              'https://www.googleapis.com/auth/admin.directory.group.readonly',
-                                              'https://www.googleapis.com/auth/calendar',
-                                              'https://www.googleapis.com/auth/contacts',
-                                              // Microsoft medium risk scopes
-                                              'Application.Read.All',
-                                              'Directory.Read.All',
-                                              'Group.Read.All',
-                                              'User.Read.All',
-                                              'Files.Read.All',
-                                              'Mail.Read',
-                                              'Mail.Read.All',
-                                              'Sites.Read.All',
-                                              'AuditLog.Read.All',
-                                              'Reports.Read.All'
-                                            ].includes(scope) ||
-                                            // Check for Microsoft patterns
-                                            scope.endsWith('.Read.All') ||
-                                            scope.includes('Reports.Read') ||
-                                            scope.includes('AuditLog.Read')
-                                          );
-
-                                          let riskColor = "#81C784"; // Default green for low risk
-                                          if (isHighRisk) {
-                                            riskColor = "#EF5350"; // Red for high risk
-                                          } else if (isMediumRisk) {
-                                            riskColor = "#FFD54F"; // Yellow for medium risk
-                                          }
+                                          // Use the centralized color function
+                                          const riskColor = getRiskLevelColor(scopeRiskLevel);
 
                                           return (
                                             <div key={scopeIndex} className="py-1 border-b border-muted last:border-0 flex items-center">
@@ -3777,59 +3679,8 @@ export default function ShadowITDashboard() {
                                     .filter(group => !group.isAllScopes)
                                     .map((group, groupIndex: number) => {
                                       // Determine highest risk level in this group
-                                      const hasHighRisk = group.scopes.some((scope: string) => 
-                                        [
-                                          // Google high risk scopes
-                                          'https://www.googleapis.com/auth/admin.directory.user',
-                                          'https://www.googleapis.com/auth/admin.directory.group',
-                                          'https://www.googleapis.com/auth/admin.directory.user.security',
-                                          'https://mail.google.com/',
-                                          'https://www.googleapis.com/auth/gmail',
-                                          'https://www.googleapis.com/auth/drive',
-                                          'https://www.googleapis.com/auth/cloud-platform',
-                                          // Microsoft high risk scopes
-                                          'Application.ReadWrite.All',
-                                          'User.ReadWrite.All',
-                                          'Group.ReadWrite.All',
-                                          'Directory.ReadWrite.All',
-                                          'Mail.ReadWrite',
-                                          'Mail.ReadWrite.All',
-                                          'Mail.Send',
-                                          'Files.ReadWrite.All',
-                                          'Sites.ReadWrite.All',
-                                          'MailboxSettings.ReadWrite'
-                                        ].includes(scope) ||
-                                        // Check for Microsoft patterns
-                                        scope.endsWith('.ReadWrite.All') || 
-                                        scope.endsWith('.ReadWrite') ||
-                                        scope.includes('FullControl') ||
-                                        scope.includes('Write.All')
-                                      );
-                                      
-                                      const hasMediumRisk = !hasHighRisk && group.scopes.some(scope => 
-                                        [
-                                          // Google medium risk scopes
-                                          'https://www.googleapis.com/auth/admin.directory.user.readonly',
-                                          'https://www.googleapis.com/auth/admin.directory.group.readonly',
-                                          'https://www.googleapis.com/auth/calendar',
-                                          'https://www.googleapis.com/auth/contacts',
-                                          // Microsoft medium risk scopes
-                                          'Application.Read.All',
-                                          'Directory.Read.All',
-                                          'Group.Read.All',
-                                          'User.Read.All',
-                                          'Files.Read.All',
-                                          'Mail.Read',
-                                          'Mail.Read.All',
-                                          'Sites.Read.All',
-                                          'AuditLog.Read.All',
-                                          'Reports.Read.All'
-                                        ].includes(scope) ||
-                                        // Check for Microsoft patterns
-                                        scope.endsWith('.Read.All') ||
-                                        scope.includes('Reports.Read') ||
-                                        scope.includes('AuditLog.Read')
-                                      );
+                                      const hasHighRisk = group.scopes.some((scope: string) => evaluateSingleScopeRisk(scope) === 'High');
+                                      const hasMediumRisk = !hasHighRisk && group.scopes.some((scope: string) => evaluateSingleScopeRisk(scope) === 'Medium');
 
                                       return (
                                         <div key={groupIndex} className="mb-6 border rounded-md overflow-hidden">
@@ -3858,54 +3709,11 @@ export default function ShadowITDashboard() {
                                             <h5 className="text-sm font-medium mb-2">Permissions:</h5>
                                             <div className="max-h-60 overflow-y-auto">
                                               {group.scopes.map((scope: string, scopeIndex: number) => {
-                                                // Determine risk level for each scope
-                                                const isHighRisk = [
-                                                  // Google high risk scopes
-                                                  'https://www.googleapis.com/auth/admin.directory.user',
-                                                  'https://www.googleapis.com/auth/admin.directory.group',
-                                                  'https://www.googleapis.com/auth/admin.directory.user.security',
-                                                  'https://mail.google.com/',
-                                                  'https://www.googleapis.com/auth/gmail',
-                                                  'https://www.googleapis.com/auth/drive',
-                                                  'https://www.googleapis.com/auth/cloud-platform',
-                                                  // Microsoft high risk scopes
-                                                  'Application.ReadWrite.All',
-                                                  'User.ReadWrite.All',
-                                                  'Group.ReadWrite.All',
-                                                  'Directory.ReadWrite.All',
-                                                  'Mail.ReadWrite',
-                                                  'Mail.ReadWrite.All',
-                                                  'Mail.Send',
-                                                  'Files.ReadWrite.All',
-                                                  'Sites.ReadWrite.All',
-                                                  'MailboxSettings.ReadWrite'
-                                                ].some(highRiskScope => scope.includes(highRiskScope));
+                                                // Use the centralized risk assessment function
+                                                const scopeRiskLevel = evaluateSingleScopeRisk(scope);
                                                 
-                                                const isMediumRisk = [
-                                                  // Google medium risk scopes
-                                                  'https://www.googleapis.com/auth/admin.directory.user.readonly',
-                                                  'https://www.googleapis.com/auth/admin.directory.group.readonly',
-                                                  'https://www.googleapis.com/auth/calendar',
-                                                  'https://www.googleapis.com/auth/contacts',
-                                                  // Microsoft medium risk scopes
-                                                  'Application.Read.All',
-                                                  'Directory.Read.All',
-                                                  'Group.Read.All',
-                                                  'User.Read.All',
-                                                  'Files.Read.All',
-                                                  'Mail.Read',
-                                                  'Mail.Read.All',
-                                                  'Sites.Read.All',
-                                                  'AuditLog.Read.All',
-                                                  'Reports.Read.All'
-                                                ].some(mediumRiskScope => scope.includes(mediumRiskScope));
-
-                                                let riskColor = "#81C784"; // Default green for low risk
-                                                if (isHighRisk) {
-                                                  riskColor = "#EF5350"; // Red for high risk
-                                                } else if (isMediumRisk) {
-                                                  riskColor = "#FFD54F"; // Yellow for medium risk
-                                                }
+                                                // Use the centralized color function
+                                                const riskColor = getRiskLevelColor(scopeRiskLevel);
 
                                                 return (
                                                   <div key={scopeIndex} className="py-1 border-b border-muted last:border-0 flex items-center">
