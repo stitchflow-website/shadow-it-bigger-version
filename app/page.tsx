@@ -181,6 +181,12 @@ export default function ShadowITDashboard() {
   // State for the "Top Apps by User Count" chart's managed status filter
   const [chartManagedStatusFilter, setChartManagedStatusFilter] = useState<string>('Any Status');
 
+  // State for the "High Risk Users by App" chart's managed status filter
+  const [highRiskUsersManagedStatusFilter, setHighRiskUsersManagedStatusFilter] = useState<string>('Any Status');
+
+  // State for the "Apps by Scope Permissions" chart's managed status filter
+  const [scopePermissionsManagedStatusFilter, setScopePermissionsManagedStatusFilter] = useState<string>('Any Status');
+
   // Helper function to redirect to Google consent screen
   const redirectToGoogleConsent = () => {
     let redirectURI;
@@ -1330,13 +1336,21 @@ export default function ShadowITDashboard() {
 
   // Get top 10 apps by permissions
   const getTop10AppsByPermissions = () => {
-    const sorted = [...applications].sort((a, b) => b.totalPermissions - a.totalPermissions)
-    return sorted.slice(0, 10).map((app) => ({
+    // Filter by managed status if selected
+    let filtered = applications;
+    if (scopePermissionsManagedStatusFilter && scopePermissionsManagedStatusFilter !== 'Any Status') {
+      filtered = applications.filter(app => app.managementStatus === scopePermissionsManagedStatusFilter);
+    }
+    
+    // Sort by number of permissions (scope count)
+    const sorted = [...filtered].sort((a, b) => b.totalPermissions - a.totalPermissions);
+    
+    return sorted.map((app) => ({
       name: app.name,
-      value: app.totalPermissions, // Keep value for chart compatibility
-      color: getCategoryColor(appCategories[app.id] || app.category), // Use latest category color
-    }))
-  }
+      value: app.totalPermissions,
+      color: getCategoryColor(appCategories[app.id] || app.category),
+    }));
+  };
 
   const getTop5Apps = () => {
     return [...applications]
@@ -2169,6 +2183,25 @@ export default function ShadowITDashboard() {
       value: app.userCount,
       color: getCategoryColor(appCategories[app.id] || app.category),
     }));
+  };
+
+  // High Risk Users by App - chart data preparation
+  const getHighRiskUsersByApp = () => {
+    // Filter by managed status if selected
+    let filtered = applications;
+    if (highRiskUsersManagedStatusFilter && highRiskUsersManagedStatusFilter !== 'Any Status') {
+      filtered = applications.filter(app => app.managementStatus === highRiskUsersManagedStatusFilter);
+    }
+    
+    // Map applications to get name, high-risk user count, and color
+    const mappedData = filtered.map(app => ({
+      name: app.name,
+      value: app.users.filter(user => transformRiskLevel(user.riskLevel) === "High").length,
+      color: getCategoryColor(appCategories[app.id] || app.category),
+    }));
+    
+    // Sort by number of high-risk users (descending)
+    return mappedData.sort((a, b) => b.value - a.value);
   };
 
   return (
@@ -3031,9 +3064,113 @@ export default function ShadowITDashboard() {
                         </div>
                       </div>
 
+                      {/* High Scope Risk Users chart */}
+                      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-lg font-medium text-gray-900">High Scope Risk Users</h3>
+                          <div>
+                            <label htmlFor="high-risk-users-filter" className="mr-2 text-sm text-gray-700">Managed Status:</label>
+                            <select
+                              id="high-risk-users-filter"
+                              value={highRiskUsersManagedStatusFilter}
+                              onChange={e => setHighRiskUsersManagedStatusFilter(e.target.value)}
+                              className="border rounded px-2 py-1 text-sm"
+                            >
+                              <option value="Any Status">Any Status</option>
+                              <option value="Managed">Managed</option>
+                              <option value="Unmanaged">Unmanaged</option>
+                              <option value="Needs Review">Needs Review</option>
+                            </select>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-4">Applications ranked by number of high-risk users</p>
+                        <div className="h-96 overflow-y-auto">
+                          {getHighRiskUsersByApp().filter(app => app.value > 0).length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-gray-500">
+                              No applications found with high-risk users
+                            </div>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={Math.max(400, getHighRiskUsersByApp().filter(app => app.value > 0).length * 30)}>
+                              <BarChart data={getHighRiskUsersByApp().filter(app => app.value > 0)} layout="vertical" margin={{ left: 150 }}>
+                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
+                                <YAxis
+                                  dataKey="name"
+                                  type="category"
+                                  axisLine={false}
+                                  tickLine={false}
+                                  width={140}
+                                  tick={{ fill: '#111827', fontSize: 12 }}
+                                />
+                                <Bar 
+                                  dataKey="value" 
+                                  name="High-Risk Users" 
+                                  radius={[0, 4, 4, 0]} 
+                                  barSize={20}
+                                  strokeWidth={1}
+                                  stroke="#fff"
+                                  cursor="pointer"
+                                  fill="#EF5350" 
+                                  onClick={(data) => {
+                                    const app = applications.find(a => a.name === data.name);
+                                    if (app) {
+                                      setMainView("list");
+                                      setSelectedAppId(app.id);
+                                      setIsUserModalOpen(true);
+                                    }
+                                  }}
+                                >
+                                  {getHighRiskUsersByApp().filter(app => app.value > 0).map((entry, index) => (
+                                    <Cell 
+                                      key={`cell-${index}`} 
+                                      fill="#EF5350"  
+                                      fillOpacity={1}
+                                    />
+                                  ))}
+                                </Bar>
+                                <RechartsTooltip
+                                  formatter={(value) => [`${value} high-risk ${value === 1 ? 'user' : 'users'}`, ""]}
+                                  contentStyle={{ 
+                                    backgroundColor: 'white', 
+                                    border: '1px solid #e5e7eb', 
+                                    borderRadius: '8px', 
+                                    padding: '4px 12px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                    fontFamily: 'inherit',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                  }}
+                                  labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                  itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                  separator=": "
+                                  cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Apps by Scope Permissions */}
                       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-                        <h3 className="text-lg font-medium text-gray-900">Top Apps by Scope Permissions</h3>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-lg font-medium text-gray-900">Top Apps by Scope Permissions</h3>
+                          <div>
+                            <label htmlFor="scope-permissions-filter" className="mr-2 text-sm text-gray-700">Managed Status:</label>
+                            <select
+                              id="scope-permissions-filter"
+                              value={scopePermissionsManagedStatusFilter}
+                              onChange={e => setScopePermissionsManagedStatusFilter(e.target.value)}
+                              className="border rounded px-2 py-1 text-sm"
+                            >
+                              <option value="Any Status">Any Status</option>
+                              <option value="Managed">Managed</option>
+                              <option value="Unmanaged">Unmanaged</option>
+                              <option value="Needs Review">Needs Review</option>
+                            </select>
+                          </div>
+                        </div>
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
                         <div className="h-96">
                           <ResponsiveContainer width="100%" height="100%">

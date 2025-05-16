@@ -539,6 +539,25 @@ export async function GET(request: Request) {
       });
     }
 
+    // Create default notification preferences for the user
+    try {
+      const prefsUrl = createRedirectUrl('/api/auth/create-default-preferences');
+      await fetch(prefsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orgId: org.id,
+          userEmail: userInfo.email
+        })
+      });
+      console.log('Created default notification preferences for user');
+    } catch (prefsError) {
+      console.error('Error creating default notification preferences:', prefsError);
+      // Continue despite error - not critical
+    }
+
     // Now make sure we store the user's profile information in users_signedup table
     const { error: userError } = await supabaseAdmin
       .from('users_signedup')
