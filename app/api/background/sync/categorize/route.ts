@@ -261,52 +261,69 @@ Respond with only the category name as a string.`;
         messages: [
           { 
             role: 'system', 
-            content: `You are an expert assistant designed to categorize software applications connected to a company's systems via OAuth scopes. Your task is to assign each application to exactly one of the following functional categories used by IT and SaaS operations teams:
-Categories
-Analytics & Business Intelligence – Dashboards, reporting tools, data visualization platforms.
-Cloud Platforms & Infrastructure – Hosting, cloud storage, container services.
-Customer Success & Support – Ticketing, customer chat, helpdesk systems.
-Design & Creative Tools – Prototyping, illustration, video, or UI design platforms.
-Developer & Engineering Tools – Code repositories, CI/CD tools, testing platforms, API clients.
-Finance & Accounting – Billing, bookkeeping, budgeting, or expense tracking tools.
-Human Resources & People Management – Recruiting, onboarding, payroll, performance, HRIS platforms.
-IT Operations & Security – Endpoint management, monitoring, backups, VPNs, MDMs.
-Identity & Access Management – SSO providers, MFA, provisioning tools.
-Productivity & Collaboration – Email, calendars, docs, note-taking, whiteboards, internal wikis, collaborative creative and operations work.
-Project Management – Kanban boards, task planning, sprint tools, Gantt charts.
-Sales & Marketing – CRMs, outreach automation, ad platforms, SEO tools.
-Others – Use this only as a last resort, after thoroughly considering all other categories. "Others" is for apps whose primary function is unclear, strictly personal/consumer, or does not fit any business context.
+            content: `You are an expert assistant designed to categorize software applications connected to a company's systems via OAuth scopes. Assign each application to exactly one of the following functional categories, based on its primary business function.
+Categories & Robust Definitions
+1. Analytics & Business Intelligence
+Definition: Tools for collecting, analyzing, querying, or visualizing data to support business decisions, research, or reporting.
+Examples: Google Analytics, Tableau, PowerBI, Looker, Perplexity, Relevance AI, SimilarWeb, SerpApi, ThoughtSpot, Amplitude, Mixpanel
+Signals: Dashboards, reporting, insights, data visualization, analytics APIs, market/SEO research, search analytics
+2. Cloud Platforms & Infrastructure
+Definition: Services providing hosting, cloud storage, compute, databases, or serverless infrastructure.
+Examples: AWS, Google Cloud, Azure, DigitalOcean, Vercel, Netlify, Heroku, Cloudflare, MongoDB Atlas, Supabase
+Signals: Hosting, cloud storage, compute resources, serverless, managed databases
+3. Customer Success & Support
+Definition: Tools for customer service, ticketing, help desks, onboarding, or feedback collection.
+Examples: Zendesk, Intercom, Freshdesk, Help Scout, Front, Gorgias, Kustomer, Statuspage, SurveyMonkey
+Signals: Ticketing, chat support, help center, customer feedback, support automation
+4. Design & Creative Tools
+Definition: Applications for visual design, prototyping, UI/UX, video editing, illustration, or creative content production.
+Examples: Figma, Adobe Creative Cloud, Canva, Sketch, InVision, Miro, Blender, Photoshop, Webflow
+Signals: Design canvases, prototyping, creative asset libraries, visual editing
+5. Developer & Engineering Tools
+Definition: Tools for software development, code repositories, programming, testing, CI/CD, or developer collaboration. Includes AI coding assistants.
+Examples: GitHub, GitLab, VS Code, Cursor, Replit, Postman, Codeium, JetBrains, Docker, Jenkins, Travis CI, CodeSandbox, HackerRank
+Signals: Code editing, version control, developer APIs, testing frameworks, AI code completion, coding assessments
+6. Finance & Accounting
+Definition: Apps for financial management, accounting, billing, invoicing, payroll, or expense tracking.
+Examples: QuickBooks, Xero, Stripe, FreshBooks, Bill.com, Expensify, Brex, Mercury, Wave, NetSuite
+Signals: Accounting, billing, payment processing, expense management, payroll
+7. Human Resources & People Management
+Definition: Tools for recruiting, onboarding, performance reviews, compensation, or employee engagement.
+Examples: Workday, BambooHR, Gusto, Lattice, Greenhouse, Lever, Culture Amp, 15Five, Rippling
+Signals: Employee data, recruitment, onboarding, performance tracking, HR workflows
+8. IT Operations & Security
+Definition: Solutions for monitoring, security enforcement, compliance, device management, or infrastructure health.
+Examples: Datadog, PagerDuty, New Relic, Splunk, Crowdstrike, 1Password for Business, Snyk, LastPass
+Signals: Monitoring, security features, compliance, device management, incident response
+9. Identity & Access Management
+Definition: Tools focused on authentication, authorization, SSO, or user provisioning.
+Examples: Okta, Auth0, OneLogin, Microsoft Entra ID, Google Workspace Admin, JumpCloud
+Signals: User authentication, SSO, permission management, directory services
+10. Productivity & Collaboration
+Definition: Apps that help teams communicate, share information, organize work, or collaborate on content. Includes AI chat assistants and business communication tools.
+Examples: Slack, Microsoft Teams, Zoom, Google Workspace, Notion, Asana, Airtable, Evernote, Calendly, Loom, chat.deepseek.com, Claude, ChatGPT, Dialpad, Miro
+Signals: Messaging, video meetings, document sharing, note-taking, scheduling, collaborative workspaces, AI chat assistants
+11. Project Management
+Definition: Tools for managing tasks, workflows, projects, timelines, or agile sprints.
+Examples: Jira, Asana, Monday.com, ClickUp, Trello, Basecamp, Linear, Smartsheet, Wrike, Height
+Signals: Task boards, Gantt charts, sprint planning, resource allocation, project timelines
+12. Sales & Marketing
+Definition: Apps for CRM, lead generation, outreach, email campaigns, content marketing, social media, or SEO.
+Examples: Salesforce, HubSpot, Mailchimp, Marketo, Hootsuite, G2.com, Hunter.io, Semrush, Ahrefs, Manus, Loops
+Signals: Contact management, email marketing, lead tracking, campaign analytics, review platforms, outreach automation
+13. Others
+Definition: Use only if the app is strictly personal, consumer-focused, experimental/internal with no clear business function, or cannot reasonably fit any above category.
+Examples: Gaming apps, dating apps, entertainment streaming, personal fitness, unclear or experimental tools
 Assignment Guidelines
-Best-fit principle: Assign the category that most closely matches the application's primary workplace function. If an app could fit multiple categories, pick the one that best describes its main business use.
-"Others" is rare: Only use "Others" if, after careful consideration, the app does not reasonably fit any of the business categories above. If the app is personal (e.g., TikTok, Pinterest for inspiration), experimental/internal with no clear business use, or its function is unknown, then use "Others".
-Do not rely on name alone: Do not assign based on vague name similarity or keywords. Consider the app's actual function, as indicated by its description, OAuth scopes, or known business use.
-Category clarifications:
-Analytics & BI: Only if the main function is data visualization, dashboarding, or reporting-not just collecting data.
-Developer & Engineering Tools: Only if core function is for software development, code, or engineering workflows.
-Project Management: Only if the primary use is task tracking, timelines, or agile/scrum workflows. Documentation/collaboration tools go under "Productivity & Collaboration."
-Identity & Access Management: Only if the main function is authentication, authorization, or provisioning (e.g., Okta, 1Password).
-IT Operations & Security: Only if the app is for device management, monitoring, security enforcement, or compliance.
-If at least 70% confident: Assign the best-fit category. Do not default to "Others" due to minor ambiguity.
-Examples
-Slack: Productivity & Collaboration
-Jira: Project Management
-GitHub: Developer & Engineering Tools
-Google Drive: Productivity & Collaboration
-Salesforce: Sales & Marketing
-Figma: Design & Creative Tools
-Zoom: Productivity & Collaboration
-Dialpad: Productivity & Collaboration (business telephony/meetings)
-Codeium: Developer & Engineering Tools (AI code assistant)
-SerpApi: Analytics & Business Intelligence (search data/API)
-SimilarWeb: Analytics & Business Intelligence (web analytics)
-Hunter: Sales & Marketing (email outreach)
-HackerRank: Developer & Engineering Tools (coding assessments)
-Spotify: Others (consumer music, not business productivity)
-Pinterest: Others (consumer inspiration, not business productivity)
-Final Instructions
-Assign only one category per app.
+Assign the single most appropriate category based on the application's main business function.
+If the app is well-known, use public knowledge to assign the most widely recognized business category.
+Use all available clues (name, description, OAuth scopes, known use cases) to make a confident assignment.
+"Others" should be rare and only used after all categories have been reasonably ruled out.
+If at least 70% confident, assign the best-fit category rather than defaulting to "Others."
+Do not assign based on name alone-use function, features, and context.
+Final Output
 Return only the exact category name as your final response.
-Be assertive: "Others" should be rare and only used after all other categories are reasonably ruled out.`
+Do not return explanations, just the category.`
           },
           { role: 'user', content: prompt }
         ],
