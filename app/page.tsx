@@ -1995,8 +1995,14 @@ export default function ShadowITDashboard() {
     const [loginError, setLoginError] = useState('');
     const searchParams = useSearchParams(); // Import and use useSearchParams
 
+    // Log data for debugging
+    console.log("Login Modal Rendered, error state:", loginError);
+    console.log("URL Search Params:", Object.fromEntries(searchParams.entries()));
+
     useEffect(() => {
       const errorParam = searchParams.get('error');
+      console.log("Error param from URL:", errorParam);
+      
       if (errorParam) {
         let friendlyMessage = '';
         switch (errorParam) {
@@ -2024,11 +2030,18 @@ export default function ShadowITDashboard() {
           case 'data_refresh_required':
             friendlyMessage = "We need to refresh your account permissions. Please sign in again to grant access. Check you mail for detailed error message";
             break;
+          // Cases for interaction_required, login_required, consent_required, missing_data
+          // are handled by the default block below if they were a 'isDirectConsentError' but provider was null.
+          case 'interaction_required':
+          case 'login_required':
+          case 'consent_required':
+          case 'missing_data':
           case 'unknown':
           default:
-            friendlyMessage = "An unknown authentication error occurred. Please try again. Check you mail for detailed error message";
+            friendlyMessage = "An unknown authentication error occurred. Please try again. Check your mail for detailed error message";
             break;
         }
+        console.log("Setting error message to:", friendlyMessage);
         setLoginError(friendlyMessage);
 
         // Clean the error from URL after displaying it
@@ -2164,6 +2177,13 @@ export default function ShadowITDashboard() {
         authUrl.searchParams.append('prompt', 'select_account');
         authUrl.searchParams.append('state', state);
 
+        // Clean URL before redirecting
+        const cleanUrl = new URL(window.location.href);
+        if (cleanUrl.searchParams.has('error')) {
+          cleanUrl.searchParams.delete('error');
+          window.history.replaceState({}, document.title, cleanUrl.toString());
+        }
+
         window.location.href = authUrl.toString();
       } catch (err) {
         console.error('Microsoft login error:', err);
@@ -2182,8 +2202,9 @@ export default function ShadowITDashboard() {
               Ensure you connect your admin org account to get started with the app
             </p>
             
-            {loginError && (
-              <div className="mb-4 p-4 text-sm text-red-800 bg-red-100 rounded-lg">
+            {/* Added stronger conditional check and inline style for better visibility */}
+            {loginError && loginError.length > 0 && (
+              <div className="mb-4 p-4 text-sm text-red-800 bg-red-100 rounded-lg border border-red-300">
                 {loginError}
               </div>
             )}
