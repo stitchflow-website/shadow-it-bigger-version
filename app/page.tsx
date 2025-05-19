@@ -302,47 +302,48 @@ export default function ShadowITDashboard() {
       }
 
       let friendlyMessage = '';
-      switch (errorParam) {
-        case 'admin_required':
-          friendlyMessage = "Admin access required. Please sign in with an administrator account for your organization. Check you mail for detailed error message.";
-          break;
-        case 'not_workspace_account':
-          friendlyMessage = "Please use a Google Workspace account. Personal Gmail accounts are not supported. Check you mail for detailed error message.";
-          break;
-        case 'not_work_account':
-          friendlyMessage = "Please use a Microsoft work or school account. Personal Microsoft accounts are not supported. Check you mail for detailed error message.";
-          break;
-        case 'no_code':
-          friendlyMessage = "Authentication failed: Authorization code missing. Please try again. Check you mail for detailed error message.";
-          break;
-        case 'auth_failed':
-          friendlyMessage = "Authentication failed. Please try again or contact support if the issue persists. Check you mail for detailed error message";
-          break;
-        case 'user_data_failed':
-          friendlyMessage = "Failed to fetch user data after authentication. Please try again. Check you mail for detailed error message";
-          break;
-        case 'config_missing':
-          friendlyMessage = "OAuth configuration is missing. Please contact support. Check you mail for detailed error message";
-          break;
-        case 'data_refresh_required': // Also in needsDirectConsentErrors
-          // If provider was missing, this message will be shown.
-          friendlyMessage = "We need to refresh your account permissions. Please sign in again to grant access. Check you mail for detailed error message";
-          break;
-        // Cases for interaction_required, login_required, consent_required, missing_data
-        // are handled by the default block below if they were a 'isDirectConsentError' but provider was null.
-        case 'interaction_required':
-        case 'login_required':
-        case 'consent_required':
-        case 'missing_data':
-        case 'unknown':
-        default:
-          if (isDirectConsentError) { // Error was a direct consent type, but provider was null (so no redirect)
-            friendlyMessage = 'We need to refresh your data access. Please grant permission again. Check your mail for detailed error message.';
-          } else {
-            friendlyMessage = "An unknown authentication error occurred. Please try again. Check you mail for detailed error message";
-          }
-          break;
-      }
+        switch (errorParam) {
+          case 'admin_required':
+            friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
+            break;
+          case 'not_workspace_account':
+            friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
+            break;
+          case 'not_work_account':
+            friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
+            break;
+          case 'no_code':
+            friendlyMessage = "Authentication failed: Authorization code missing. Please try again. Check you mail for detailed error message.";
+            break;
+          case 'auth_failed':
+            friendlyMessage = "Authentication failed. Please try again or reach out to contact@stitchflow.io if the issue persists.";
+            break;
+          case 'user_data_failed':
+            friendlyMessage = "Failed to fetch user data after authentication. Please try again.";
+            break;
+          case 'config_missing':
+            friendlyMessage = "OAuth configuration is missing. Please reach out to contact@stitchflow.io.";
+            break;
+          case 'data_refresh_required': // Also in needsDirectConsentErrors
+            // If provider was missing, this message will be shown.
+            friendlyMessage = "We need to refresh your account permissions. Please sign in again to grant access.";
+            break;
+          // Cases for interaction_required, login_required, consent_required, missing_data
+          // are handled by the default block below if they were a 'isDirectConsentError' but provider was null.
+          case 'interaction_required':
+          case 'login_required':
+          case 'consent_required':
+          case 'missing_data':
+          case 'unknown':
+          default:
+            if (isDirectConsentError) { // Error was a direct consent type, but provider was null (so no redirect)
+              friendlyMessage = 'We need to refresh your data access. Please grant permission again.';
+            } else {
+              friendlyMessage = "An unknown authentication error occurred. Please try again.";
+            }
+            break;
+        }
+        
       setLoginError(friendlyMessage);
       setShowLoginModal(true);
 
@@ -3026,7 +3027,7 @@ export default function ShadowITDashboard() {
                       <p className="text-sm text-gray-500 mb-4">Applications ranked by number of users</p>
                        <div className="relative h-96">
                         {/* Scrollable chart area */}
-                        <div className="absolute inset-0 top-0 bottom-8 flex flex-col">
+                        <div className="absolute inset-0 top-0 bottom-0 flex flex-col">
                           <div className="flex-grow overflow-y-auto">
                             {(() => {
                               const chartData = getAppsByUserCountChartData();
@@ -3042,9 +3043,10 @@ export default function ShadowITDashboard() {
                                   <BarChart
                                     data={chartData}
                                     layout="vertical"
-                                    margin={{ left: 150, bottom: 0 }}
+                                    margin={{ left: 150, bottom: 20 }}
                                   >
                                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#F0F0F0" />
+                                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
                                     <YAxis
                                       dataKey="name"
                                       type="category"
@@ -3103,19 +3105,7 @@ export default function ShadowITDashboard() {
                           </div>
                         </div>
                         {/* Fixed x-axis at the bottom */}
-                        <div className="absolute left-0 right-0 bottom-0 h-8 bg-white flex items-center border-t border-gray-200 z-10">
-                          <div className="absolute left-[150px] right-0 flex justify-between px-4">
-                            {[0, 8, 16, 24, 32].map((value) => (
-                              <div key={value} className="flex flex-col items-center">
-                                <div className="h-2 w-px bg-gray-300 mb-1"></div>
-                                <span className="text-xs text-gray-500">{value}</span>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
-                            Users
-                          </div>
-                        </div>
+                        {/* Lines 2759-2772 removed */}
                       </div>
                     </div>
 
@@ -3242,9 +3232,10 @@ export default function ShadowITDashboard() {
                                 </div>
                               ) : (
                                 <ResponsiveContainer width="100%" height={Math.max(400, getHighRiskUsersByApp().filter(app => app.value > 0).length * 30)}>
-                                  <BarChart data={getHighRiskUsersByApp().filter(app => app.value > 0)} layout="vertical" margin={{ left: 150, bottom: 0 }}>
+                                  <BarChart data={getHighRiskUsersByApp().filter(app => app.value > 0)} layout="vertical" margin={{ left: 150, bottom: 20 }}>
                                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
                                     {/* Removed the XAxis from here - it will be rendered separately below */}
+                                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
                                     <YAxis
                                       dataKey="name"
                                       type="category"
@@ -3355,9 +3346,10 @@ export default function ShadowITDashboard() {
                                 }
                                 return (
                                   <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
-                                    <BarChart data={chartData} layout="vertical" margin={{ left: 150, bottom: 0 }}>
+                                    <BarChart data={chartData} layout="vertical" margin={{ left: 150, bottom: 20 }}>
                                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
                                       {/* Removed the XAxis from here - it will be rendered separately below */}
+                                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
                                       <YAxis
                                         dataKey="name"
                                         type="category"
