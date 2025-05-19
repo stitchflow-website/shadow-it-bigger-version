@@ -133,6 +133,12 @@ type RiskData = {
   color: string
 }
 
+const X_AXIS_HEIGHT = 30;
+const Y_AXIS_WIDTH = 150;
+const CHART_TOTAL_HEIGHT = 384; // Corresponds to h-96
+const BAR_VIEWPORT_HEIGHT = CHART_TOTAL_HEIGHT - X_AXIS_HEIGHT;
+const BAR_THICKNESS_WITH_PADDING = 30;
+
 export default function ShadowITDashboard() {
   const router = useRouter();
   const [applications, setApplications] = useState<Application[]>([])
@@ -190,16 +196,6 @@ export default function ShadowITDashboard() {
 
   const searchParams = useSearchParams(); // Import and use useSearchParams
   const mainContentRef = useRef<HTMLDivElement>(null); // Added for scroll to top
-
-  // Refs and state for X-axis widths
-  const userCountXAxisRef = useRef<HTMLDivElement>(null);
-  const [userCountXAxisWidth, setUserCountXAxisWidth] = useState(0);
-
-  const highRiskUsersXAxisRef = useRef<HTMLDivElement>(null);
-  const [highRiskUsersXAxisWidth, setHighRiskUsersXAxisWidth] = useState(0);
-
-  const scopePermissionsXAxisRef = useRef<HTMLDivElement>(null);
-  const [scopePermissionsXAxisWidth, setScopePermissionsXAxisWidth] = useState(0);
 
   // Add states for owner email and notes editing
   const [ownerEmail, setOwnerEmail] = useState<string>("");
@@ -312,47 +308,47 @@ export default function ShadowITDashboard() {
       }
 
       let friendlyMessage = '';
-      switch (errorParam) {
-        case 'admin_required':
+        switch (errorParam) {
+          case 'admin_required':
             friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
-          break;
-        case 'not_workspace_account':
+            break;
+          case 'not_workspace_account':
             friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
-          break;
-        case 'not_work_account':
+            break;
+          case 'not_work_account':
             friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
-          break;
-        case 'no_code':
-          friendlyMessage = "Authentication failed: Authorization code missing. Please try again. Check you mail for detailed error message.";
-          break;
-        case 'auth_failed':
+            break;
+          case 'no_code':
+            friendlyMessage = "Authentication failed: Authorization code missing. Please try again. Check you mail for detailed error message.";
+            break;
+          case 'auth_failed':
             friendlyMessage = "Authentication failed. Please try again or reach out to contact@stitchflow.io if the issue persists.";
-          break;
-        case 'user_data_failed':
+            break;
+          case 'user_data_failed':
             friendlyMessage = "Failed to fetch user data after authentication. Please try again.";
-          break;
-        case 'config_missing':
+            break;
+          case 'config_missing':
             friendlyMessage = "OAuth configuration is missing. Please reach out to contact@stitchflow.io.";
-          break;
-        case 'data_refresh_required': // Also in needsDirectConsentErrors
-          // If provider was missing, this message will be shown.
+            break;
+          case 'data_refresh_required': // Also in needsDirectConsentErrors
+            // If provider was missing, this message will be shown.
             friendlyMessage = "We need to refresh your account permissions. Please sign in again to grant access.";
-          break;
-        // Cases for interaction_required, login_required, consent_required, missing_data
-        // are handled by the default block below if they were a 'isDirectConsentError' but provider was null.
-        case 'interaction_required':
-        case 'login_required':
-        case 'consent_required':
-        case 'missing_data':
-        case 'unknown':
-        default:
-          if (isDirectConsentError) { // Error was a direct consent type, but provider was null (so no redirect)
+            break;
+          // Cases for interaction_required, login_required, consent_required, missing_data
+          // are handled by the default block below if they were a 'isDirectConsentError' but provider was null.
+          case 'interaction_required':
+          case 'login_required':
+          case 'consent_required':
+          case 'missing_data':
+          case 'unknown':
+          default:
+            if (isDirectConsentError) { // Error was a direct consent type, but provider was null (so no redirect)
               friendlyMessage = 'We need to refresh your data access. Please grant permission again.';
-          } else {
+            } else {
               friendlyMessage = "An unknown authentication error occurred. Please try again.";
-          }
-          break;
-      }
+            }
+            break;
+        }
         
       setLoginError(friendlyMessage);
       setShowLoginModal(true);
@@ -2209,42 +2205,6 @@ export default function ShadowITDashboard() {
     // No action needed - just having this dependency will cause charts to re-render
   }, [appCategories, mainView]);
 
-  // useEffect for userCountXAxisWidth
-  useEffect(() => {
-    const currentRef = userCountXAxisRef.current;
-    if (currentRef) {
-      const resizeObserver = new ResizeObserver(entries => {
-        if (entries[0]) setUserCountXAxisWidth(entries[0].contentRect.width);
-      });
-      resizeObserver.observe(currentRef);
-      return () => resizeObserver.disconnect();
-    }
-  }, []);
-
-  // useEffect for highRiskUsersXAxisWidth
-  useEffect(() => {
-    const currentRef = highRiskUsersXAxisRef.current;
-    if (currentRef) {
-      const resizeObserver = new ResizeObserver(entries => {
-        if (entries[0]) setHighRiskUsersXAxisWidth(entries[0].contentRect.width);
-      });
-      resizeObserver.observe(currentRef);
-      return () => resizeObserver.disconnect();
-    }
-  }, []);
-
-  // useEffect for scopePermissionsXAxisWidth
-  useEffect(() => {
-    const currentRef = scopePermissionsXAxisRef.current;
-    if (currentRef) {
-      const resizeObserver = new ResizeObserver(entries => {
-        if (entries[0]) setScopePermissionsXAxisWidth(entries[0].contentRect.width);
-      });
-      resizeObserver.observe(currentRef);
-      return () => resizeObserver.disconnect();
-    }
-  }, []);
-
   // We're now using the centralized risk assessment functions from '@/lib/risk-assessment'
   // instead of having duplicate risk assessment logic here
 
@@ -3071,39 +3031,42 @@ export default function ShadowITDashboard() {
                         </div>
                       </div>
                       <p className="text-sm text-gray-500 mb-4">Applications ranked by number of users</p>
-                      <div className="h-96 border-gray-200 relative">
-                        {/* Scrollable area for the bars only */}
-                        <div className="absolute top-0 left-0 right-0 bottom-8 overflow-y-auto">
-                            {(() => {
-                              const chartData = getAppsByUserCountChartData();
-                              if (chartData.length === 0) {
-                                return (
-                                  <div className="h-full flex items-center justify-center text-gray-500">
-                                    No apps that match this criteria
-                                  </div>
-                                );
-                              }
-                              return (
-                                <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
+                       {/* New structure for fixed X-axis chart */}
+                       <div className="relative h-96">
+                        {(() => {
+                          const chartData = getAppsByUserCountChartData();
+                          if (chartData.length === 0) {
+                            return (
+                              <div className="h-full flex items-center justify-center text-gray-500">
+                                No apps that match this criteria
+                              </div>
+                            );
+                          }
+                          return (
+                            <>
+                              {/* Scrollable Bars Area (center part) */}
+                              <div
+                                className="absolute top-0 overflow-y-auto"
+                                style={{
+                                  left: `${Y_AXIS_WIDTH}px`,
+                                  right: '0px',
+                                  height: `${BAR_VIEWPORT_HEIGHT}px`,
+                                }}
+                              >
+                                <ResponsiveContainer width="100%" height={Math.max(BAR_VIEWPORT_HEIGHT, chartData.length * BAR_THICKNESS_WITH_PADDING)}>
                                   <BarChart
                                     data={chartData}
                                     layout="vertical"
-                                  margin={{ left: 150, bottom: 0, right: 20 }}
+                                    margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
+                                    syncId="topAppsByUserCountSync" // syncId for potential coordination
                                   >
                                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#F0F0F0" />
-                                    <YAxis
-                                      dataKey="name"
-                                      type="category"
-                                      axisLine={false}
-                                      tickLine={false}
-                                      width={140}
-                                      tick={{ fill: '#111827', fontSize: 12 }}
-                                    />
+                                    {/* No XAxis or YAxis here, they are separate */}
                                     <Bar
                                       dataKey="value"
                                       name="Users"
                                       radius={[0, 4, 4, 0]}
-                                      barSize={20}
+                                      barSize={20} // barSize is individual bar thickness, BAR_THICKNESS_WITH_PADDING is for layout
                                       strokeWidth={1}
                                       stroke="#fff"
                                       cursor="pointer"
@@ -3144,24 +3107,65 @@ export default function ShadowITDashboard() {
                                     />
                                   </BarChart>
                                 </ResponsiveContainer>
-                              );
-                            })()}
-                          </div>
-                        
-                        {/* Fixed X-axis at the bottom */}
-                        <div ref={userCountXAxisRef} className="absolute left-0 right-0 bottom-0 h-8 bg-white flex items-center border-t border-gray-200 z-10">
-                          <div className="absolute left-[150px] right-0 flex justify-between px-4">
-                            {[0, 8, 16, 24, 32].map((value) => (
-                              <div key={value} className="flex flex-col items-center">
-                                <div className="h-2 w-px bg-gray-300 mb-1"></div>
-                                <span className="text-xs text-gray-500">{value}</span>
                               </div>
-                            ))}
-                          </div>
-                          <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
-                            Users
-                          </div>
-                        </div>
+
+                              {/* Fixed YAxis on the left */}
+                              <div
+                                className="absolute top-0 bg-white z-10" // bg-white and z-10 to ensure it's on top of grid lines from bar chart
+                                style={{
+                                  left: '0px',
+                                  width: `${Y_AXIS_WIDTH}px`,
+                                  height: `${BAR_VIEWPORT_HEIGHT}px`,
+                                  borderRight: '1px solid #F0F0F0' // Optional: visual separator for Y-axis area
+                                }}
+                              >
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart
+                                    data={chartData}
+                                    layout="vertical"
+                                    margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+                                    syncId="topAppsByUserCountSync"
+                                  >
+                                    <YAxis
+                                      dataKey="name"
+                                      type="category"
+                                      axisLine={false}
+                                      tickLine={false}
+                                      width={Y_AXIS_WIDTH - 10} // Full width minus some padding
+                                      tick={{ fill: '#111827', fontSize: 12 }}
+                                      interval={0} // Ensure all Y-axis ticks are rendered
+                                    />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+
+                              {/* Fixed XAxis at the bottom */}
+                              <div
+                                className="absolute bottom-0 bg-white z-10" // bg-white and z-10
+                                style={{
+                                  left: `${Y_AXIS_WIDTH}px`,
+                                  right: '0px',
+                                  height: `${X_AXIS_HEIGHT}px`,
+                                  borderTop: '1px solid #F0F0F0' // Optional: visual separator
+                                }}
+                              >
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 0 }} syncId="topAppsByUserCountSync">
+                                    <XAxis
+                                      type="number"
+                                      dataKey="value" // Ensure XAxis uses the same dataKey as bars
+                                      axisLine={false}
+                                      tickLine={false}
+                                      tick={{ fill: '#111827', fontSize: 12 }}
+                                      // domain={[0, 'auto']} // Let Recharts determine domain or set explicitly if needed
+                                      // ticks={[0, 8, 16, 24, 32]} // Can set explicit ticks if desired
+                                    />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -3277,17 +3281,21 @@ export default function ShadowITDashboard() {
                           </div>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of high-risk users</p>
-                        <div className="h-96 border-gray-200 relative">
+                        <div className="relative h-96">
+                          {/* Chart container with fixed height and overflow for scrolling */}
+                          <div className="absolute inset-0 flex flex-col">
                             {/* Scrollable area for the bars only */}
-                          <div className="absolute top-0 left-0 right-0 bottom-8 overflow-y-auto">
+                            <div className="flex-grow overflow-y-auto pb-10">
                               {getHighRiskUsersByApp().filter(app => app.value > 0).length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-gray-500">
                                   No applications found with high-risk users
                                 </div>
                               ) : (
                                 <ResponsiveContainer width="100%" height={Math.max(400, getHighRiskUsersByApp().filter(app => app.value > 0).length * 30)}>
-                                <BarChart data={getHighRiskUsersByApp().filter(app => app.value > 0)} layout="vertical" margin={{ left: 150, bottom: 0, right: 20 }}>
+                                  <BarChart data={getHighRiskUsersByApp().filter(app => app.value > 0)} layout="vertical" margin={{ left: 150, bottom: 20 }}>
                                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                    {/* Removed the XAxis from here - it will be rendered separately below */}
+                                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
                                     <YAxis
                                       dataKey="name"
                                       type="category"
@@ -3344,18 +3352,19 @@ export default function ShadowITDashboard() {
                               )}
                             </div>
                             
-                          {/* Fixed X-axis at the bottom */}
-                          <div ref={highRiskUsersXAxisRef} className="absolute left-0 right-0 bottom-0 h-8 bg-white flex items-center border-t border-gray-200 z-10">
-                            <div className="absolute left-[150px] right-0 flex justify-between px-4">
-                              {[0, 2, 4, 6, 8].map((value) => (
-                                <div key={value} className="flex flex-col items-center">
-                                  <div className="h-2 w-px bg-gray-300 mb-1"></div>
-                                  <span className="text-xs text-gray-500">{value}</span>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
-                              High-Risk Users
+                            {/* Fixed x-axis at the bottom */}
+                            <div className="h-8 relative bg-white flex items-center border-t border-gray-200">
+                              <div className="absolute left-[150px] right-0 flex justify-between px-4">
+                                {[0, 5, 10, 15, 20].map((value) => (
+                                  <div key={value} className="flex flex-col items-center">
+                                    <div className="h-2 w-px bg-gray-300 mb-1"></div>
+                                    <span className="text-xs text-gray-500">{value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
+                                High-Risk Users
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -3381,9 +3390,11 @@ export default function ShadowITDashboard() {
                           </div>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
-                        <div className="h-96 border-gray-200 relative">
+                        <div className="relative h-96">
+                          {/* Chart container with fixed height and overflow for scrolling */}
+                          <div className="absolute inset-0 flex flex-col">
                             {/* Scrollable area for the bars only */}
-                          <div className="absolute top-0 left-0 right-0 bottom-8 overflow-y-auto">
+                            <div className="flex-grow overflow-y-auto pb-10">
                               {(() => {
                                 const chartData = getTop10AppsByPermissions();
                                 if (chartData.length === 0) {
@@ -3395,8 +3406,10 @@ export default function ShadowITDashboard() {
                                 }
                                 return (
                                   <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
-                                  <BarChart data={chartData} layout="vertical" margin={{ left: 150, bottom: 0, right: 20 }}>
+                                    <BarChart data={chartData} layout="vertical" margin={{ left: 150, bottom: 20 }}>
                                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                      {/* Removed the XAxis from here - it will be rendered separately below */}
+                                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
                                       <YAxis
                                         dataKey="name"
                                         type="category"
@@ -3454,18 +3467,19 @@ export default function ShadowITDashboard() {
                               })()}
                             </div>
                             
-                          {/* Fixed X-axis at the bottom */}
-                          <div ref={scopePermissionsXAxisRef} className="absolute left-0 right-0 bottom-0 h-8 bg-white flex items-center border-t border-gray-200 z-10">
-                            <div className="absolute left-[150px] right-0 flex justify-between px-4">
-                              {[0, 5, 10, 15, 20].map((value) => (
-                                <div key={value} className="flex flex-col items-center">
-                                  <div className="h-2 w-px bg-gray-300 mb-1"></div>
-                                  <span className="text-xs text-gray-500">{value}</span>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
-                              Permissions
+                            {/* Fixed x-axis at the bottom */}
+                            <div className="h-8 relative bg-white flex items-center border-t border-gray-200">
+                              <div className="absolute left-[150px] right-0 flex justify-between px-4">
+                                {[0, 5, 10, 15, 20].map((value) => (
+                                  <div key={value} className="flex flex-col items-center">
+                                    <div className="h-2 w-px bg-gray-300 mb-1"></div>
+                                    <span className="text-xs text-gray-500">{value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
+                                Permissions
+                              </div>
                             </div>
                           </div>
                         </div>
