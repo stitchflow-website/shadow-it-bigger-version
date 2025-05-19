@@ -191,6 +191,16 @@ export default function ShadowITDashboard() {
   const searchParams = useSearchParams(); // Import and use useSearchParams
   const mainContentRef = useRef<HTMLDivElement>(null); // Added for scroll to top
 
+  // Refs and state for X-axis widths
+  const userCountXAxisRef = useRef<HTMLDivElement>(null);
+  const [userCountXAxisWidth, setUserCountXAxisWidth] = useState(0);
+
+  const highRiskUsersXAxisRef = useRef<HTMLDivElement>(null);
+  const [highRiskUsersXAxisWidth, setHighRiskUsersXAxisWidth] = useState(0);
+
+  const scopePermissionsXAxisRef = useRef<HTMLDivElement>(null);
+  const [scopePermissionsXAxisWidth, setScopePermissionsXAxisWidth] = useState(0);
+
   // Add states for owner email and notes editing
   const [ownerEmail, setOwnerEmail] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
@@ -302,47 +312,47 @@ export default function ShadowITDashboard() {
       }
 
       let friendlyMessage = '';
-        switch (errorParam) {
-          case 'admin_required':
+      switch (errorParam) {
+        case 'admin_required':
             friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
-            break;
-          case 'not_workspace_account':
+          break;
+        case 'not_workspace_account':
             friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
-            break;
-          case 'not_work_account':
+          break;
+        case 'not_work_account':
             friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
-            break;
-          case 'no_code':
-            friendlyMessage = "Authentication failed: Authorization code missing. Please try again. Check you mail for detailed error message.";
-            break;
-          case 'auth_failed':
+          break;
+        case 'no_code':
+          friendlyMessage = "Authentication failed: Authorization code missing. Please try again. Check you mail for detailed error message.";
+          break;
+        case 'auth_failed':
             friendlyMessage = "Authentication failed. Please try again or reach out to contact@stitchflow.io if the issue persists.";
-            break;
-          case 'user_data_failed':
+          break;
+        case 'user_data_failed':
             friendlyMessage = "Failed to fetch user data after authentication. Please try again.";
-            break;
-          case 'config_missing':
+          break;
+        case 'config_missing':
             friendlyMessage = "OAuth configuration is missing. Please reach out to contact@stitchflow.io.";
-            break;
-          case 'data_refresh_required': // Also in needsDirectConsentErrors
-            // If provider was missing, this message will be shown.
+          break;
+        case 'data_refresh_required': // Also in needsDirectConsentErrors
+          // If provider was missing, this message will be shown.
             friendlyMessage = "We need to refresh your account permissions. Please sign in again to grant access.";
-            break;
-          // Cases for interaction_required, login_required, consent_required, missing_data
-          // are handled by the default block below if they were a 'isDirectConsentError' but provider was null.
-          case 'interaction_required':
-          case 'login_required':
-          case 'consent_required':
-          case 'missing_data':
-          case 'unknown':
-          default:
-            if (isDirectConsentError) { // Error was a direct consent type, but provider was null (so no redirect)
+          break;
+        // Cases for interaction_required, login_required, consent_required, missing_data
+        // are handled by the default block below if they were a 'isDirectConsentError' but provider was null.
+        case 'interaction_required':
+        case 'login_required':
+        case 'consent_required':
+        case 'missing_data':
+        case 'unknown':
+        default:
+          if (isDirectConsentError) { // Error was a direct consent type, but provider was null (so no redirect)
               friendlyMessage = 'We need to refresh your data access. Please grant permission again.';
-            } else {
+          } else {
               friendlyMessage = "An unknown authentication error occurred. Please try again.";
-            }
-            break;
-        }
+          }
+          break;
+      }
         
       setLoginError(friendlyMessage);
       setShowLoginModal(true);
@@ -2199,6 +2209,42 @@ export default function ShadowITDashboard() {
     // No action needed - just having this dependency will cause charts to re-render
   }, [appCategories, mainView]);
 
+  // useEffect for userCountXAxisWidth
+  useEffect(() => {
+    const currentRef = userCountXAxisRef.current;
+    if (currentRef) {
+      const resizeObserver = new ResizeObserver(entries => {
+        if (entries[0]) setUserCountXAxisWidth(entries[0].contentRect.width);
+      });
+      resizeObserver.observe(currentRef);
+      return () => resizeObserver.disconnect();
+    }
+  }, []);
+
+  // useEffect for highRiskUsersXAxisWidth
+  useEffect(() => {
+    const currentRef = highRiskUsersXAxisRef.current;
+    if (currentRef) {
+      const resizeObserver = new ResizeObserver(entries => {
+        if (entries[0]) setHighRiskUsersXAxisWidth(entries[0].contentRect.width);
+      });
+      resizeObserver.observe(currentRef);
+      return () => resizeObserver.disconnect();
+    }
+  }, []);
+
+  // useEffect for scopePermissionsXAxisWidth
+  useEffect(() => {
+    const currentRef = scopePermissionsXAxisRef.current;
+    if (currentRef) {
+      const resizeObserver = new ResizeObserver(entries => {
+        if (entries[0]) setScopePermissionsXAxisWidth(entries[0].contentRect.width);
+      });
+      resizeObserver.observe(currentRef);
+      return () => resizeObserver.disconnect();
+    }
+  }, []);
+
   // We're now using the centralized risk assessment functions from '@/lib/risk-assessment'
   // instead of having duplicate risk assessment logic here
 
@@ -3028,115 +3074,130 @@ export default function ShadowITDashboard() {
                       <div className="h-96 border-gray-200 relative">
                         {/* Scrollable area for the bars only */}
                         <div className="absolute top-0 left-0 right-0 bottom-20 overflow-y-auto">
-                          {(() => {
-                            const chartData = getAppsByUserCountChartData();
-                            if (chartData.length === 0) {
+                            {(() => {
+                              const chartData = getAppsByUserCountChartData();
+                              if (chartData.length === 0) {
+                                return (
+                                  <div className="h-full flex items-center justify-center text-gray-500">
+                                    No apps that match this criteria
+                                  </div>
+                                );
+                              }
                               return (
-                                <div className="h-full flex items-center justify-center text-gray-500">
-                                  No apps that match this criteria
-                                </div>
-                              );
-                            }
-                            return (
-                              <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
-                                <BarChart
-                                  data={chartData}
-                                  layout="vertical"
+                                <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
+                                  <BarChart
+                                    data={chartData}
+                                    layout="vertical"
                                   margin={{ left: 150, bottom: 0, right: 20 }}
-                                >
-                                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#F0F0F0" />
-                                  <YAxis
-                                    dataKey="name"
-                                    type="category"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    width={140}
-                                    tick={{ fill: '#111827', fontSize: 12 }}
-                                  />
-                                  <Bar
-                                    dataKey="value"
-                                    name="Users"
-                                    radius={[0, 4, 4, 0]}
-                                    barSize={20}
-                                    strokeWidth={1}
-                                    stroke="#fff"
-                                    cursor="pointer"
-                                    onClick={(data) => {
-                                      const app = applications.find(a => a.name === data.name);
-                                      if (app) {
-                                        setMainView("list");
-                                        setSelectedAppId(app.id);
-                                        setIsUserModalOpen(true);
-                                      }
-                                    }}
                                   >
-                                    {chartData.map((entry, index) => (
-                                      <Cell
-                                        key={`cell-${index}`}
-                                        fill={entry.color}
-                                        fillOpacity={1}
-                                      />
-                                    ))}
-                                  </Bar>
-                                  <RechartsTooltip
-                                    formatter={(value) => [`${value} users`, ""]}
-                                    contentStyle={{
-                                      backgroundColor: 'white',
-                                      border: '1px solid #E5E7EB',
-                                      borderRadius: '8px',
-                                      padding: '4px 12px',
-                                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                      fontFamily: 'inherit',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '8px'
-                                    }}
-                                    labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                                    itemStyle={{ color: '#111827', fontWeight: 600 }}
-                                    separator=": "
-                                    cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                                  />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            );
-                          })()}
-                        </div>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#F0F0F0" />
+                                    <YAxis
+                                      dataKey="name"
+                                      type="category"
+                                      axisLine={false}
+                                      tickLine={false}
+                                      width={140}
+                                      tick={{ fill: '#111827', fontSize: 12 }}
+                                    />
+                                    <Bar
+                                      dataKey="value"
+                                      name="Users"
+                                      radius={[0, 4, 4, 0]}
+                                      barSize={20}
+                                      strokeWidth={1}
+                                      stroke="#fff"
+                                      cursor="pointer"
+                                      onClick={(data) => {
+                                        const app = applications.find(a => a.name === data.name);
+                                        if (app) {
+                                          setMainView("list");
+                                          setSelectedAppId(app.id);
+                                          setIsUserModalOpen(true);
+                                        }
+                                      }}
+                                    >
+                                      {chartData.map((entry, index) => (
+                                        <Cell
+                                          key={`cell-${index}`}
+                                          fill={entry.color}
+                                          fillOpacity={1}
+                                        />
+                                      ))}
+                                    </Bar>
+                                    <RechartsTooltip
+                                      formatter={(value) => [`${value} users`, ""]}
+                                      contentStyle={{
+                                        backgroundColor: 'white',
+                                        border: '1px solid #E5E7EB',
+                                        borderRadius: '8px',
+                                        padding: '4px 12px',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                        fontFamily: 'inherit',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                      }}
+                                      labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                      itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                      separator=": "
+                                      cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                    />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              );
+                            })()}
+                          </div>
                         
                         {/* Fixed X-axis at the bottom */}
-                        <div className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
-                          <svg width="100%" height="100%">
-                            <g transform="translate(150, 10)">
-                              <line x1="0" y1="0" x2="calc(100% - 170px)" y2="0" stroke="#E5E7EB" />
-                              {[0, 8, 16, 24, 32].map((value, i, arr) => {
-                                // Use fixed percentages instead of calculating from document width
-                                const percentPosition = (i / (arr.length - 1)) * 100;
-                                return (
-                                  <g key={value} transform={`translate(${percentPosition}%, 0)`}>
-                                    <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
-                                    <text
-                                      x="0"
-                                      y="20"
-                                      textAnchor="middle"
-                                      fill="#6B7280"
-                                      fontSize="12"
-                                    >
-                                      {value}
-                                    </text>
-                                  </g>
-                                );
-                              })}
-                              <text
-                                x="calc(100% - 170px)"
-                                y="35"
-                                textAnchor="end"
-                                fill="#6B7280"
-                                fontSize="12"
-                                fontWeight="500"
-                              >
-                                Users
-                              </text>
-                            </g>
-                          </svg>
+                        <div ref={userCountXAxisRef} className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
+                          {userCountXAxisWidth > 0 && (
+                            <svg width="100%" height="100%">
+                              <g transform="translate(150, 10)">
+                                {(() => {
+                                  const G_TRANSLATE_X = 150;
+                                  const RIGHT_MARGIN_FOR_LABEL = 30;
+                                  const axisLineEndX = userCountXAxisWidth - G_TRANSLATE_X - RIGHT_MARGIN_FOR_LABEL;
+                                  const tickValues = [0, 8, 16, 24, 32];
+                                  const axisLabelText = "Users";
+
+                                  if (axisLineEndX <= 0) return null; // Avoid rendering if width is too small
+
+                                  return (
+                                    <>
+                                      <line x1="0" y1="0" x2={axisLineEndX} y2="0" stroke="#E5E7EB" />
+                                      {tickValues.map((value, i, arr) => {
+                                        const position = arr.length > 1 ? (i / (arr.length - 1)) * axisLineEndX : 0;
+                                        return (
+                                          <g key={value} transform={`translate(${position}, 0)`}>
+                                            <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
+                                            <text
+                                              x="0"
+                                              y="20"
+                                              textAnchor="middle"
+                                              fill="#6B7280"
+                                              fontSize="12"
+                                            >
+                                              {value}
+                                            </text>
+                                          </g>
+                                        );
+                                      })}
+                                      <text
+                                        x={axisLineEndX}
+                                        y="35"
+                                        textAnchor="end"
+                                        fill="#6B7280"
+                                        fontSize="12"
+                                        fontWeight="500"
+                                      >
+                                        {axisLabelText}
+                                      </text>
+                                    </>
+                                  );
+                                })()}
+                              </g>
+                            </svg>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -3254,107 +3315,109 @@ export default function ShadowITDashboard() {
                         </div>
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of high-risk users</p>
                         <div className="h-96 border-gray-200 relative">
-                          {/* Scrollable area for the bars only */}
+                            {/* Scrollable area for the bars only */}
                           <div className="absolute top-0 left-0 right-0 bottom-20 overflow-y-auto">
-                            {getHighRiskUsersByApp().filter(app => app.value > 0).length === 0 ? (
-                              <div className="h-full flex items-center justify-center text-gray-500">
-                                No applications found with high-risk users
-                              </div>
-                            ) : (
-                              <ResponsiveContainer width="100%" height={Math.max(400, getHighRiskUsersByApp().filter(app => app.value > 0).length * 30)}>
+                              {getHighRiskUsersByApp().filter(app => app.value > 0).length === 0 ? (
+                                <div className="h-full flex items-center justify-center text-gray-500">
+                                  No applications found with high-risk users
+                                </div>
+                              ) : (
+                                <ResponsiveContainer width="100%" height={Math.max(400, getHighRiskUsersByApp().filter(app => app.value > 0).length * 30)}>
                                 <BarChart data={getHighRiskUsersByApp().filter(app => app.value > 0)} layout="vertical" margin={{ left: 150, bottom: 0, right: 20 }}>
-                                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                                  <YAxis
-                                    dataKey="name"
-                                    type="category"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    width={140}
-                                    tick={{ fill: '#111827', fontSize: 12 }}
-                                  />
-                                  <Bar 
-                                    dataKey="value" 
-                                    name="High-Risk Users" 
-                                    radius={[0, 4, 4, 0]} 
-                                    barSize={20}
-                                    strokeWidth={1}
-                                    stroke="#fff"
-                                    cursor="pointer"
-                                    onClick={(data) => {
-                                      const app = applications.find(a => a.name === data.name);
-                                      if (app) {
-                                        setMainView("list");
-                                        setSelectedAppId(app.id);
-                                        setIsUserModalOpen(true);
-                                      }
-                                    }}
-                                  >
-                                    {getHighRiskUsersByApp().filter(app => app.value > 0).map((entry, index) => (
-                                      <Cell 
-                                        key={`cell-${index}`} 
-                                        fill={entry.color}  
-                                        fillOpacity={1}
-                                      />
-                                    ))}
-                                  </Bar>
-                                  <RechartsTooltip
-                                    formatter={(value) => [`${value} high-risk ${value === 1 ? 'user' : 'users'}`, ""]}
-                                    contentStyle={{ 
-                                      backgroundColor: 'white', 
-                                      border: '1px solid #e5e7eb', 
-                                      borderRadius: '8px', 
-                                      padding: '4px 12px',
-                                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                      fontFamily: 'inherit',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '8px'
-                                    }}
-                                    labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                                    itemStyle={{ color: '#111827', fontWeight: 600 }}
-                                    separator=": "
-                                    cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                                  />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            )}
-                          </div>
-                          
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                    <YAxis
+                                      dataKey="name"
+                                      type="category"
+                                      axisLine={false}
+                                      tickLine={false}
+                                      width={140}
+                                      tick={{ fill: '#111827', fontSize: 12 }}
+                                    />
+                                    <Bar 
+                                      dataKey="value" 
+                                      name="High-Risk Users" 
+                                      radius={[0, 4, 4, 0]} 
+                                      barSize={20}
+                                      strokeWidth={1}
+                                      stroke="#fff"
+                                      cursor="pointer"
+                                      onClick={(data) => {
+                                        const app = applications.find(a => a.name === data.name);
+                                        if (app) {
+                                          setMainView("list");
+                                          setSelectedAppId(app.id);
+                                          setIsUserModalOpen(true);
+                                        }
+                                      }}
+                                    >
+                                      {getHighRiskUsersByApp().filter(app => app.value > 0).map((entry, index) => (
+                                        <Cell 
+                                          key={`cell-${index}`} 
+                                          fill={entry.color}  
+                                          fillOpacity={1}
+                                        />
+                                      ))}
+                                    </Bar>
+                                    <RechartsTooltip
+                                      formatter={(value) => [`${value} high-risk ${value === 1 ? 'user' : 'users'}`, ""]}
+                                      contentStyle={{ 
+                                        backgroundColor: 'white', 
+                                        border: '1px solid #e5e7eb', 
+                                        borderRadius: '8px', 
+                                        padding: '4px 12px',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                        fontFamily: 'inherit',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                      }}
+                                      labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                      itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                      separator=": "
+                                      cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                    />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              )}
+                            </div>
+                            
                           {/* Fixed X-axis at the bottom */}
-                          <div className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
-                            <svg width="100%" height="100%">
-                              <g transform="translate(150, 10)">
-                                <line x1="0" y1="0" x2="calc(100% - 170px)" y2="0" stroke="#E5E7EB" />
-                                {[0, 5, 10, 15, 20].map((value, i, arr) => {
-                                  // Use fixed percentages instead of calculating from document width
-                                  const percentPosition = (i / (arr.length - 1)) * 100;
-                                  return (
-                                    <g key={value} transform={`translate(${percentPosition}%, 0)`}>
-                                      <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
-                                      <text
-                                        x="0"
-                                        y="20"
-                                        textAnchor="middle"
-                                        fill="#6B7280"
-                                        fontSize="12"
-                                      >
-                                        {value}
-                                      </text>
-                                    </g>
-                                  );
-                                })}
-                                <text
-                                  x="calc(100% - 170px)"
-                                  y="35"
-                                  textAnchor="end"
-                                  fill="#6B7280"
-                                  fontSize="12"
-                                  fontWeight="500"
-                                >
-                                  High-Risk Users
-                                </text>
-                              </g>
-                            </svg>
+                          <div ref={highRiskUsersXAxisRef} className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
+                            {highRiskUsersXAxisWidth > 0 && (
+                              <svg width="100%" height="100%">
+                                <g transform="translate(150, 10)">
+                                  {(() => {
+                                    const G_TRANSLATE_X = 150;
+                                    const RIGHT_MARGIN_FOR_LABEL = 30;
+                                    const axisLineEndX = highRiskUsersXAxisWidth - G_TRANSLATE_X - RIGHT_MARGIN_FOR_LABEL;
+                                    const tickValues = [0, 5, 10, 15, 20];
+                                    const axisLabelText = "High-Risk Users";
+
+                                    if (axisLineEndX <= 0) return null;
+
+                                    return (
+                                      <>
+                                        <line x1="0" y1="0" x2={axisLineEndX} y2="0" stroke="#E5E7EB" />
+                                        {tickValues.map((value, i, arr) => {
+                                          const position = arr.length > 1 ? (i / (arr.length - 1)) * axisLineEndX : 0;
+                                          return (
+                                            <g key={value} transform={`translate(${position}, 0)`}>
+                                              <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
+                                              <text x="0" y="20" textAnchor="middle" fill="#6B7280" fontSize="12">
+                                                {value}
+                                              </text>
+                                            </g>
+                                          );
+                                        })}
+                                        <text x={axisLineEndX} y="35" textAnchor="end" fill="#6B7280" fontSize="12" fontWeight="500">
+                                          {axisLabelText}
+                                        </text>
+                                      </>
+                                    );
+                                  })()}
+                                </g>
+                              </svg>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -3380,113 +3443,115 @@ export default function ShadowITDashboard() {
                         </div>
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
                         <div className="h-96 border-gray-200 relative">
-                          {/* Scrollable area for the bars only */}
+                            {/* Scrollable area for the bars only */}
                           <div className="absolute top-0 left-0 right-0 bottom-20 overflow-y-auto">
-                            {(() => {
-                              const chartData = getTop10AppsByPermissions();
-                              if (chartData.length === 0) {
-                                return (
-                                  <div className="h-full flex items-center justify-center text-gray-500">
-                                    No apps that match this criteria
-                                  </div>
-                                );
-                              }
-                              return (
-                                <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
-                                  <BarChart data={chartData} layout="vertical" margin={{ left: 150, bottom: 0, right: 20 }}>
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                                    <YAxis
-                                      dataKey="name"
-                                      type="category"
-                                      axisLine={false}
-                                      tickLine={false}
-                                      width={140}
-                                      tick={{ fill: '#111827', fontSize: 12 }}
-                                    />
-                                    <Bar 
-                                      dataKey="value" 
-                                      name="Permissions" 
-                                      radius={[0, 4, 4, 0]} 
-                                      barSize={20}
-                                      strokeWidth={1}
-                                      stroke="#fff"
-                                      cursor="pointer"
-                                      onClick={(data) => {
-                                        const app = applications.find(a => a.name === data.name);
-                                        if (app) {
-                                          setMainView("list");
-                                          setSelectedAppId(app.id);
-                                          setIsUserModalOpen(true);
-                                        }
-                                      }}
-                                    >
-                                      {chartData.map((entry, index) => (
-                                        <Cell 
-                                          key={`cell-${index}`} 
-                                          fill={entry.color} 
-                                          fillOpacity={1}
-                                        />
-                                      ))}
-                                    </Bar>
-                                    <RechartsTooltip
-                                      formatter={(value) => [`${value} permissions`, ""]}
-                                      contentStyle={{ 
-                                        backgroundColor: 'white', 
-                                        border: '1px solid #e5e7eb', 
-                                        borderRadius: '8px', 
-                                        padding: '4px 12px',
-                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                        fontFamily: 'inherit',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px'
-                                      }}
-                                      labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                                      itemStyle={{ color: '#111827', fontWeight: 600 }}
-                                      separator=": "
-                                      cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                                    />
-                                  </BarChart>
-                                </ResponsiveContainer>
-                              );
-                            })()}
-                          </div>
-                          
-                          {/* Fixed X-axis at the bottom */}
-                          <div className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
-                            <svg width="100%" height="100%">
-                              <g transform="translate(150, 10)">
-                                <line x1="0" y1="0" x2="calc(100% - 170px)" y2="0" stroke="#E5E7EB" />
-                                {[0, 5, 10, 15, 20].map((value, i, arr) => {
-                                  // Use fixed percentages instead of calculating from document width
-                                  const percentPosition = (i / (arr.length - 1)) * 100;
+                              {(() => {
+                                const chartData = getTop10AppsByPermissions();
+                                if (chartData.length === 0) {
                                   return (
-                                    <g key={value} transform={`translate(${percentPosition}%, 0)`}>
-                                      <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
-                                      <text
-                                        x="0"
-                                        y="20"
-                                        textAnchor="middle"
-                                        fill="#6B7280"
-                                        fontSize="12"
-                                      >
-                                        {value}
-                                      </text>
-                                    </g>
+                                    <div className="h-full flex items-center justify-center text-gray-500">
+                                      No apps that match this criteria
+                                    </div>
                                   );
-                                })}
-                                <text
-                                  x="calc(100% - 170px)"
-                                  y="35"
-                                  textAnchor="end"
-                                  fill="#6B7280"
-                                  fontSize="12"
-                                  fontWeight="500"
-                                >
-                                  Permissions
-                                </text>
-                              </g>
-                            </svg>
+                                }
+                                return (
+                                  <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
+                                  <BarChart data={chartData} layout="vertical" margin={{ left: 150, bottom: 0, right: 20 }}>
+                                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                      <YAxis
+                                        dataKey="name"
+                                        type="category"
+                                        axisLine={false}
+                                        tickLine={false}
+                                        width={140}
+                                        tick={{ fill: '#111827', fontSize: 12 }}
+                                      />
+                                      <Bar 
+                                        dataKey="value" 
+                                        name="Permissions" 
+                                        radius={[0, 4, 4, 0]} 
+                                        barSize={20}
+                                        strokeWidth={1}
+                                        stroke="#fff"
+                                        cursor="pointer"
+                                        onClick={(data) => {
+                                          const app = applications.find(a => a.name === data.name);
+                                          if (app) {
+                                            setMainView("list");
+                                            setSelectedAppId(app.id);
+                                            setIsUserModalOpen(true);
+                                          }
+                                        }}
+                                      >
+                                        {chartData.map((entry, index) => (
+                                          <Cell 
+                                            key={`cell-${index}`} 
+                                            fill={entry.color} 
+                                            fillOpacity={1}
+                                          />
+                                        ))}
+                                      </Bar>
+                                      <RechartsTooltip
+                                        formatter={(value) => [`${value} permissions`, ""]}
+                                        contentStyle={{ 
+                                          backgroundColor: 'white', 
+                                          border: '1px solid #e5e7eb', 
+                                          borderRadius: '8px', 
+                                          padding: '4px 12px',
+                                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                          fontFamily: 'inherit',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '8px'
+                                        }}
+                                        labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                        itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                        separator=": "
+                                        cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                      />
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                );
+                              })()}
+                            </div>
+                            
+                          {/* Fixed X-axis at the bottom */}
+                          <div ref={scopePermissionsXAxisRef} className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
+                            {scopePermissionsXAxisWidth > 0 && (
+                              <svg width="100%" height="100%">
+                                <g transform="translate(150, 10)">
+                                  {(() => {
+                                    const G_TRANSLATE_X = 150;
+                                    const RIGHT_MARGIN_FOR_LABEL = 30;
+                                    const axisLineEndX = scopePermissionsXAxisWidth - G_TRANSLATE_X - RIGHT_MARGIN_FOR_LABEL;
+                                    const tickValues = [0, 5, 10, 15, 20];
+                                    const axisLabelText = "Permissions";
+
+                                    if (axisLineEndX <= 0) return null;
+
+                                    return (
+                                      <>
+                                        <line x1="0" y1="0" x2={axisLineEndX} y2="0" stroke="#E5E7EB" />
+                                        {tickValues.map((value, i, arr) => {
+                                          const position = arr.length > 1 ? (i / (arr.length - 1)) * axisLineEndX : 0;
+                                          return (
+                                            <g key={value} transform={`translate(${position}, 0)`}>
+                                              <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
+                                              <text x="0" y="20" textAnchor="middle" fill="#6B7280" fontSize="12">
+                                                {value}
+                                              </text>
+                                            </g>
+                                          );
+                                        })}
+                                        <text x={axisLineEndX} y="35" textAnchor="end" fill="#6B7280" fontSize="12" fontWeight="500">
+                                          {axisLabelText}
+                                        </text>
+                                      </>
+                                    );
+                                  })()}
+                                </g>
+                              </svg>
+                            )}
                           </div>
                         </div>
                       </div>
