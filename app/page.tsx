@@ -1989,81 +1989,31 @@ export default function ShadowITDashboard() {
   };
 
   // Update the LoginModal component to fix both the top gap and maintain button spacing
-  const LoginModal = () => {
+  const LoginModal = ({ error }: { error: string }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [loginProvider, setLoginProvider] = useState<'google' | 'microsoft' | null>(null);
-    const [loginError, setLoginError] = useState('');
-    const searchParams = useSearchParams(); // Import and use useSearchParams
+    const [currentLoginError, setCurrentLoginError] = useState(error); // Use prop for initial error
+    const searchParams = useSearchParams();
 
     // Log data for debugging
-    console.log("Login Modal Rendered, error state:", loginError);
+    console.log("Login Modal Rendered, error state:", currentLoginError);
     console.log("URL Search Params:", Object.fromEntries(searchParams.entries()));
 
     useEffect(() => {
-      const errorParam = searchParams.get('error');
-      console.log("Error param from URL:", errorParam);
-      
-      if (errorParam) {
-        let friendlyMessage = '';
-        switch (errorParam) {
-          case 'admin_required':
-            friendlyMessage = "Admin access required. Please sign in with an administrator account for your organization. Check you mail for detailed error message.";
-            break;
-          case 'not_workspace_account':
-            friendlyMessage = "Please use a Google Workspace account. Personal Gmail accounts are not supported. Check you mail for detailed error message.";
-            break;
-          case 'not_work_account':
-            friendlyMessage = "Please use a Microsoft work or school account. Personal Microsoft accounts are not supported. Check you mail for detailed error message.";
-            break;
-          case 'no_code':
-            friendlyMessage = "Authentication failed: Authorization code missing. Please try again. Check you mail for detailed error message.";
-            break;
-          case 'auth_failed':
-            friendlyMessage = "Authentication failed. Please try again or contact support if the issue persists. Check you mail for detailed error message";
-            break;
-          case 'user_data_failed':
-            friendlyMessage = "Failed to fetch user data after authentication. Please try again. Check you mail for detailed error message";
-            break;
-          case 'config_missing':
-            friendlyMessage = "OAuth configuration is missing. Please contact support. Check you mail for detailed error message";
-            break;
-          case 'data_refresh_required':
-            friendlyMessage = "We need to refresh your account permissions. Please sign in again to grant access. Check you mail for detailed error message";
-            break;
-          // Cases for interaction_required, login_required, consent_required, missing_data
-          // are handled by the default block below if they were a 'isDirectConsentError' but provider was null.
-          case 'interaction_required':
-          case 'login_required':
-          case 'consent_required':
-          case 'missing_data':
-          case 'unknown':
-          default:
-            friendlyMessage = "An unknown authentication error occurred. Please try again. Check your mail for detailed error message";
-            break;
-        }
-        console.log("Setting error message to:", friendlyMessage);
-        setLoginError(friendlyMessage);
-
-        // Clean the error from URL after displaying it
-        const cleanUrl = new URL(window.location.href);
-        if (cleanUrl.searchParams.has('error')) {
-          cleanUrl.searchParams.delete('error');
-          window.history.replaceState({}, document.title, cleanUrl.toString());
-        }
-      }
-    }, [searchParams]);
+      setCurrentLoginError(error); // Update error when prop changes
+    }, [error]);
     
     const handleGoogleLogin = async () => {
       try {
         setIsLoading(true);
         setLoginProvider('google');
-        setLoginError(''); // Clear previous errors specifically for a new login attempt
+        setCurrentLoginError(''); // Clear previous errors specifically for a new login attempt
 
         const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
         let redirectUri;
 
         if (!clientId) {
-          setLoginError("Missing Google OAuth configuration");
+          setCurrentLoginError("Missing Google OAuth configuration");
           console.error('Missing client ID');
           setIsLoading(false);
           return;
@@ -2115,7 +2065,7 @@ export default function ShadowITDashboard() {
         window.location.href = authUrl.toString();
       } catch (err) {
         console.error('Login error:', err);
-        setLoginError('Failed to initialize login. Please try again.');
+        setCurrentLoginError('Failed to initialize login. Please try again.');
         setIsLoading(false);
         setLoginProvider(null);
       }
@@ -2125,13 +2075,13 @@ export default function ShadowITDashboard() {
       try {
         setIsLoading(true);
         setLoginProvider('microsoft');
-        setLoginError(''); // Clear previous errors specifically for a new login attempt
+        setCurrentLoginError(''); // Clear previous errors specifically for a new login attempt
 
         const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
         let redirectUri = process.env.NEXT_PUBLIC_MICROSOFT_REDIRECT_URI;
 
         if (!clientId || !redirectUri) {
-          setLoginError("Missing Microsoft OAuth configuration");
+          setCurrentLoginError("Missing Microsoft OAuth configuration");
           console.error('Missing env variables:', { 
             clientId: clientId ? 'present' : 'missing',
             redirectUri: redirectUri ? 'present' : 'missing'
@@ -2187,7 +2137,7 @@ export default function ShadowITDashboard() {
         window.location.href = authUrl.toString();
       } catch (err) {
         console.error('Microsoft login error:', err);
-        setLoginError('Failed to initialize Microsoft login. Please try again.');
+        setCurrentLoginError('Failed to initialize Microsoft login. Please try again.');
         setIsLoading(false);
         setLoginProvider(null);
       }
@@ -2203,9 +2153,9 @@ export default function ShadowITDashboard() {
             </p>
             
             {/* Added stronger conditional check and inline style for better visibility */}
-            {loginError && loginError.length > 0 && (
+            {currentLoginError && currentLoginError.length > 0 && (
               <div className="mb-4 p-4 text-sm text-red-800 bg-red-100 rounded-lg border border-red-300">
-                {loginError}
+                {currentLoginError}
               </div>
             )}
             
@@ -4533,7 +4483,7 @@ export default function ShadowITDashboard() {
           background-color: #1f2937;
         }
       `}</style>
-      {showLoginModal && <LoginModal />}
+      {showLoginModal && <LoginModal error={loginError} />}
     </div>
   )
 }
