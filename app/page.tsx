@@ -3073,7 +3073,7 @@ export default function ShadowITDashboard() {
                       <p className="text-sm text-gray-500 mb-4">Applications ranked by number of users</p>
                       <div className="h-96 border-gray-200 relative">
                         {/* Scrollable area for the bars only */}
-                        <div className="absolute top-0 left-0 right-0 bottom-20 overflow-y-auto">
+                        <div className="absolute top-0 left-0 right-0 bottom-8 overflow-y-auto">
                             {(() => {
                               const chartData = getAppsByUserCountChartData();
                               if (chartData.length === 0) {
@@ -3149,55 +3149,18 @@ export default function ShadowITDashboard() {
                           </div>
                         
                         {/* Fixed X-axis at the bottom */}
-                        <div ref={userCountXAxisRef} className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
-                          {userCountXAxisWidth > 0 && (
-                            <svg width="100%" height="100%">
-                              <g transform="translate(150, 10)">
-                                {(() => {
-                                  const G_TRANSLATE_X = 150;
-                                  const RIGHT_MARGIN_FOR_LABEL = 30;
-                                  const axisLineEndX = userCountXAxisWidth - G_TRANSLATE_X - RIGHT_MARGIN_FOR_LABEL;
-                                  const tickValues = [0, 8, 16, 24, 32];
-                                  const axisLabelText = "Users";
-
-                                  if (axisLineEndX <= 0) return null; // Avoid rendering if width is too small
-
-                                  return (
-                                    <>
-                                      <line x1="0" y1="0" x2={axisLineEndX} y2="0" stroke="#E5E7EB" />
-                                      {tickValues.map((value, i, arr) => {
-                                        const position = arr.length > 1 ? (i / (arr.length - 1)) * axisLineEndX : 0;
-                                        return (
-                                          <g key={value} transform={`translate(${position}, 0)`}>
-                                            <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
-                                            <text
-                                              x="0"
-                                              y="20"
-                                              textAnchor="middle"
-                                              fill="#6B7280"
-                                              fontSize="12"
-                                            >
-                                              {value}
-                                            </text>
-                                          </g>
-                                        );
-                                      })}
-                                      <text
-                                        x={axisLineEndX}
-                                        y="35"
-                                        textAnchor="end"
-                                        fill="#6B7280"
-                                        fontSize="12"
-                                        fontWeight="500"
-                                      >
-                                        {axisLabelText}
-                                      </text>
-                                    </>
-                                  );
-                                })()}
-                              </g>
-                            </svg>
-                          )}
+                        <div ref={userCountXAxisRef} className="absolute left-0 right-0 bottom-0 h-8 bg-white flex items-center border-t border-gray-200 z-10">
+                          <div className="absolute left-[150px] right-0 flex justify-between px-4">
+                            {[0, 8, 16, 24, 32].map((value) => (
+                              <div key={value} className="flex flex-col items-center">
+                                <div className="h-2 w-px bg-gray-300 mb-1"></div>
+                                <span className="text-xs text-gray-500">{value}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
+                            Users
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -3316,7 +3279,7 @@ export default function ShadowITDashboard() {
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of high-risk users</p>
                         <div className="h-96 border-gray-200 relative">
                             {/* Scrollable area for the bars only */}
-                          <div className="absolute top-0 left-0 right-0 bottom-20 overflow-y-auto">
+                          <div className="absolute top-0 left-0 right-0 bottom-8 overflow-y-auto">
                               {getHighRiskUsersByApp().filter(app => app.value > 0).length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-gray-500">
                                   No applications found with high-risk users
@@ -3382,42 +3345,18 @@ export default function ShadowITDashboard() {
                             </div>
                             
                           {/* Fixed X-axis at the bottom */}
-                          <div ref={highRiskUsersXAxisRef} className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
-                            {highRiskUsersXAxisWidth > 0 && (
-                              <svg width="100%" height="100%">
-                                <g transform="translate(150, 10)">
-                                  {(() => {
-                                    const G_TRANSLATE_X = 150;
-                                    const RIGHT_MARGIN_FOR_LABEL = 30;
-                                    const axisLineEndX = highRiskUsersXAxisWidth - G_TRANSLATE_X - RIGHT_MARGIN_FOR_LABEL;
-                                    const tickValues = [0, 5, 10, 15, 20];
-                                    const axisLabelText = "High-Risk Users";
-
-                                    if (axisLineEndX <= 0) return null;
-
-                                    return (
-                                      <>
-                                        <line x1="0" y1="0" x2={axisLineEndX} y2="0" stroke="#E5E7EB" />
-                                        {tickValues.map((value, i, arr) => {
-                                          const position = arr.length > 1 ? (i / (arr.length - 1)) * axisLineEndX : 0;
-                                          return (
-                                            <g key={value} transform={`translate(${position}, 0)`}>
-                                              <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
-                                              <text x="0" y="20" textAnchor="middle" fill="#6B7280" fontSize="12">
-                                                {value}
-                                              </text>
-                                            </g>
-                                          );
-                                        })}
-                                        <text x={axisLineEndX} y="35" textAnchor="end" fill="#6B7280" fontSize="12" fontWeight="500">
-                                          {axisLabelText}
-                                        </text>
-                                      </>
-                                    );
-                                  })()}
-                                </g>
-                              </svg>
-                            )}
+                          <div ref={highRiskUsersXAxisRef} className="absolute left-0 right-0 bottom-0 h-8 bg-white flex items-center border-t border-gray-200 z-10">
+                            <div className="absolute left-[150px] right-0 flex justify-between px-4">
+                              {[0, 2, 4, 6, 8].map((value) => (
+                                <div key={value} className="flex flex-col items-center">
+                                  <div className="h-2 w-px bg-gray-300 mb-1"></div>
+                                  <span className="text-xs text-gray-500">{value}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
+                              High-Risk Users
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -3444,7 +3383,7 @@ export default function ShadowITDashboard() {
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
                         <div className="h-96 border-gray-200 relative">
                             {/* Scrollable area for the bars only */}
-                          <div className="absolute top-0 left-0 right-0 bottom-20 overflow-y-auto">
+                          <div className="absolute top-0 left-0 right-0 bottom-8 overflow-y-auto">
                               {(() => {
                                 const chartData = getTop10AppsByPermissions();
                                 if (chartData.length === 0) {
@@ -3516,42 +3455,18 @@ export default function ShadowITDashboard() {
                             </div>
                             
                           {/* Fixed X-axis at the bottom */}
-                          <div ref={scopePermissionsXAxisRef} className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
-                            {scopePermissionsXAxisWidth > 0 && (
-                              <svg width="100%" height="100%">
-                                <g transform="translate(150, 10)">
-                                  {(() => {
-                                    const G_TRANSLATE_X = 150;
-                                    const RIGHT_MARGIN_FOR_LABEL = 30;
-                                    const axisLineEndX = scopePermissionsXAxisWidth - G_TRANSLATE_X - RIGHT_MARGIN_FOR_LABEL;
-                                    const tickValues = [0, 5, 10, 15, 20];
-                                    const axisLabelText = "Permissions";
-
-                                    if (axisLineEndX <= 0) return null;
-
-                                    return (
-                                      <>
-                                        <line x1="0" y1="0" x2={axisLineEndX} y2="0" stroke="#E5E7EB" />
-                                        {tickValues.map((value, i, arr) => {
-                                          const position = arr.length > 1 ? (i / (arr.length - 1)) * axisLineEndX : 0;
-                                          return (
-                                            <g key={value} transform={`translate(${position}, 0)`}>
-                                              <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
-                                              <text x="0" y="20" textAnchor="middle" fill="#6B7280" fontSize="12">
-                                                {value}
-                                              </text>
-                                            </g>
-                                          );
-                                        })}
-                                        <text x={axisLineEndX} y="35" textAnchor="end" fill="#6B7280" fontSize="12" fontWeight="500">
-                                          {axisLabelText}
-                                        </text>
-                                      </>
-                                    );
-                                  })()}
-                                </g>
-                              </svg>
-                            )}
+                          <div ref={scopePermissionsXAxisRef} className="absolute left-0 right-0 bottom-0 h-8 bg-white flex items-center border-t border-gray-200 z-10">
+                            <div className="absolute left-[150px] right-0 flex justify-between px-4">
+                              {[0, 5, 10, 15, 20].map((value) => (
+                                <div key={value} className="flex flex-col items-center">
+                                  <div className="h-2 w-px bg-gray-300 mb-1"></div>
+                                  <span className="text-xs text-gray-500">{value}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
+                              Permissions
+                            </div>
                           </div>
                         </div>
                       </div>
