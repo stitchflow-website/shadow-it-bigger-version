@@ -3025,87 +3025,119 @@ export default function ShadowITDashboard() {
                         </div>
                       </div>
                       <p className="text-sm text-gray-500 mb-4">Applications ranked by number of users</p>
-                       <div className="relative h-96">
-                        {/* Scrollable chart area */}
-                        <div className="absolute inset-0 top-0 bottom-0 flex flex-col">
-                          <div className="flex-grow overflow-y-auto">
-                            {(() => {
-                              const chartData = getAppsByUserCountChartData();
-                              if (chartData.length === 0) {
-                                return (
-                                  <div className="h-full flex items-center justify-center text-gray-500">
-                                    No apps that match this criteria
-                                  </div>
-                                );
-                              }
+                      <div className="h-96 border-gray-200 relative">
+                        {/* Scrollable area for the bars only */}
+                        <div className="absolute top-0 left-0 right-0 bottom-20 overflow-y-auto">
+                          {(() => {
+                            const chartData = getAppsByUserCountChartData();
+                            if (chartData.length === 0) {
                               return (
-                                <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
-                                  <BarChart
-                                    data={chartData}
-                                    layout="vertical"
-                                    margin={{ left: 150, bottom: 20 }}
-                                  >
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#F0F0F0" />
-                                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                                    <YAxis
-                                      dataKey="name"
-                                      type="category"
-                                      axisLine={false}
-                                      tickLine={false}
-                                      width={140}
-                                      tick={{ fill: '#111827', fontSize: 12 }}
-                                    />
-                                    <Bar
-                                      dataKey="value"
-                                      name="Users"
-                                      radius={[0, 4, 4, 0]}
-                                      barSize={20}
-                                      strokeWidth={1}
-                                      stroke="#fff"
-                                      cursor="pointer"
-                                      onClick={(data) => {
-                                        const app = applications.find(a => a.name === data.name);
-                                        if (app) {
-                                          setMainView("list");
-                                          setSelectedAppId(app.id);
-                                          setIsUserModalOpen(true);
-                                        }
-                                      }}
-                                    >
-                                      {chartData.map((entry, index) => (
-                                        <Cell
-                                          key={`cell-${index}`}
-                                          fill={entry.color}
-                                          fillOpacity={1}
-                                        />
-                                      ))}
-                                    </Bar>
-                                    <RechartsTooltip
-                                      formatter={(value) => [`${value} users`, ""]}
-                                      contentStyle={{
-                                        backgroundColor: 'white',
-                                        border: '1px solid #E5E7EB',
-                                        borderRadius: '8px',
-                                        padding: '4px 12px',
-                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                        fontFamily: 'inherit',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px'
-                                      }}
-                                      labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                                      itemStyle={{ color: '#111827', fontWeight: 600 }}
-                                      separator=": "
-                                      cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                                    />
-                                  </BarChart>
-                                </ResponsiveContainer>
+                                <div className="h-full flex items-center justify-center text-gray-500">
+                                  No apps that match this criteria
+                                </div>
                               );
-                            })()}
-                          </div>
+                            }
+                            return (
+                              <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
+                                <BarChart
+                                  data={chartData}
+                                  layout="vertical"
+                                  margin={{ left: 150, bottom: 0, right: 20 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#F0F0F0" />
+                                  <YAxis
+                                    dataKey="name"
+                                    type="category"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    width={140}
+                                    tick={{ fill: '#111827', fontSize: 12 }}
+                                  />
+                                  <Bar
+                                    dataKey="value"
+                                    name="Users"
+                                    radius={[0, 4, 4, 0]}
+                                    barSize={20}
+                                    strokeWidth={1}
+                                    stroke="#fff"
+                                    cursor="pointer"
+                                    onClick={(data) => {
+                                      const app = applications.find(a => a.name === data.name);
+                                      if (app) {
+                                        setMainView("list");
+                                        setSelectedAppId(app.id);
+                                        setIsUserModalOpen(true);
+                                      }
+                                    }}
+                                  >
+                                    {chartData.map((entry, index) => (
+                                      <Cell
+                                        key={`cell-${index}`}
+                                        fill={entry.color}
+                                        fillOpacity={1}
+                                      />
+                                    ))}
+                                  </Bar>
+                                  <RechartsTooltip
+                                    formatter={(value) => [`${value} users`, ""]}
+                                    contentStyle={{
+                                      backgroundColor: 'white',
+                                      border: '1px solid #E5E7EB',
+                                      borderRadius: '8px',
+                                      padding: '4px 12px',
+                                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                      fontFamily: 'inherit',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px'
+                                    }}
+                                    labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                    itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                    separator=": "
+                                    cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                  />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            );
+                          })()}
                         </div>
-                        {/* Fixed x-axis at the bottom */}
-                        {/* Lines 2759-2772 removed */}
+                        
+                        {/* Fixed X-axis at the bottom */}
+                        <div className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
+                          <svg width="100%" height="100%">
+                            <g transform="translate(150, 10)">
+                              <line x1="0" y1="0" x2="calc(100% - 170px)" y2="0" stroke="#E5E7EB" />
+                              {[0, 8, 16, 24, 32].map((value, i, arr) => {
+                                // Use fixed percentages instead of calculating from document width
+                                const percentPosition = (i / (arr.length - 1)) * 100;
+                                return (
+                                  <g key={value} transform={`translate(${percentPosition}%, 0)`}>
+                                    <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
+                                    <text
+                                      x="0"
+                                      y="20"
+                                      textAnchor="middle"
+                                      fill="#6B7280"
+                                      fontSize="12"
+                                    >
+                                      {value}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                              <text
+                                x="calc(100% - 170px)"
+                                y="35"
+                                textAnchor="end"
+                                fill="#6B7280"
+                                fontSize="12"
+                                fontWeight="500"
+                              >
+                                Users
+                              </text>
+                            </g>
+                          </svg>
+                        </div>
                       </div>
                     </div>
 
@@ -3221,91 +3253,108 @@ export default function ShadowITDashboard() {
                           </div>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of high-risk users</p>
-                        <div className="relative h-96">
-                          {/* Chart container with fixed height and overflow for scrolling */}
-                          <div className="absolute inset-0 flex flex-col">
-                            {/* Scrollable area for the bars only */}
-                            <div className="flex-grow overflow-y-auto pb-10">
-                              {getHighRiskUsersByApp().filter(app => app.value > 0).length === 0 ? (
-                                <div className="h-full flex items-center justify-center text-gray-500">
-                                  No applications found with high-risk users
-                                </div>
-                              ) : (
-                                <ResponsiveContainer width="100%" height={Math.max(400, getHighRiskUsersByApp().filter(app => app.value > 0).length * 30)}>
-                                  <BarChart data={getHighRiskUsersByApp().filter(app => app.value > 0)} layout="vertical" margin={{ left: 150, bottom: 20 }}>
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                                    {/* Removed the XAxis from here - it will be rendered separately below */}
-                                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                                    <YAxis
-                                      dataKey="name"
-                                      type="category"
-                                      axisLine={false}
-                                      tickLine={false}
-                                      width={140}
-                                      tick={{ fill: '#111827', fontSize: 12 }}
-                                    />
-                                    <Bar 
-                                      dataKey="value" 
-                                      name="High-Risk Users" 
-                                      radius={[0, 4, 4, 0]} 
-                                      barSize={20}
-                                      strokeWidth={1}
-                                      stroke="#fff"
-                                      cursor="pointer"
-                                      onClick={(data) => {
-                                        const app = applications.find(a => a.name === data.name);
-                                        if (app) {
-                                          setMainView("list");
-                                          setSelectedAppId(app.id);
-                                          setIsUserModalOpen(true);
-                                        }
-                                      }}
-                                    >
-                                      {getHighRiskUsersByApp().filter(app => app.value > 0).map((entry, index) => (
-                                        <Cell 
-                                          key={`cell-${index}`} 
-                                          fill={entry.color}  
-                                          fillOpacity={1}
-                                        />
-                                      ))}
-                                    </Bar>
-                                    <RechartsTooltip
-                                      formatter={(value) => [`${value} high-risk ${value === 1 ? 'user' : 'users'}`, ""]}
-                                      contentStyle={{ 
-                                        backgroundColor: 'white', 
-                                        border: '1px solid #e5e7eb', 
-                                        borderRadius: '8px', 
-                                        padding: '4px 12px',
-                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                        fontFamily: 'inherit',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px'
-                                      }}
-                                      labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                                      itemStyle={{ color: '#111827', fontWeight: 600 }}
-                                      separator=": "
-                                      cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                                    />
-                                  </BarChart>
-                                </ResponsiveContainer>
-                              )}
-                            </div>
-                            
-                            {/* Fixed x-axis at the bottom */}
-                            <div className="h-8 relative bg-white flex items-center border-t border-gray-200">
-                              <div className="absolute left-[150px] right-0 flex justify-between px-4">
-                                {[0, 5, 10, 15, 20].map((value) => (
-                                  <div key={value} className="flex flex-col items-center">
-                                    <div className="h-2 w-px bg-gray-300 mb-1"></div>
-                                    <span className="text-xs text-gray-500">{value}</span>
-                                  </div>
-                                ))}
+                        <div className="h-96 border-gray-200 relative">
+                          {/* Scrollable area for the bars only */}
+                          <div className="absolute top-0 left-0 right-0 bottom-20 overflow-y-auto">
+                            {getHighRiskUsersByApp().filter(app => app.value > 0).length === 0 ? (
+                              <div className="h-full flex items-center justify-center text-gray-500">
+                                No applications found with high-risk users
                               </div>
-                              <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
-                                High-Risk Users
-                              </div>
-                            </div>
+                            ) : (
+                              <ResponsiveContainer width="100%" height={Math.max(400, getHighRiskUsersByApp().filter(app => app.value > 0).length * 30)}>
+                                <BarChart data={getHighRiskUsersByApp().filter(app => app.value > 0)} layout="vertical" margin={{ left: 150, bottom: 0, right: 20 }}>
+                                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                  <YAxis
+                                    dataKey="name"
+                                    type="category"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    width={140}
+                                    tick={{ fill: '#111827', fontSize: 12 }}
+                                  />
+                                  <Bar 
+                                    dataKey="value" 
+                                    name="High-Risk Users" 
+                                    radius={[0, 4, 4, 0]} 
+                                    barSize={20}
+                                    strokeWidth={1}
+                                    stroke="#fff"
+                                    cursor="pointer"
+                                    onClick={(data) => {
+                                      const app = applications.find(a => a.name === data.name);
+                                      if (app) {
+                                        setMainView("list");
+                                        setSelectedAppId(app.id);
+                                        setIsUserModalOpen(true);
+                                      }
+                                    }}
+                                  >
+                                    {getHighRiskUsersByApp().filter(app => app.value > 0).map((entry, index) => (
+                                      <Cell 
+                                        key={`cell-${index}`} 
+                                        fill={entry.color}  
+                                        fillOpacity={1}
+                                      />
+                                    ))}
+                                  </Bar>
+                                  <RechartsTooltip
+                                    formatter={(value) => [`${value} high-risk ${value === 1 ? 'user' : 'users'}`, ""]}
+                                    contentStyle={{ 
+                                      backgroundColor: 'white', 
+                                      border: '1px solid #e5e7eb', 
+                                      borderRadius: '8px', 
+                                      padding: '4px 12px',
+                                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                      fontFamily: 'inherit',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px'
+                                    }}
+                                    labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                    itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                    separator=": "
+                                    cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                  />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            )}
+                          </div>
+                          
+                          {/* Fixed X-axis at the bottom */}
+                          <div className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
+                            <svg width="100%" height="100%">
+                              <g transform="translate(150, 10)">
+                                <line x1="0" y1="0" x2="calc(100% - 170px)" y2="0" stroke="#E5E7EB" />
+                                {[0, 5, 10, 15, 20].map((value, i, arr) => {
+                                  // Use fixed percentages instead of calculating from document width
+                                  const percentPosition = (i / (arr.length - 1)) * 100;
+                                  return (
+                                    <g key={value} transform={`translate(${percentPosition}%, 0)`}>
+                                      <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
+                                      <text
+                                        x="0"
+                                        y="20"
+                                        textAnchor="middle"
+                                        fill="#6B7280"
+                                        fontSize="12"
+                                      >
+                                        {value}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
+                                <text
+                                  x="calc(100% - 170px)"
+                                  y="35"
+                                  textAnchor="end"
+                                  fill="#6B7280"
+                                  fontSize="12"
+                                  fontWeight="500"
+                                >
+                                  High-Risk Users
+                                </text>
+                              </g>
+                            </svg>
                           </div>
                         </div>
                       </div>
@@ -3330,97 +3379,114 @@ export default function ShadowITDashboard() {
                           </div>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
-                        <div className="relative h-96">
-                          {/* Chart container with fixed height and overflow for scrolling */}
-                          <div className="absolute inset-0 flex flex-col">
-                            {/* Scrollable area for the bars only */}
-                            <div className="flex-grow overflow-y-auto pb-10">
-                              {(() => {
-                                const chartData = getTop10AppsByPermissions();
-                                if (chartData.length === 0) {
-                                  return (
-                                    <div className="h-full flex items-center justify-center text-gray-500">
-                                      No apps that match this criteria
-                                    </div>
-                                  );
-                                }
+                        <div className="h-96 border-gray-200 relative">
+                          {/* Scrollable area for the bars only */}
+                          <div className="absolute top-0 left-0 right-0 bottom-20 overflow-y-auto">
+                            {(() => {
+                              const chartData = getTop10AppsByPermissions();
+                              if (chartData.length === 0) {
                                 return (
-                                  <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
-                                    <BarChart data={chartData} layout="vertical" margin={{ left: 150, bottom: 20 }}>
-                                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                                      {/* Removed the XAxis from here - it will be rendered separately below */}
-                                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                                      <YAxis
-                                        dataKey="name"
-                                        type="category"
-                                        axisLine={false}
-                                        tickLine={false}
-                                        width={140}
-                                        tick={{ fill: '#111827', fontSize: 12 }}
-                                      />
-                                      <Bar 
-                                        dataKey="value" 
-                                        name="Permissions" 
-                                        radius={[0, 4, 4, 0]} 
-                                        barSize={20}
-                                        strokeWidth={1}
-                                        stroke="#fff"
-                                        cursor="pointer"
-                                        onClick={(data) => {
-                                          const app = applications.find(a => a.name === data.name);
-                                          if (app) {
-                                            setMainView("list");
-                                            setSelectedAppId(app.id);
-                                            setIsUserModalOpen(true);
-                                          }
-                                        }}
-                                      >
-                                        {chartData.map((entry, index) => (
-                                          <Cell 
-                                            key={`cell-${index}`} 
-                                            fill={entry.color} 
-                                            fillOpacity={1}
-                                          />
-                                        ))}
-                                      </Bar>
-                                      <RechartsTooltip
-                                        formatter={(value) => [`${value} permissions`, ""]}
-                                        contentStyle={{ 
-                                          backgroundColor: 'white', 
-                                          border: '1px solid #e5e7eb', 
-                                          borderRadius: '8px', 
-                                          padding: '4px 12px',
-                                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                          fontFamily: 'inherit',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '8px'
-                                        }}
-                                        labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                                        itemStyle={{ color: '#111827', fontWeight: 600 }}
-                                        separator=": "
-                                        cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                                      />
-                                    </BarChart>
-                                  </ResponsiveContainer>
-                                );
-                              })()}
-                            </div>
-                            
-                            {/* Fixed x-axis at the bottom */}
-                            <div className="h-8 relative bg-white flex items-center border-t border-gray-200">
-                              <div className="absolute left-[150px] right-0 flex justify-between px-4">
-                                {[0, 5, 10, 15, 20].map((value) => (
-                                  <div key={value} className="flex flex-col items-center">
-                                    <div className="h-2 w-px bg-gray-300 mb-1"></div>
-                                    <span className="text-xs text-gray-500">{value}</span>
+                                  <div className="h-full flex items-center justify-center text-gray-500">
+                                    No apps that match this criteria
                                   </div>
-                                ))}
-                              </div>
-                              <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
-                                Permissions
-                              </div>
-                            </div>
+                                );
+                              }
+                              return (
+                                <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
+                                  <BarChart data={chartData} layout="vertical" margin={{ left: 150, bottom: 0, right: 20 }}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                    <YAxis
+                                      dataKey="name"
+                                      type="category"
+                                      axisLine={false}
+                                      tickLine={false}
+                                      width={140}
+                                      tick={{ fill: '#111827', fontSize: 12 }}
+                                    />
+                                    <Bar 
+                                      dataKey="value" 
+                                      name="Permissions" 
+                                      radius={[0, 4, 4, 0]} 
+                                      barSize={20}
+                                      strokeWidth={1}
+                                      stroke="#fff"
+                                      cursor="pointer"
+                                      onClick={(data) => {
+                                        const app = applications.find(a => a.name === data.name);
+                                        if (app) {
+                                          setMainView("list");
+                                          setSelectedAppId(app.id);
+                                          setIsUserModalOpen(true);
+                                        }
+                                      }}
+                                    >
+                                      {chartData.map((entry, index) => (
+                                        <Cell 
+                                          key={`cell-${index}`} 
+                                          fill={entry.color} 
+                                          fillOpacity={1}
+                                        />
+                                      ))}
+                                    </Bar>
+                                    <RechartsTooltip
+                                      formatter={(value) => [`${value} permissions`, ""]}
+                                      contentStyle={{ 
+                                        backgroundColor: 'white', 
+                                        border: '1px solid #e5e7eb', 
+                                        borderRadius: '8px', 
+                                        padding: '4px 12px',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                        fontFamily: 'inherit',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                      }}
+                                      labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                      itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                      separator=": "
+                                      cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                    />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              );
+                            })()}
+                          </div>
+                          
+                          {/* Fixed X-axis at the bottom */}
+                          <div className="absolute left-0 right-0 bottom-0 h-20 bg-white border-t border-gray-200">
+                            <svg width="100%" height="100%">
+                              <g transform="translate(150, 10)">
+                                <line x1="0" y1="0" x2="calc(100% - 170px)" y2="0" stroke="#E5E7EB" />
+                                {[0, 5, 10, 15, 20].map((value, i, arr) => {
+                                  // Use fixed percentages instead of calculating from document width
+                                  const percentPosition = (i / (arr.length - 1)) * 100;
+                                  return (
+                                    <g key={value} transform={`translate(${percentPosition}%, 0)`}>
+                                      <line x1="0" y1="0" x2="0" y2="6" stroke="#9CA3AF" />
+                                      <text
+                                        x="0"
+                                        y="20"
+                                        textAnchor="middle"
+                                        fill="#6B7280"
+                                        fontSize="12"
+                                      >
+                                        {value}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
+                                <text
+                                  x="calc(100% - 170px)"
+                                  y="35"
+                                  textAnchor="end"
+                                  fill="#6B7280"
+                                  fontSize="12"
+                                  fontWeight="500"
+                                >
+                                  Permissions
+                                </text>
+                              </g>
+                            </svg>
                           </div>
                         </div>
                       </div>
