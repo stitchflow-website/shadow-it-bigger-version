@@ -2261,7 +2261,7 @@ export default function ShadowITDashboard() {
     return sorted.map((app) => ({
       name: app.name,
       value: app.userCount,
-      color: getCategoryColor(appCategories[app.id] || app.category),
+      color: getCategoryColor(appCategories[app.id] || app.category), // Ensure this provides a valid color string
     }));
   };
 
@@ -3091,25 +3091,25 @@ export default function ShadowITDashboard() {
                                   <BarChart 
                                     data={chartData} 
                                     layout="vertical" 
-                                    margin={{ left: 150, bottom: 0 }}
+                                    margin={{ top: 5, right: 30, left: 120, bottom: 5 }} // Adjusted left margin for YAxis labels
                                   >
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                                    {/* Removed the XAxis from here - it will be rendered separately below */}
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
+                                    {/* YAxis configuration */}
                                     <YAxis
                                       dataKey="name"
                                       type="category"
                                       axisLine={false}
                                       tickLine={false}
-                                      width={140}
-                                      tick={{ fill: '#111827', fontSize: 12 }}
+                                      width={140} // Increased width to accommodate longer app names
+                                      tick={{ fill: '#374151', fontSize: 12 }} // Darker text for better readability
+                                      interval={0} // Ensure all labels are shown
                                     />
                                     <Bar 
                                       dataKey="value" 
                                       name="Users" 
                                       radius={[0, 4, 4, 0]} 
                                       barSize={20}
-                                      strokeWidth={1}
-                                      stroke="#fff"
+                                      // Removed stroke and strokeWidth, relying on Cell for fill
                                       cursor="pointer"
                                       onClick={(data) => {
                                         const app = applications.find(a => a.name === data.name);
@@ -3123,8 +3123,8 @@ export default function ShadowITDashboard() {
                                       {chartData.map((entry, index) => (
                                         <Cell 
                                           key={`cell-${index}`} 
-                                          fill={entry.color} 
-                                          fillOpacity={1}
+                                          fill={entry.color || getCategoryColor(entry.name)} // Ensure color is applied
+                                          // fillOpacity={1} // fillOpacity is default 1
                                         />
                                       ))}
                                     </Bar>
@@ -3153,16 +3153,17 @@ export default function ShadowITDashboard() {
                           </div>
                           
                           {/* Fixed x-axis at the bottom */}
-                          <div className="h-8 relative bg-white flex items-center border-t border-gray-200">
-                            <div className="absolute left-[150px] right-0 flex justify-between px-4">
+                          {/* Adjusted x-axis to align with the chart content area */}
+                          <div className="h-10 relative bg-white flex items-end border-t border-gray-200 pl-[150px] pr-[30px]"> {/* Align with BarChart margins */}
+                            <div className="w-full flex justify-between">
                               {[0, 8, 16, 24, 32].map((value) => (
-                                <div key={value} className="flex flex-col items-center">
-                                  <div className="h-2 w-px bg-gray-300 mb-1"></div>
-                                  <span className="text-xs text-gray-500">{value}</span>
+                                <div key={value} className="flex flex-col items-center pt-1">
+                                  <div className="h-1.5 w-px bg-gray-400"></div>
+                                  <span className="text-xs text-gray-500 mt-1">{value}</span>
                                 </div>
                               ))}
                             </div>
-                            <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
+                            <div className="absolute right-[30px] -bottom-0.5 text-xs text-gray-600 font-medium"> {/* Adjusted positioning */}
                               Users
                             </div>
                           </div>
