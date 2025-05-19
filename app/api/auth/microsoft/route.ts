@@ -166,10 +166,11 @@ export async function GET(request: NextRequest) {
     const needsAdminConsent = adminScopes.some(s => !grantedScopes.includes(s));
 
     // Avoid infinite redirect loops by checking if we've already requested consent
-    const consentRequested = searchParams.get('consent_requested') === 'true';
+    // const consentRequested = searchParams.get('consent_requested') === 'true'; // Original line
+    // Use isFreshSyncFlow as a more reliable indicator than consent_requested query param
 
-    if (needsAdminConsent && !consentRequested) {
-      console.log('Missing admin scopes – redirecting user to grant full consent');
+    if (needsAdminConsent && !isFreshSyncFlow) { // Changed condition here
+      console.log('Missing admin scopes – redirecting user to grant full consent (using isFreshSyncFlow check)');
 
       const fullScopes = [
         // Base scopes

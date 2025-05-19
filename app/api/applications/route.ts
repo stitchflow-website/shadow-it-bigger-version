@@ -31,6 +31,8 @@ type ApplicationType = {
   all_scopes?: string[];
   created_at: string;
   microsoft_app_id?: string;
+  owner_email?: string;
+  notes?: string;
 }
 
 // Helper to generate app logo URL from logo.dev
@@ -191,8 +193,8 @@ export async function GET(request: Request) {
         logoUrlFallback: logoUrls.fallback,
         created_at: app.created_at,
         managementStatus: transformManagementStatus(app.management_status),
-        ownerEmail: '',
-        notes: '',
+        ownerEmail: app.owner_email || '',
+        notes: app.notes || '',
         scopes: applicationScopes,
         scopesMessage: isMicrosoftApp ? "Scope details not available for Microsoft applications" : undefined,
         isInstalled: app.management_status === 'MANAGED',
@@ -234,20 +236,41 @@ function calculateScopeVariance(userApplications: any[] | null): { userGroups: n
 
 export async function PATCH(request: Request) {
   try {
-    const { id, managementStatus } = await request.json();
+    const { id, managementStatus, ownerEmail, notes } = await request.json();
 
-    if (!id || !managementStatus) {
-      return NextResponse.json({ error: 'Application ID and management status are required' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: 'Application ID is required' }, { status: 400 });
     }
 
-    // Validate management status
-    if (!['Managed', 'Unmanaged', 'Needs Review'].includes(managementStatus)) {
-      return NextResponse.json({ error: 'Invalid management status' }, { status: 400 });
+    // Build update object based on what was provided
+    const updateData: any = {};
+    
+    if (managementStatus) {
+      // Validate management status
+      if (!['Managed', 'Unmanaged', 'Needs Review'].includes(managementStatus)) {
+        return NextResponse.json({ error: 'Invalid management status' }, { status: 400 });
+      }
+      updateData.management_status = managementStatus;
+    }
+    
+    // Add owner_email if provided
+    if (ownerEmail !== undefined) {
+      updateData.owner_email = ownerEmail;
+    }
+    
+    // Add notes if provided
+    if (notes !== undefined) {
+      updateData.notes = notes;
+    }
+    
+    // If nothing to update, return an error
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'No update parameters provided' }, { status: 400 });
     }
 
     const { error } = await supabaseAdmin
       .from('applications')
-      .update({ management_status: managementStatus })
+      .update(updateData)
       .eq('id', id);
 
     if (error) {

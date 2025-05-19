@@ -189,6 +189,13 @@ export default function ShadowITDashboard() {
   const [scopePermissionsManagedStatusFilter, setScopePermissionsManagedStatusFilter] = useState<string>('Any Status');
 
   const searchParams = useSearchParams(); // Import and use useSearchParams
+  const mainContentRef = useRef<HTMLDivElement>(null); // Added for scroll to top
+
+  // Add states for owner email and notes editing
+  const [ownerEmail, setOwnerEmail] = useState<string>("");
+  const [notes, setNotes] = useState<string>("");
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveMessage, setSaveMessage] = useState<{type: "success" | "error", text: string} | null>(null);
 
   // Helper function to redirect to Google consent screen
   const redirectToGoogleConsent = () => {
@@ -262,90 +269,91 @@ export default function ShadowITDashboard() {
   
   // Add a useEffect to check for error parameters in the URL
   useEffect(() => {
-    const checkErrorParams = () => {
-      // Only run in browser environment
-      if (typeof window === 'undefined') return;
-      
-      const searchParams = new URLSearchParams(window.location.search);
-      const errorParam = searchParams.get('error');
-      
-      if (errorParam) {
-        // Get the authentication provider from localStorage if available
-        const provider = localStorage.getItem('auth_provider') as 'google' | 'microsoft' | null;
-        
-        // For these specific errors, redirect directly to consent screen
-        const needsDirectConsent = 
-          errorParam === 'interaction_required' || 
-          errorParam === 'login_required' || 
-          errorParam === 'consent_required' ||
-          errorParam === 'missing_data' || 
-          errorParam === 'data_refresh_required';
-          
-        if (needsDirectConsent && provider) {
-          console.log(`Redirecting directly to ${provider} consent screen due to error: ${errorParam}`);
-          
-          // Clean up the URL before redirecting
-          const cleanUrl = new URL(window.location.href);
-          cleanUrl.searchParams.delete('error');
-          window.history.replaceState({}, document.title, cleanUrl.toString());
-          
-          // Redirect based on the provider
-          if (provider === 'google') {
-            redirectToGoogleConsent();
-            return;
-          } else if (provider === 'microsoft') {
-            redirectToMicrosoftConsent();
-            return;
-          }
-        }
-        
-        // For other errors, show the login modal with appropriate message
-        switch (errorParam) {
-          case 'no_code':
-            setLoginError('No authorization code received. Please try again.');
-            break;
-          case 'auth_failed':
-            setLoginError('Authentication failed. Please try again.');
-            break;
-          case 'not_workspace_account':
-            setLoginError('Please sign in with a Google Workspace account. Personal Gmail accounts are not supported');
-            break;
-          case 'not_work_account':
-            setLoginError('Please sign in with a Microsoft 365 workspace account. Personal accounts are not supported');
-            break;
-          case 'admin_required':
-            setLoginError('Please sign in with an admin account that has appropriate permissions.');
-            break;
-          case 'config_missing':
-            setLoginError('Authentication configuration is missing. Please contact support.');
-            break;
-          default:
-            // For unknown errors or if provider is not known, set generic error
-            if (needsDirectConsent) {
-              setLoginError('We need to refresh your data access. Please grant permission again.');
-            } else {
-              setLoginError('An error occurred during authentication. Please try again or contact support');
-            }
-        }
-        
-        // Show the login modal
-        setShowLoginModal(true);
-        
-        // Clean up the URL by removing the error parameter
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const errorParam = searchParams.get('error');
+
+    if (errorParam) {
+      const provider = localStorage.getItem('auth_provider') as 'google' | 'microsoft' | null;
+
+      const needsDirectConsentErrors = [
+        'interaction_required',
+        'login_required',
+        'consent_required',
+        'missing_data',
+        'data_refresh_required'
+      ];
+      const isDirectConsentError = needsDirectConsentErrors.includes(errorParam);
+
+      if (isDirectConsentError && provider) {
+        console.log(`Redirecting directly to ${provider} consent screen due to error: ${errorParam}`);
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('error');
         window.history.replaceState({}, document.title, cleanUrl.toString());
+
+        if (provider === 'google') {
+          redirectToGoogleConsent();
+        } else if (provider === 'microsoft') {
+          redirectToMicrosoftConsent();
+        }
+        return; // Exit after redirecting
       }
-    };
-    
-    // Run on mount and on URL changes
-    checkErrorParams();
-    
-    window.addEventListener('popstate', checkErrorParams);
-    return () => {
-      window.removeEventListener('popstate', checkErrorParams);
-    };
-  }, [redirectToGoogleConsent, redirectToMicrosoftConsent, setLoginError, setShowLoginModal]);
+
+      let friendlyMessage = '';
+      switch (errorParam) {
+        case 'admin_required':
+          friendlyMessage = "Admin access required. Please sign in with an administrator account for your organization. Check you mail for detailed error message.";
+          break;
+        case 'not_workspace_account':
+          friendlyMessage = "Please use a Google Workspace account. Personal Gmail accounts are not supported. Check you mail for detailed error message.";
+          break;
+        case 'not_work_account':
+          friendlyMessage = "Please use a Microsoft work or school account. Personal Microsoft accounts are not supported. Check you mail for detailed error message.";
+          break;
+        case 'no_code':
+          friendlyMessage = "Authentication failed: Authorization code missing. Please try again. Check you mail for detailed error message.";
+          break;
+        case 'auth_failed':
+          friendlyMessage = "Authentication failed. Please try again or contact support if the issue persists. Check you mail for detailed error message";
+          break;
+        case 'user_data_failed':
+          friendlyMessage = "Failed to fetch user data after authentication. Please try again. Check you mail for detailed error message";
+          break;
+        case 'config_missing':
+          friendlyMessage = "OAuth configuration is missing. Please contact support. Check you mail for detailed error message";
+          break;
+        case 'data_refresh_required': // Also in needsDirectConsentErrors
+          // If provider was missing, this message will be shown.
+          friendlyMessage = "We need to refresh your account permissions. Please sign in again to grant access. Check you mail for detailed error message";
+          break;
+        // Cases for interaction_required, login_required, consent_required, missing_data
+        // are handled by the default block below if they were a 'isDirectConsentError' but provider was null.
+        case 'interaction_required':
+        case 'login_required':
+        case 'consent_required':
+        case 'missing_data':
+        case 'unknown':
+        default:
+          if (isDirectConsentError) { // Error was a direct consent type, but provider was null (so no redirect)
+            friendlyMessage = 'We need to refresh your data access. Please grant permission again. Check your mail for detailed error message.';
+          } else {
+            friendlyMessage = "An unknown authentication error occurred. Please try again. Check you mail for detailed error message";
+          }
+          break;
+      }
+      setLoginError(friendlyMessage);
+      setShowLoginModal(true);
+
+      // Clean up the URL by removing the error parameter
+      const cleanUrl = new URL(window.location.href);
+      if (cleanUrl.searchParams.has('error')) {
+          cleanUrl.searchParams.delete('error');
+          window.history.replaceState({}, document.title, cleanUrl.toString());
+      }
+    }
+  }, [searchParams, redirectToGoogleConsent, redirectToMicrosoftConsent, setLoginError, setShowLoginModal]);
 
   // Add new function to check categories
   const checkCategories = async () => {
@@ -914,14 +922,16 @@ export default function ShadowITDashboard() {
       (app.category && app.category.toLowerCase().includes(searchTerm.toLowerCase()))
     const matchesRisk = filterRisk ? app.riskLevel === filterRisk : true
     const matchesManaged = filterManaged ? app.managementStatus === filterManaged : true
-    const matchesCategory = filterCategory ? app.category === filterCategory : true
+    // Use appCategories for filtering if available, otherwise fallback to app.category
+    const effectiveCategory = appCategories[app.id] || app.category;
+    const matchesCategory = filterCategory ? effectiveCategory === filterCategory : true
 
     return matchesSearch && matchesRisk && matchesManaged && matchesCategory
   })
-  }, [applications, searchTerm, filterRisk, filterManaged, filterCategory])
+  }, [applications, searchTerm, filterRisk, filterManaged, filterCategory, appCategories]) // Added appCategories to dependency array
 
   // Get unique categories for the filter dropdown
-  const uniqueCategories = [...new Set(applications.map((app) => app.category).filter((category): category is string => category !== null))].sort()
+  const uniqueCategories = [...new Set(applications.map(app => appCategories[app.id] || app.category).filter((category): category is string => category !== null))].sort()
 
   // Sort applications
   const sortedApps = [...filteredApps].sort((a, b) => {
@@ -2253,6 +2263,72 @@ export default function ShadowITDashboard() {
     return mappedData.sort((a, b) => b.value - a.value);
   };
 
+  // Update the states when an app is selected
+  useEffect(() => {
+    if (selectedApp) {
+      setOwnerEmail(selectedApp.ownerEmail || "");
+      setNotes(selectedApp.notes || "");
+    }
+  }, [selectedApp]);
+
+  // Function to save owner email and notes
+  const handleSaveNotesAndOwner = async () => {
+    if (!selectedApp) return;
+
+    try {
+      setIsSaving(true);
+      setSaveMessage(null);
+
+      const response = await fetch('/tools/shadow-it-scan/api/applications', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: selectedApp.id,
+          ownerEmail,
+          notes,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update application');
+      }
+
+      // Update applications state with the updated app
+      setApplications(prevApps => {
+        // Create a new array with the updated application
+        const updatedApps = prevApps.map(app => 
+          app.id === selectedApp.id 
+            ? { ...app, ownerEmail, notes } 
+            : app
+        );
+        
+        return updatedApps;
+      });
+
+      // No need to update selectedAppId as it would trigger a re-render and potentially close the modal
+
+      setSaveMessage({
+        type: "success",
+        text: "Successfully saved changes"
+      });
+
+      // Hide the success message after 3 seconds
+      setTimeout(() => {
+        setSaveMessage(null);
+      }, 3000);
+    } catch (error) {
+      console.error('Error saving notes and owner:', error);
+      setSaveMessage({
+        type: "error",
+        text: "Failed to save changes. Please try again."
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="mx-auto font-sans text-gray-900 bg-[#FAF8FA]">
 
@@ -2336,7 +2412,7 @@ export default function ShadowITDashboard() {
                 </div>
               </div>
             ) : !selectedAppId ? (
-              <div className="space-y-6">
+              <div ref={mainContentRef} className="space-y-6"> {/* Added ref here */}
                 <div className="flex justify-between items-center mt-[-4px]">
                   <div>
                     <p className="text-lg font-medium text-gray-800">
@@ -2582,7 +2658,7 @@ export default function ShadowITDashboard() {
                       </div>
 
                       <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-                        <div className="max-h-[800px] overflow-y-auto">
+                        <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
                         <Table>
                             <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
                               <TableRow className="border-b border-gray-100">
@@ -2811,7 +2887,10 @@ export default function ShadowITDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setCurrentPage(1)}
+                            onClick={() => {
+                              setCurrentPage(1);
+                              mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }}
                             disabled={currentPage === 1}
                           >
                             First
@@ -2819,7 +2898,10 @@ export default function ShadowITDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                            onClick={() => {
+                              setCurrentPage(prev => Math.max(1, prev - 1));
+                              mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }}
                             disabled={currentPage === 1}
                           >
                             Previous
@@ -2833,7 +2915,10 @@ export default function ShadowITDashboard() {
                                   key={page}
                                   variant={currentPage === page ? "default" : "outline"}
                                   size="sm"
-                                  onClick={() => setCurrentPage(Number(page))}
+                                  onClick={() => {
+                                    setCurrentPage(Number(page));
+                                    mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }}
                                   className="w-8"
                                 >
                                   {page}
@@ -2844,7 +2929,10 @@ export default function ShadowITDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                            onClick={() => {
+                              setCurrentPage(prev => Math.min(totalPages, prev + 1));
+                              mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }}
                             disabled={currentPage === totalPages}
                           >
                             Next
@@ -2852,7 +2940,10 @@ export default function ShadowITDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setCurrentPage(totalPages)}
+                            onClick={() => {
+                              setCurrentPage(totalPages);
+                              mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }}
                             disabled={currentPage === totalPages}
                           >
                             Last
@@ -2960,7 +3051,7 @@ export default function ShadowITDashboard() {
                         </div>
                       </div>
                       <p className="text-sm text-gray-500 mb-4">Applications ranked by number of users</p>
-                      <div className="h-96 overflow-y-auto">
+                      <div className="h-96 relative">
                         {(() => {
                           const chartData = getAppsByUserCountChartData();
                           if (chartData.length === 0) {
@@ -2971,63 +3062,83 @@ export default function ShadowITDashboard() {
                             );
                           }
                           return (
-                            <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
-                              <BarChart data={chartData} layout="vertical" margin={{ left: 150 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                                <YAxis
-                                  dataKey="name"
-                                  type="category"
-                                  axisLine={false}
-                                  tickLine={false}
-                                  width={140}
-                                  tick={{ fill: '#111827', fontSize: 12 }}
-                                />
-                                <Bar 
-                                  dataKey="value" 
-                                  name="Users" 
-                                  radius={[0, 4, 4, 0]} 
-                                  barSize={20}
-                                  strokeWidth={1}
-                                  stroke="#fff"
-                                  cursor="pointer"
-                                  onClick={(data) => {
-                                    const app = applications.find(a => a.name === data.name);
-                                    if (app) {
-                                      setMainView("list");
-                                      setSelectedAppId(app.id);
-                                      setIsUserModalOpen(true);
-                                    }
-                                  }}
-                                >
-                                  {chartData.map((entry, index) => (
-                                    <Cell 
-                                      key={`cell-${index}`} 
-                                      fill={entry.color} 
-                                      fillOpacity={1}
+                            <div className="absolute inset-0 flex flex-col">
+                              <div className="flex-grow overflow-y-auto pr-2" style={{ maxHeight: "calc(100% - 30px)" }}>
+                                <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
+                                  <BarChart data={chartData} layout="vertical" margin={{ left: 150, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                    <YAxis
+                                      dataKey="name"
+                                      type="category"
+                                      axisLine={false}
+                                      tickLine={false}
+                                      width={140}
+                                      tick={{ fill: '#111827', fontSize: 12 }}
                                     />
-                                  ))}
-                                </Bar>
-                                <RechartsTooltip
-                                  formatter={(value) => [`${value} users`, ""]}
-                                  contentStyle={{ 
-                                    backgroundColor: 'white', 
-                                    border: '1px solid #e5e7eb', 
-                                    borderRadius: '8px', 
-                                    padding: '4px 12px',
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                    fontFamily: 'inherit',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px'
-                                  }}
-                                  labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                                  itemStyle={{ color: '#111827', fontWeight: 600 }}
-                                  separator=": "
-                                  cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                                />
-                              </BarChart>
-                            </ResponsiveContainer>
+                                    <Bar 
+                                      dataKey="value" 
+                                      name="Users" 
+                                      radius={[0, 4, 4, 0]} 
+                                      barSize={20}
+                                      strokeWidth={1}
+                                      stroke="#fff"
+                                      cursor="pointer"
+                                      onClick={(data) => {
+                                        const app = applications.find(a => a.name === data.name);
+                                        if (app) {
+                                          setMainView("list");
+                                          setSelectedAppId(app.id);
+                                          setIsUserModalOpen(true);
+                                        }
+                                      }}
+                                    >
+                                      {chartData.map((entry, index) => (
+                                        <Cell 
+                                          key={`cell-${index}`} 
+                                          fill={entry.color} 
+                                          fillOpacity={1}
+                                        />
+                                      ))}
+                                    </Bar>
+                                    <RechartsTooltip
+                                      formatter={(value) => [`${value} users`, ""]}
+                                      contentStyle={{ 
+                                        backgroundColor: 'white', 
+                                        border: '1px solid #e5e7eb', 
+                                        borderRadius: '8px', 
+                                        padding: '4px 12px',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                        fontFamily: 'inherit',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                      }}
+                                      labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                      itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                      separator=": "
+                                      cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                    />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+                              <div style={{ height: "30px", marginLeft: "150px" }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart 
+                                    data={[{ name: "axis", value: 0 }]} 
+                                    layout="horizontal"
+                                    margin={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                                  >
+                                    <XAxis 
+                                      type="number" 
+                                      axisLine={false} 
+                                      tickLine={false} 
+                                      tick={{ fill: '#111827', fontSize: 12 }}
+                                      domain={[0, Math.max(...chartData.map(item => item.value))]}
+                                    />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
                           );
                         })()}
                       </div>
@@ -3145,69 +3256,89 @@ export default function ShadowITDashboard() {
                           </div>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of high-risk users</p>
-                        <div className="h-96 overflow-y-auto">
+                        <div className="h-96 relative">
                           {getHighRiskUsersByApp().filter(app => app.value > 0).length === 0 ? (
                             <div className="h-full flex items-center justify-center text-gray-500">
                               No applications found with high-risk users
                             </div>
                           ) : (
-                            <ResponsiveContainer width="100%" height={Math.max(400, getHighRiskUsersByApp().filter(app => app.value > 0).length * 30)}>
-                              <BarChart data={getHighRiskUsersByApp().filter(app => app.value > 0)} layout="vertical" margin={{ left: 150 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                                <YAxis
-                                  dataKey="name"
-                                  type="category"
-                                  axisLine={false}
-                                  tickLine={false}
-                                  width={140}
-                                  tick={{ fill: '#111827', fontSize: 12 }}
-                                />
-                                <Bar 
-                                  dataKey="value" 
-                                  name="High-Risk Users" 
-                                  radius={[0, 4, 4, 0]} 
-                                  barSize={20}
-                                  strokeWidth={1}
-                                  stroke="#fff"
-                                  cursor="pointer"
-                                  onClick={(data) => {
-                                    const app = applications.find(a => a.name === data.name);
-                                    if (app) {
-                                      setMainView("list");
-                                      setSelectedAppId(app.id);
-                                      setIsUserModalOpen(true);
-                                    }
-                                  }}
-                                >
-                                  {getHighRiskUsersByApp().filter(app => app.value > 0).map((entry, index) => (
-                                    <Cell 
-                                      key={`cell-${index}`} 
-                                      fill={entry.color}  
-                                      fillOpacity={1}
+                            <div className="absolute inset-0 flex flex-col">
+                              <div className="flex-grow overflow-y-auto pr-2" style={{ maxHeight: "calc(100% - 30px)" }}>
+                                <ResponsiveContainer width="100%" height={Math.max(400, getHighRiskUsersByApp().filter(app => app.value > 0).length * 30)}>
+                                  <BarChart data={getHighRiskUsersByApp().filter(app => app.value > 0)} layout="vertical" margin={{ left: 150, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                    <YAxis
+                                      dataKey="name"
+                                      type="category"
+                                      axisLine={false}
+                                      tickLine={false}
+                                      width={140}
+                                      tick={{ fill: '#111827', fontSize: 12 }}
                                     />
-                                  ))}
-                                </Bar>
-                                <RechartsTooltip
-                                  formatter={(value) => [`${value} high-risk ${value === 1 ? 'user' : 'users'}`, ""]}
-                                  contentStyle={{ 
-                                    backgroundColor: 'white', 
-                                    border: '1px solid #e5e7eb', 
-                                    borderRadius: '8px', 
-                                    padding: '4px 12px',
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                    fontFamily: 'inherit',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px'
-                                  }}
-                                  labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                                  itemStyle={{ color: '#111827', fontWeight: 600 }}
-                                  separator=": "
-                                  cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                                />
-                              </BarChart>
-                            </ResponsiveContainer>
+                                    <Bar 
+                                      dataKey="value" 
+                                      name="High-Risk Users" 
+                                      radius={[0, 4, 4, 0]} 
+                                      barSize={20}
+                                      strokeWidth={1}
+                                      stroke="#fff"
+                                      cursor="pointer"
+                                      onClick={(data) => {
+                                        const app = applications.find(a => a.name === data.name);
+                                        if (app) {
+                                          setMainView("list");
+                                          setSelectedAppId(app.id);
+                                          setIsUserModalOpen(true);
+                                        }
+                                      }}
+                                    >
+                                      {getHighRiskUsersByApp().filter(app => app.value > 0).map((entry, index) => (
+                                        <Cell 
+                                          key={`cell-${index}`} 
+                                          fill={entry.color}  
+                                          fillOpacity={1}
+                                        />
+                                      ))}
+                                    </Bar>
+                                    <RechartsTooltip
+                                      formatter={(value) => [`${value} high-risk ${value === 1 ? 'user' : 'users'}`, ""]}
+                                      contentStyle={{ 
+                                        backgroundColor: 'white', 
+                                        border: '1px solid #e5e7eb', 
+                                        borderRadius: '8px', 
+                                        padding: '4px 12px',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                        fontFamily: 'inherit',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                      }}
+                                      labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                      itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                      separator=": "
+                                      cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                    />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+                              <div style={{ height: "30px", marginLeft: "150px" }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart 
+                                    data={[{ name: "axis", value: 0 }]} 
+                                    layout="horizontal"
+                                    margin={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                                  >
+                                    <XAxis 
+                                      type="number" 
+                                      axisLine={false} 
+                                      tickLine={false} 
+                                      tick={{ fill: '#111827', fontSize: 12 }}
+                                      domain={[0, Math.max(...getHighRiskUsersByApp().filter(app => app.value > 0).map(item => item.value))]}
+                                    />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -3232,7 +3363,7 @@ export default function ShadowITDashboard() {
                           </div>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">Applications ranked by number of scope permissions</p>
-                        <div className="h-96 overflow-y-auto">
+                        <div className="h-96 relative">
                           {(() => {
                             const chartData = getTop10AppsByPermissions();
                             if (chartData.length === 0) {
@@ -3243,63 +3374,83 @@ export default function ShadowITDashboard() {
                               );
                             }
                             return (
-                              <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
-                                <BarChart data={chartData} layout="vertical" margin={{ left: 150 }}>
-                                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
-                                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#111827', fontSize: 12 }} />
-                                  <YAxis
-                                    dataKey="name"
-                                    type="category"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    width={140}
-                                    tick={{ fill: '#111827', fontSize: 12 }}
-                                  />
-                                  <Bar 
-                                    dataKey="value" 
-                                    name="Permissions" 
-                                    radius={[0, 4, 4, 0]} 
-                                    barSize={20}
-                                    strokeWidth={1}
-                                    stroke="#fff"
-                                    cursor="pointer"
-                                    onClick={(data) => {
-                                      const app = applications.find(a => a.name === data.name);
-                                      if (app) {
-                                        setMainView("list");
-                                        setSelectedAppId(app.id);
-                                        setIsUserModalOpen(true);
-                                      }
-                                    }}
-                                  >
-                                    {chartData.map((entry, index) => (
-                                      <Cell 
-                                        key={`cell-${index}`} 
-                                        fill={entry.color} 
-                                        fillOpacity={1}
+                              <div className="absolute inset-0 flex flex-col">
+                                <div className="flex-grow overflow-y-auto pr-2" style={{ maxHeight: "calc(100% - 30px)" }}>
+                                  <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
+                                    <BarChart data={chartData} layout="vertical" margin={{ left: 150, bottom: 0 }}>
+                                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                                      <YAxis
+                                        dataKey="name"
+                                        type="category"
+                                        axisLine={false}
+                                        tickLine={false}
+                                        width={140}
+                                        tick={{ fill: '#111827', fontSize: 12 }}
                                       />
-                                    ))}
-                                  </Bar>
-                                  <RechartsTooltip
-                                    formatter={(value) => [`${value} permissions`, ""]}
-                                    contentStyle={{ 
-                                      backgroundColor: 'white', 
-                                      border: '1px solid #e5e7eb', 
-                                      borderRadius: '8px', 
-                                      padding: '4px 12px',
-                                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                      fontFamily: 'inherit',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '8px'
-                                    }}
-                                    labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
-                                    itemStyle={{ color: '#111827', fontWeight: 600 }}
-                                    separator=": "
-                                    cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                                  />
-                                </BarChart>
-                              </ResponsiveContainer>
+                                      <Bar 
+                                        dataKey="value" 
+                                        name="Permissions" 
+                                        radius={[0, 4, 4, 0]} 
+                                        barSize={20}
+                                        strokeWidth={1}
+                                        stroke="#fff"
+                                        cursor="pointer"
+                                        onClick={(data) => {
+                                          const app = applications.find(a => a.name === data.name);
+                                          if (app) {
+                                            setMainView("list");
+                                            setSelectedAppId(app.id);
+                                            setIsUserModalOpen(true);
+                                          }
+                                        }}
+                                      >
+                                        {chartData.map((entry, index) => (
+                                          <Cell 
+                                            key={`cell-${index}`} 
+                                            fill={entry.color} 
+                                            fillOpacity={1}
+                                          />
+                                        ))}
+                                      </Bar>
+                                      <RechartsTooltip
+                                        formatter={(value) => [`${value} permissions`, ""]}
+                                        contentStyle={{ 
+                                          backgroundColor: 'white', 
+                                          border: '1px solid #e5e7eb', 
+                                          borderRadius: '8px', 
+                                          padding: '4px 12px',
+                                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                          fontFamily: 'inherit',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '8px'
+                                        }}
+                                        labelStyle={{ color: '#111827', fontWeight: 500, marginBottom: 0 }}
+                                        itemStyle={{ color: '#111827', fontWeight: 600 }}
+                                        separator=": "
+                                        cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
+                                      />
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                </div>
+                                <div style={{ height: "30px", marginLeft: "150px" }}>
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart 
+                                      data={[{ name: "axis", value: 0 }]} 
+                                      layout="horizontal"
+                                      margin={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                                    >
+                                      <XAxis 
+                                        type="number" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fill: '#111827', fontSize: 12 }}
+                                        domain={[0, Math.max(...chartData.map(item => item.value))]}
+                                      />
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              </div>
                             );
                           })()}
                         </div>
@@ -4120,7 +4271,8 @@ export default function ShadowITDashboard() {
                               <Input
                                 id="owner"
                                 placeholder="Enter owner email"
-                                defaultValue={selectedApp.ownerEmail || ""}
+                                value={ownerEmail}
+                                onChange={(e) => setOwnerEmail(e.target.value)}
                                 className="mt-1"
                               />
                             </div>
@@ -4132,10 +4284,27 @@ export default function ShadowITDashboard() {
                                 id="notes"
                                 className="w-full min-h-[100px] p-3 rounded-md border border-input bg-background mt-1"
                                 placeholder="Add notes about this application..."
-                                defaultValue={selectedApp.notes || ""}
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
                               />
                             </div>
-                            <Button>Save Changes</Button>
+                            
+                            {saveMessage && (
+                              <div className={`p-3 rounded-md ${
+                                saveMessage.type === "success" 
+                                  ? "bg-green-50 text-green-700 border border-green-200" 
+                                  : "bg-red-50 text-red-700 border border-red-200"
+                              }`}>
+                                {saveMessage.text}
+                              </div>
+                            )}
+                            
+                            <Button 
+                              onClick={handleSaveNotesAndOwner} 
+                              disabled={isSaving}
+                            >
+                              {isSaving ? "Saving..." : "Save Changes"}
+                            </Button>
                           </div>
                         </div>
                       </TabsContent>

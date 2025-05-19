@@ -233,9 +233,9 @@ function LoadingContent() {
                     "Initializing connection..."
                   ) : (
                     <>
-                      We're scanning your organization to discover all connected applications. You will get notification on your email when it's ready.
+                      We're scanning your organization to discover all connected applications.
                       <br />
-                      This process is running in the background, so you'll be redirected once it completes. You will get notification on your email when it's ready.
+                      This process is running in the background, so you'll be redirected and notified via email once it's ready.
                     </>
                   )}
                 </p>

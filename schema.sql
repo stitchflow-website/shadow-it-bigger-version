@@ -66,4 +66,12 @@ CREATE POLICY "Allow insert for sync_status" ON sync_status
     FOR INSERT WITH CHECK (true);
 
 CREATE POLICY "Allow update for sync_status" ON sync_status
-    FOR UPDATE USING (true); 
+    FOR UPDATE USING (true);
+
+-- Add owner_email and notes columns to the shadow_it.applications table
+ALTER TABLE shadow_it.applications
+  ADD COLUMN owner_email text null,
+  ADD COLUMN notes text null;
+
+-- If you want an index on owner_email for faster lookups
+create index IF not exists idx_applications_owner_email on shadow_it.applications using btree (owner_email) TABLESPACE pg_default; 

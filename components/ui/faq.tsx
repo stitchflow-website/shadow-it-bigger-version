@@ -13,7 +13,7 @@ export function FAQ() {
 
       <Accordion type="single" collapsible className="w-full space-y-6 mt-11">
 
-        <AccordionItem value="item-1" className="border rounded-lg border-gray-200 bg-white">
+        {/* <AccordionItem value="item-1" className="border rounded-lg border-gray-200 bg-white">
             <AccordionTrigger className="text-left hover:no-underline hover:bg-gray-50 px-6 py-4 transition-colors w-full">
               <div className="flex-1 text-base font-medium">
               Is it really free?
@@ -26,7 +26,7 @@ export function FAQ() {
                 </p>
               </div>
             </AccordionContent>
-          </AccordionItem>
+          </AccordionItem> */}
 
 
           <AccordionItem value="item-2" className="border rounded-lg border-gray-200 bg-white">
