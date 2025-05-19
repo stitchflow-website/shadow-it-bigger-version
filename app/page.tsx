@@ -3052,6 +3052,8 @@ export default function ShadowITDashboard() {
                       </div>
                     </div>
 
+                    
+
                     {/* Apps by User Count */}
                     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
                       <div className="flex items-center justify-between mb-2">
@@ -3072,11 +3074,10 @@ export default function ShadowITDashboard() {
                         </div>
                       </div>
                       <p className="text-sm text-gray-500 mb-4">Applications ranked by number of users</p>
-                      <div className="relative h-96">
-                        {/* Chart container with fixed height and overflow for scrolling */}
-                        <div className="absolute inset-0 flex flex-col">
-                          {/* Scrollable area for the bars only, with bottom padding to ensure visibility of all bars */}
-                          <div className="flex-grow overflow-y-auto pb-10">
+                       <div className="relative h-96">
+                        {/* Scrollable chart area */}
+                        <div className="absolute inset-0 top-0 bottom-8 flex flex-col">
+                          <div className="flex-grow overflow-y-auto">
                             {(() => {
                               const chartData = getAppsByUserCountChartData();
                               if (chartData.length === 0) {
@@ -3088,28 +3089,27 @@ export default function ShadowITDashboard() {
                               }
                               return (
                                 <ResponsiveContainer width="100%" height={Math.max(350, chartData.length * 30)}>
-                                  <BarChart 
-                                    data={chartData} 
-                                    layout="vertical" 
-                                    margin={{ top: 5, right: 30, left: 120, bottom: 5 }} // Adjusted left margin for YAxis labels
+                                  <BarChart
+                                    data={chartData}
+                                    layout="vertical"
+                                    margin={{ left: 150, bottom: 0 }}
                                   >
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
-                                    {/* YAxis configuration */}
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#F0F0F0" />
                                     <YAxis
                                       dataKey="name"
                                       type="category"
                                       axisLine={false}
                                       tickLine={false}
-                                      width={140} // Increased width to accommodate longer app names
-                                      tick={{ fill: '#374151', fontSize: 12 }} // Darker text for better readability
-                                      interval={0} // Ensure all labels are shown
+                                      width={140}
+                                      tick={{ fill: '#111827', fontSize: 12 }}
                                     />
-                                    <Bar 
-                                      dataKey="value" 
-                                      name="Users" 
-                                      radius={[0, 4, 4, 0]} 
+                                    <Bar
+                                      dataKey="value"
+                                      name="Users"
+                                      radius={[0, 4, 4, 0]}
                                       barSize={20}
-                                      // Removed stroke and strokeWidth, relying on Cell for fill
+                                      strokeWidth={1}
+                                      stroke="#fff"
                                       cursor="pointer"
                                       onClick={(data) => {
                                         const app = applications.find(a => a.name === data.name);
@@ -3121,19 +3121,19 @@ export default function ShadowITDashboard() {
                                       }}
                                     >
                                       {chartData.map((entry, index) => (
-                                        <Cell 
-                                          key={`cell-${index}`} 
-                                          fill={entry.color || getCategoryColor(entry.name)} // Ensure color is applied
-                                          // fillOpacity={1} // fillOpacity is default 1
+                                        <Cell
+                                          key={`cell-${index}`}
+                                          fill={entry.color}
+                                          fillOpacity={1}
                                         />
                                       ))}
                                     </Bar>
                                     <RechartsTooltip
                                       formatter={(value) => [`${value} users`, ""]}
-                                      contentStyle={{ 
-                                        backgroundColor: 'white', 
-                                        border: '1px solid #e5e7eb', 
-                                        borderRadius: '8px', 
+                                      contentStyle={{
+                                        backgroundColor: 'white',
+                                        border: '1px solid #E5E7EB',
+                                        borderRadius: '8px',
                                         padding: '4px 12px',
                                         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                                         fontFamily: 'inherit',
@@ -3151,21 +3151,19 @@ export default function ShadowITDashboard() {
                               );
                             })()}
                           </div>
-                          
-                          {/* Fixed x-axis at the bottom */}
-                          {/* Adjusted x-axis to align with the chart content area */}
-                          <div className="h-10 relative bg-white flex items-end border-t border-gray-200 pl-[150px] pr-[30px]"> {/* Align with BarChart margins */}
-                            <div className="w-full flex justify-between">
-                              {[0, 8, 16, 24, 32].map((value) => (
-                                <div key={value} className="flex flex-col items-center pt-1">
-                                  <div className="h-1.5 w-px bg-gray-400"></div>
-                                  <span className="text-xs text-gray-500 mt-1">{value}</span>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="absolute right-[30px] -bottom-0.5 text-xs text-gray-600 font-medium"> {/* Adjusted positioning */}
-                              Users
-                            </div>
+                        </div>
+                        {/* Fixed x-axis at the bottom */}
+                        <div className="absolute left-0 right-0 bottom-0 h-8 bg-white flex items-center border-t border-gray-200 z-10">
+                          <div className="absolute left-[150px] right-0 flex justify-between px-4">
+                            {[0, 8, 16, 24, 32].map((value) => (
+                              <div key={value} className="flex flex-col items-center">
+                                <div className="h-2 w-px bg-gray-300 mb-1"></div>
+                                <span className="text-xs text-gray-500">{value}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="absolute right-0 top-6 text-xs text-gray-500 font-medium">
+                            Users
                           </div>
                         </div>
                       </div>
