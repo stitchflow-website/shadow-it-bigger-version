@@ -63,6 +63,7 @@ import { HIGH_RISK_SCOPES, MEDIUM_RISK_SCOPES } from "@/lib/risk-assessment";
 import { supabaseAdmin } from '@/lib/supabase';
 import { determineRiskLevel, transformRiskLevel, getRiskLevelColor, evaluateSingleScopeRisk, RiskLevel } from '@/lib/risk-assessment'; // Corrected import alias and added type import
 import { useSearchParams } from "next/navigation"
+import { LabelList } from "recharts"
 
 // Type definitions
 type Application = {
@@ -3071,6 +3072,14 @@ export default function ShadowITDashboard() {
                                     }
                                   }}
                                 >
+                                  <LabelList 
+                                    dataKey="value" 
+                                    position="right" 
+                                    fill="#111827"
+                                    fontSize={10}
+                                    formatter={(value: number) => `${value}`}
+                                    offset={4}
+                                  />
                                   {chartData.map((entry, index) => (
                                     <Cell 
                                       key={`cell-${index}`} 
@@ -3251,6 +3260,14 @@ export default function ShadowITDashboard() {
                                     }
                                   }}
                                 >
+                                  <LabelList 
+                                    dataKey="value" 
+                                    position="right" 
+                                    fill="#111827"
+                                    fontSize={10}
+                                    formatter={(value: number) => `${value}`}
+                                    offset={4}
+                                  />
                                   {getHighRiskUsersByApp().filter(app => app.value > 0).map((entry, index) => (
                                     <Cell 
                                       key={`cell-${index}`} 
@@ -3343,6 +3360,14 @@ export default function ShadowITDashboard() {
                                       }
                                     }}
                                   >
+                                    <LabelList 
+                                      dataKey="value" 
+                                      position="right" 
+                                      fill="#111827"
+                                      fontSize={10}
+                                      formatter={(value: number) => `${value}`}
+                                      offset={4}
+                                    />
                                     {chartData.map((entry, index) => (
                                       <Cell 
                                         key={`cell-${index}`} 
