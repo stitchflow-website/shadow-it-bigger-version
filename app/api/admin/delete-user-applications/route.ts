@@ -4,8 +4,22 @@ import { supabaseAdmin } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+// Simple admin key for authorization
+const ADMIN_KEY = process.env.ADMIN_KEY;
+
 export async function POST(request: Request) {
   try {
+    // Check for admin authorization
+    const authHeader = request.headers.get('Admin-Authorization');
+    
+    if (!authHeader || authHeader !== ADMIN_KEY) {
+      console.log('Auth failed. Received:', authHeader, 'Expected:', ADMIN_KEY);
+      return NextResponse.json(
+        { error: 'Unauthorized access' },
+        { status: 401 }
+      );
+    }
+    
     const { organization_id } = await request.json();
     
     if (!organization_id) {

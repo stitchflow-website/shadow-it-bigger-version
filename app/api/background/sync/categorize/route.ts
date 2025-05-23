@@ -189,6 +189,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Organization ID is required' }, { status: 400 });
     }
 
+    // Check if there's already an active categorization process for this organization
+    const { data: existingProcess, error: queryError } = await supabaseAdmin
+      .from('categorization_status')
+      .select('id, status, progress')
+      .eq('organization_id', organization_id)
+      .in('status', ['PENDING', 'IN_PROGRESS'])
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (queryError) {
+      console.error('Error checking existing categorization processes:', queryError);
+      return NextResponse.json({ error: 'Failed to check existing categorization processes' }, { status: 500 });
+    }
+
+    // If there's already an active process, return its ID instead of creating a new one
+    if (existingProcess && existingProcess.length > 0) {
+      console.log(`Found existing categorization process (${existingProcess[0].id}) for organization ${organization_id}, status: ${existingProcess[0].status}, progress: ${existingProcess[0].progress}%`);
+      return NextResponse.json({
+        message: 'Categorization already in progress',
+        categorization_id: existingProcess[0].id,
+        status: existingProcess[0].status,
+        progress: existingProcess[0].progress
+      });
+    }
+
     // Create a new categorization status record
     const { data: statusRecord, error: statusError } = await supabaseAdmin
       .from('categorization_status')

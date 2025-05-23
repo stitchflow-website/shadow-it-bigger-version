@@ -115,6 +115,137 @@ async function sendSyncCompletedEmail(userEmail: string, syncId?: string) {
   }
 }
 
+// Helper function to create user-application relationships in batches
+async function createUserAppRelationships(appId: string, userTokens: any[], organizationId: string) {
+  try {
+    // Skip if no tokens to process
+    if (userTokens.length === 0) return;
+    
+    // Get all users by email in one query
+    const userEmails = userTokens.map(t => t.userEmail).filter(Boolean);
+    if (userEmails.length === 0) return;
+    
+    const { data: existingUsers, error: usersError } = await supabaseAdmin
+      .from('users')
+      .select('id, email')
+      .eq('organization_id', organizationId)
+      .in('email', userEmails);
+    
+    if (usersError) {
+      console.error('❌ Error fetching users:', usersError);
+      return;
+    }
+    
+    // Create a map for quick lookups
+    const userEmailToId = new Map();
+    existingUsers?.forEach(user => {
+      userEmailToId.set(user.email, user.id);
+    });
+    
+    // Find emails not in the database
+    const missingUserEmails = userEmails.filter(email => !userEmailToId.has(email));
+    
+    // Insert missing users in a batch if needed
+    if (missingUserEmails.length > 0) {
+      const newUsers = missingUserEmails.map(email => ({
+        organization_id: organizationId,
+        email: email,
+        name: email.split('@')[0],
+        role: 'User',
+        updated_at: new Date().toISOString()
+      }));
+      
+      const { data: insertedUsers, error: insertError } = await supabaseAdmin
+        .from('users')
+        .insert(newUsers)
+        .select('id, email');
+        
+      if (insertError) {
+        console.error('❌ Error creating users in batch:', insertError);
+      } else if (insertedUsers) {
+        // Add newly inserted users to our map
+        insertedUsers.forEach(user => {
+          userEmailToId.set(user.email, user.id);
+        });
+      }
+    }
+    
+    // Get existing relationships in one query
+    const userIds = Array.from(userEmailToId.values());
+    const { data: existingRelationships, error: relationshipsError } = await supabaseAdmin
+      .from('user_applications')
+      .select('id, user_id, scopes')
+      .eq('application_id', appId)
+      .in('user_id', userIds);
+      
+    if (relationshipsError) {
+      console.error('❌ Error fetching relationships:', relationshipsError);
+    }
+    
+    // Create map of existing relationships
+    const existingRelationshipsMap = new Map();
+    existingRelationships?.forEach(rel => {
+      existingRelationshipsMap.set(rel.user_id, { id: rel.id, scopes: rel.scopes || [] });
+    });
+    
+    // Prepare batch operations
+    const toUpdate = [];
+    const toInsert = [];
+    
+    // Process each token
+    for (const token of userTokens) {
+      const userId = userEmailToId.get(token.userEmail);
+      if (!userId) continue;
+      
+      const scopes = token.scopes || [];
+      const existing = existingRelationshipsMap.get(userId);
+      
+      if (existing) {
+        // Merge scopes for existing relationship
+        const mergedScopes = [...new Set([...existing.scopes, ...scopes])];
+        toUpdate.push({
+          id: existing.id,
+          scopes: mergedScopes,
+          updated_at: new Date().toISOString()
+        });
+      } else {
+        // New relationship
+        toInsert.push({
+          user_id: userId,
+          application_id: appId,
+          scopes: scopes,
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
+    
+    // Execute batch operations
+    if (toUpdate.length > 0) {
+      const { error: updateError } = await supabaseAdmin
+        .from('user_applications')
+        .upsert(toUpdate);
+        
+      if (updateError) {
+        console.error('❌ Error batch updating user-application relationships:', updateError);
+      }
+    }
+    
+    if (toInsert.length > 0) {
+      const { error: insertError } = await supabaseAdmin
+        .from('user_applications')
+        .insert(toInsert);
+        
+      if (insertError) {
+        console.error('❌ Error batch inserting user-application relationships:', insertError);
+      }
+    }
+    
+    console.log(`✅ Processed ${userTokens.length} user-application relationships for app ${appId}`);
+  } catch (error) {
+    console.error('❌ Error in batch relationship processing:', error);
+  }
+}
+
 export async function GET(request: NextRequest) {
   let syncRecord: any = null;
   
@@ -297,151 +428,146 @@ export async function GET(request: NextRequest) {
       token.appRoleScopes?.forEach(scope => app.allScopes.add(scope));
     }
 
-    // Second pass: Process each application
-    for (const [appId, appInfo] of processedApps) {
-      try {
-        console.log(`🔍 Processing application: ${appInfo.displayText} (${appId})`);
-        // Find if app already exists
-        const { data: existingApp } = await supabaseAdmin
-          .from('applications')
-          .select('*')
-          .eq('microsoft_app_id', appId)
-          .eq('organization_id', syncRecord.organization_id)
-          .single() as { data: Application | null };
+    // Process applications in parallel for better performance
+    await updateSyncStatus(syncRecord.id, 75, `Processing ${processedApps.size} applications in parallel...`);
+    
+    // Convert Map to array for parallel processing
+    const appEntries = Array.from(processedApps.entries());
+    
+    // Track apps that need categorization
+    const needsCategorization = { count: 0 };
 
-        const allAppScopes = Array.from(appInfo.allScopes);
-        console.log(`📊 App ${appInfo.displayText || appId} has ${allAppScopes.length} unique scopes`);
+    // Process in batches of 10 to avoid overwhelming the database
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < appEntries.length; i += BATCH_SIZE) {
+      const batch = appEntries.slice(i, i + BATCH_SIZE);
+      
+      // Process each batch in parallel
+      await Promise.all(batch.map(async ([appId, appInfo]) => {
+        try {
+          // Find if app already exists
+          const { data: existingApp } = await supabaseAdmin
+            .from('applications')
+            .select('*')
+            .eq('microsoft_app_id', appId)
+            .eq('organization_id', syncRecord.organization_id)
+            .single() as { data: Application | null };
 
-        // Determine risk level based on permissions
-        let riskLevel = 'LOW';
-        // Aggregate scopes to determine risk level
-        const highRiskScopes = allAppScopes.filter(scope => 
-          typeof scope === 'string' && classifyPermissionRisk(scope) === 'high'
-        );
-        const mediumRiskScopes = allAppScopes.filter(scope => 
-          typeof scope === 'string' && classifyPermissionRisk(scope) === 'medium'
-        );
-        
-        if (highRiskScopes.length > 0) {
-          riskLevel = 'HIGH';
-          console.log(`⚠️ Setting HIGH risk level for ${appInfo.displayText || appId} due to ${highRiskScopes.length} high-risk permissions`);
-        } else if (mediumRiskScopes.length > 0) {
-          riskLevel = 'MEDIUM';
-          console.log(`⚠️ Setting MEDIUM risk level for ${appInfo.displayText || appId} due to ${mediumRiskScopes.length} medium-risk permissions`);
-        }
-
-        // Store application data
-        const { data: newApp, error: appError } = await supabaseAdmin
-          .from('applications')
-          .upsert({
-            id: existingApp?.id,
-            organization_id: syncRecord.organization_id,
-            name: appInfo.displayText || 'Unknown App',
-            microsoft_app_id: appId,
-            category: existingApp?.category || 'uncategorized',
-            risk_level: existingApp?.risk_level || riskLevel,
-            management_status: existingApp?.management_status || 'NEEDS_REVIEW',
-            total_permissions: allAppScopes.length,
-            all_scopes: allAppScopes,
-            user_count: Array.from(userAppScopes.values()).filter(ua => ua.appId === appId).length,
-            updated_at: new Date().toISOString()
-          } as Application)
-          .select()
-          .single();
-
-        if (appError) {
-          console.error(`❌ Error storing application ${appId}:`, appError);
-          continue;
-        }
-
-        // Create user-application relationships
-        const appUsers = Array.from(userAppScopes.values()).filter(ua => ua.appId === appId);
-        for (const userApp of appUsers) {
-          await createUserAppRelationship(newApp.id, {
-            userEmail: userApp.userEmail,
-            scopes: Array.from(userApp.scopes)
-          }, syncRecord.organization_id);
-        }
-
-        // Handle categorization if needed
-        if (!existingApp?.category || existingApp.category === 'uncategorized' || existingApp.category === 'Unknown' || existingApp.category === 'Others') {
-          console.log(`🏷️ App ${appInfo.displayText || appId} needs categorization`);
-          try {
-            // Create a categorization status record
-            const { data: statusRecord, error: statusError } = await supabaseAdmin
-              .from('categorization_status')
-              .insert({
-                organization_id: syncRecord.organization_id,
-                status: 'PENDING',
-                progress: 0,
-                message: 'Initializing categorization process',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
-              .select()
-              .single();
-
-            if (statusError) {
-              console.error('❌ Error creating categorization status record:', statusError);
-            } else if (statusRecord) {
-              console.log(`✅ Created categorization status record ${statusRecord.id}`);
-              // Start categorization in the background
-              const categorizeModule = await import('../categorize/route');
-              (categorizeModule as any).categorizeApplications(syncRecord.organization_id, statusRecord.id).catch((error: Error) => {
-                console.error('❌ Background categorization failed:', error);
-                updateCategorizationStatus(
-                  statusRecord.id,
-                  0,
-                  `Categorization failed: ${error.message}`,
-                  'FAILED'
-                ).catch(err => {
-                  console.error('❌ Error updating categorization status:', err);
-                });
-              });
-            }
-          } catch (categorizationError) {
-            console.error('❌ Error initiating categorization:', categorizationError);
+          const allAppScopes = Array.from(appInfo.allScopes);
+          
+          // Determine risk level based on permissions
+          let riskLevel = 'LOW';
+          // Aggregate scopes to determine risk level
+          const highRiskScopes = allAppScopes.filter(scope => 
+            typeof scope === 'string' && classifyPermissionRisk(scope) === 'high'
+          );
+          const mediumRiskScopes = allAppScopes.filter(scope => 
+            typeof scope === 'string' && classifyPermissionRisk(scope) === 'medium'
+          );
+          
+          if (highRiskScopes.length > 0) {
+            riskLevel = 'HIGH';
+          } else if (mediumRiskScopes.length > 0) {
+            riskLevel = 'MEDIUM';
           }
+
+          // Store application data
+          const { data: newApp, error: appError } = await supabaseAdmin
+            .from('applications')
+            .upsert({
+              id: existingApp?.id,
+              organization_id: syncRecord.organization_id,
+              name: appInfo.displayText || 'Unknown App',
+              microsoft_app_id: appId,
+              category: existingApp?.category || 'uncategorized',
+              risk_level: existingApp?.risk_level || riskLevel,
+              management_status: existingApp?.management_status || 'NEEDS_REVIEW',
+              total_permissions: allAppScopes.length,
+              all_scopes: allAppScopes,
+              user_count: Array.from(userAppScopes.values()).filter(ua => ua.appId === appId).length,
+              updated_at: new Date().toISOString()
+            } as Application)
+            .select()
+            .single();
+
+          if (appError) {
+            console.error(`❌ Error storing application ${appId}:`, appError);
+            return;
+          }
+
+          // Process user-application relationships in batches
+          const appUsers = Array.from(userAppScopes.values())
+            .filter(ua => ua.appId === appId)
+            .map(userApp => ({
+              userEmail: userApp.userEmail,
+              scopes: Array.from(userApp.scopes)
+            }));
+            
+          await createUserAppRelationships(newApp.id, appUsers, syncRecord.organization_id);
+
+          // Track if app needs categorization without creating individual records
+          if (!existingApp?.category || existingApp.category === 'uncategorized' || existingApp.category === 'Unknown' || existingApp.category === 'Others') {
+            needsCategorization.count++;
+          }
+        } catch (error) {
+          console.error(`❌ Error processing application ${appId}:`, error);
         }
-      } catch (error) {
-        console.error(`❌ Error processing application ${appId}:`, error);
-        continue;
-      }
+      }));
+      
+      // Update progress as we go through batches
+      const progress = 75 + Math.floor((i / appEntries.length) * 10);
+      await updateSyncStatus(syncRecord.id, progress, `Processed ${Math.min(i + BATCH_SIZE, appEntries.length)} of ${appEntries.length} applications...`);
     }
 
     // Update sync status for categorization
-    await updateSyncStatus(syncRecord.id, 85, 'Categorizing applications...');
+    await updateSyncStatus(syncRecord.id, 90, `Finalizing sync... ${needsCategorization.count} apps need categorization`);
 
-    // Trigger categorization
-    console.log('🔄 Triggering application categorization...');
-    try {
-      const categorizationResponse = await fetch(`${request.nextUrl.origin}/tools/shadow-it-scan/api/background/sync/categorize`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          organization_id: syncRecord.organization_id,
-          sync_id: syncRecord.id
-        }),
-      });
+    // Only trigger categorization if apps need it, and do it safely with proper error handling
+    if (needsCategorization.count > 0) {
+      console.log(`🔄 Triggering application categorization for ${needsCategorization.count} apps...`);
+      try {
+        // We'll await this operation to ensure categorization is properly triggered
+        // but we won't wait for the actual categorization to complete
+        const categorizationResponse = await fetch(`${request.nextUrl.origin}/tools/shadow-it-scan/api/background/sync/categorize`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            organization_id: syncRecord.organization_id,
+            sync_id: syncRecord.id
+          }),
+        });
 
-      if (!categorizationResponse.ok) {
-        console.error('❌ Failed to trigger categorization:', await categorizationResponse.text());
-      } else {
-        console.log('✅ Successfully triggered categorization');
+        const categorizationResult = await categorizationResponse.json();
+        
+        if (!categorizationResponse.ok) {
+          console.error('❌ Failed to trigger categorization:', categorizationResult);
+        } else {
+          console.log('✅ Successfully triggered categorization:', categorizationResult);
+        }
+      } catch (error) {
+        // Log but don't fail the overall sync
+        console.error('❌ Error triggering categorization:', error);
       }
-    } catch (error) {
-      console.error('❌ Error triggering categorization:', error);
+    } else {
+      console.log('⏭️ No apps need categorization, skipping categorization step');
     }
 
     // Mark sync as completed
     await updateSyncStatus(syncRecord.id, 100, 'Microsoft Entra ID sync completed', 'COMPLETED');
 
+    // Send email in the background without awaiting the result
     if (syncRecord.user_email) {
-      await sendSyncCompletedEmail(syncRecord.user_email, syncRecord.id);
-    } else {
-      console.warn(`[Microsoft Sync ${syncRecord.id}] User email not found in syncRecord. Cannot send completion email.`);
+      // Create a detached promise that handles its own errors
+      (async () => {
+        try {
+          await sendSyncCompletedEmail(syncRecord.user_email, syncRecord.id);
+          console.log(`✅ Email notification sent successfully to ${syncRecord.user_email}`);
+        } catch (error) {
+          console.error(`❌ Error sending completion email: ${error}`);
+        }
+      })();
     }
 
     console.log('🎉 Microsoft sync completed successfully');
@@ -493,123 +619,5 @@ async function updateSyncStatus(
     }
   } catch (error) {
     console.error('❌ Error updating sync status:', error);
-  }
-}
-
-// Helper function to create user-application relationship with scopes
-async function createUserAppRelationship(appId: string, token: any, organizationId: string) {
-  try {
-    // Get user by email or Microsoft user ID using proper parameterized query
-    // Ensure token.userEmail and token.userKey are sanitized if they come directly from external sources
-    // For now, assuming they are trustworthy internal variables.
-    const userEmailSafe = token.userEmail ? token.userEmail.replace(/"/g, '\"') : null;
-    const userKeySafe = token.userKey ? token.userKey.replace(/"/g, '\"') : null;
-
-    let orConditions = [];
-    if (userEmailSafe) {
-      orConditions.push(`email.eq."${userEmailSafe}"`);
-    }
-    if (userKeySafe) {
-      orConditions.push(`microsoft_user_id.eq."${userKeySafe}"`);
-    }
-    
-    if (orConditions.length === 0) {
-      console.error('❌ Cannot find user without email or userKey.');
-      return;
-    }
-
-    let { data: userData, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .or(orConditions.join(','))
-      .single();
-
-    if (userError && userError.code !== 'PGRST116') { // PGRST116 means no rows found, which is handled
-      console.error('❌ Error finding user:', userError);
-      return;
-    }
-
-    if (!userData) {
-      console.log(`⚠️ No user found for email: ${token.userEmail}. Creating new user record.`);
-      
-      // Create user if they don't exist
-      const { data: newUser, error: createError } = await supabaseAdmin
-        .from('users')
-        .insert({
-          organization_id: organizationId,
-          microsoft_user_id: token.userKey,
-          email: token.userEmail,
-          name: token.userEmail.split('@')[0],
-          role: 'User',
-          updated_at: new Date().toISOString()
-        })
-        .select('id')
-        .single();
-
-      if (createError) {
-        console.error('❌ Error creating user:', createError);
-        return;
-      }
-      
-      userData = newUser;
-    }
-
-    // First, check if there's an existing relationship we need to update
-    const { data: existingRelationship, error: relationshipQueryError } = await supabaseAdmin
-      .from('user_applications')
-      .select('id, scopes')
-      .eq('user_id', userData.id)
-      .eq('application_id', appId)
-      .single();
-
-    // Store the user-application relationship with permissions (scopes)
-    console.log(`📝 Storing permissions for user ${token.userEmail} and app ${token.displayText || appId}`);
-    console.log(`   Scopes: ${token.scopes ? JSON.stringify(token.scopes) : 'None'}`);
-    
-    if (existingRelationship) {
-      console.log(`   ℹ️ Found existing relationship, updating scopes`);
-      // Merge existing scopes with new scopes to avoid duplicates
-      const existingScopes = existingRelationship.scopes || [];
-      const mergedScopes = [...new Set([...existingScopes, ...(token.scopes || [])])];
-      
-      const { error: updateError } = await supabaseAdmin
-        .from('user_applications')
-        .update({
-          scopes: mergedScopes,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingRelationship.id);
-
-      if (updateError) {
-        console.error('❌ Error updating user-application relationship:', updateError);
-      } else {
-        console.log(`✅ Successfully updated app-user relationship with ${mergedScopes.length} permissions`);
-      }
-    } else {
-      console.log(`   ℹ️ Creating new user-application relationship`);
-      // Create new relationship
-      const { error: insertError } = await supabaseAdmin
-        .from('user_applications')
-        .upsert({
-          user_id: userData.id,
-          application_id: appId,
-          scopes: token.scopes || [],
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,application_id',
-          ignoreDuplicates: true
-        });
-
-      if (insertError) {
-        console.error('❌ Error creating user-application relationship:', insertError);
-        console.error('   Details:', insertError.details);
-        console.error('   Message:', insertError.message);
-      } else {
-        console.log(`✅ Successfully created app-user relationship with ${token.scopes?.length || 0} permissions`);
-      }
-    }
-  } catch (error) {
-    console.error('❌ Error in createUserAppRelationship:', error);
   }
 } 
