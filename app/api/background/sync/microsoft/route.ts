@@ -528,7 +528,7 @@ export async function GET(request: NextRequest) {
       try {
         // We'll await this operation to ensure categorization is properly triggered
         // but we won't wait for the actual categorization to complete
-        const categorizationResponse = await fetch(`${request.nextUrl.origin}/tools/shadow-it-scan/api/background/sync/categorize`, {
+        const categorizationResponse = await fetch(`https://www.stitchflow.com/tools/shadow-it-scan/api/background/sync/categorize`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
