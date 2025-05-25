@@ -475,32 +475,113 @@ export class GoogleWorkspaceService {
     return response.data;
   }
 
-  // Check if a user is an admin
+  // Check if a user is an admin with the required permissions for Shadow IT scanning
   async isUserAdmin(email: string): Promise<boolean> {
     try {
-      // First, try to get roles for the user
-      const response = await this.admin.roles.list({
-        customer: 'my_customer',
-        userKey: email
-      });
+      console.log(`Checking admin permissions for Shadow IT scanning: ${email}`);
       
-      // If the user has any admin roles, they're an admin
-      return response.data.items && response.data.items.length > 0;
-    } catch (error) {
-      // If we get an access error, try a different approach
+      // Method 1: Direct admin check using user.get() and isAdmin field
+      // This is the most reliable way to check admin status
       try {
-        // Try to list users as this user - only admins can do this
-        await this.admin.users.list({
-          customer: 'my_customer',
+        const userResponse = await this.admin.users.get({
+          userKey: email,
+          projection: 'full'
+        });
+        
+        const userData = userResponse.data;
+        
+        // Check the isAdmin field directly
+        if (userData.isAdmin === true) {
+          console.log(`User is confirmed admin (isAdmin=true) for: ${email}`);
+          return true;
+        }
+        
+        // Check if user is a delegated admin
+        if (userData.isDelegatedAdmin === true) {
+          console.log(`User is confirmed delegated admin (isDelegatedAdmin=true) for: ${email}`);
+          return true;
+        }
+        
+        // If neither admin flag is true, they're not an admin
+        if (userData.isAdmin === false && userData.isDelegatedAdmin === false) {
+          console.log(`User is confirmed non-admin (both flags false) for: ${email}`);
+          return false;
+        }
+        
+        console.log(`Admin status unclear from user data for: ${email}, trying fallback methods`);
+      } catch (userGetError: any) {
+        console.log(`User.get check failed: ${userGetError.message}`);
+      }
+
+      // Method 2: Try to access user security tokens (specific to our Shadow IT needs)
+      try {
+        const tokenResponse = await this.admin.tokens.list({
+          userKey: email,
           maxResults: 1
         });
         
-        // If we get here without error, the user has admin rights
+        console.log(`Successfully accessed tokens API, admin confirmed for: ${email}`);
         return true;
-      } catch (innerError) {
-        // If both methods fail, the user likely isn't an admin
-        return false;
+      } catch (tokenError: any) {
+        console.log(`Token access check failed: ${tokenError.message}`);
+        
+        // Try accessing another user's tokens (requires broader admin permissions)
+        try {
+          const usersResponse = await this.admin.users.list({
+            customer: 'my_customer',
+            maxResults: 2
+          });
+          
+          if (usersResponse.data.users && usersResponse.data.users.length > 0) {
+            const testUser = usersResponse.data.users.find((u: any) => u.primaryEmail !== email) 
+              || usersResponse.data.users[0];
+            
+            await this.admin.tokens.list({
+              userKey: testUser.primaryEmail,
+              maxResults: 1
+            });
+            
+            console.log(`Successfully accessed other user's tokens, admin confirmed for: ${email}`);
+            return true;
+          }
+        } catch (otherTokenError: any) {
+          console.log(`Other user token check failed: ${otherTokenError.message}`);
+        }
       }
+
+      // Method 3: Try to list users (basic admin check)
+      try {
+        const listResponse = await this.admin.users.list({
+          customer: 'my_customer',
+          maxResults: 1,
+          projection: 'basic'
+        });
+        
+        console.log(`Successfully listed users, admin confirmed for: ${email}`);
+        return true;
+      } catch (listError: any) {
+        console.log(`Users list check failed: ${listError.message}`);
+      }
+
+      // Method 4: Try domain operations (for Super Admins)
+      try {
+        const domainResponse = await this.admin.domains.list({
+          customer: 'my_customer'
+        });
+        
+        console.log(`Successfully listed domains, super admin confirmed for: ${email}`);
+        return true;
+      } catch (domainError: any) {
+        console.log(`Domain list check failed: ${domainError.message}`);
+      }
+
+      // If all methods fail, the user doesn't have admin permissions
+      console.log(`All admin permission checks failed for: ${email}`);
+      return false;
+
+    } catch (error: any) {
+      console.error(`Error in isUserAdmin for ${email}:`, error.message);
+      return false;
     }
   }
 
