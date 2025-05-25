@@ -479,7 +479,7 @@ export async function GET(request: NextRequest) {
               organization_id: syncRecord.organization_id,
               name: appInfo.displayText || 'Unknown App',
               microsoft_app_id: appId,
-              category: existingApp?.category || 'uncategorized',
+              category: existingApp?.category || 'Unknown',
               risk_level: existingApp?.risk_level || riskLevel,
               management_status: existingApp?.management_status || 'NEEDS_REVIEW',
               total_permissions: allAppScopes.length,
