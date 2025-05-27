@@ -2187,7 +2187,7 @@ export default function ShadowITDashboard() {
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold">Sign in to continue</h2>
                 <p className="text-sm text-muted-foreground">
-                  Ensure you connect your admin org account to get started with the app
+                Connect with your org admin account to begin using the app
                 </p>
               </div>
 
@@ -2244,16 +2244,21 @@ export default function ShadowITDashboard() {
 
               <div className="space-y-3 pt-6">
                 <div className="text-sm text-muted-foreground">
-                  <p>Stitchflow's IT tools meet the highest industry standards for security, privacy, and compliance.</p>
+
                   <p className="mt-2">
+                  We take data privacy seriously. Learn more about our approach to security{" "}
                     <a href="https://www.stitchflow.com/security" className="font-medium text-green-600 hover:underline">
-                      View our security terms
-                    </a>{" "}
-                    or{" "}
+                       View our security terms {" "}
+                    </a>
+                    or 
+
+                    schedule a time to chat with us 
+
+                    {" "}
+
                     <a href="https://www.stitchflow.com/demo" className="font-medium text-green-600 hover:underline">
                       schedule a chat
                     </a>{" "}
-                    with us to discuss if your org has specific security policies for using external tools.
                   </p>
                 </div>
               </div>
