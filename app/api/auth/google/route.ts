@@ -262,12 +262,30 @@ export async function GET(request: Request) {
       console.log('Could not verify admin status with current token');
     }
 
+    // Check if current scopes include admin scopes
+    const requiredAdminScopes = [
+      'https://www.googleapis.com/auth/admin.directory.user.readonly',
+      'https://www.googleapis.com/auth/admin.directory.domain.readonly', 
+      'https://www.googleapis.com/auth/admin.directory.user.security'
+    ];
+    
+    const currentScopes = oauthTokens.scope ? oauthTokens.scope.split(' ') : [];
+    const hasRequiredAdminScopes = requiredAdminScopes.every(scope => 
+      currentScopes.includes(scope)
+    );
+    
+    console.log('Scope check:', { 
+      currentScopes, 
+      hasRequiredAdminScopes,
+      hasRefreshToken: !!oauthTokens.refresh_token 
+    });
+
     // Request admin scopes if:
     // 1. New user (not in DB) OR no admin access AND
-    // 2. Haven't completed consent flow AND
-    // 3. Don't have a refresh token
-    if ((!existingUser || !hasAdminAccess) && !hasCompletedConsent && !oauthTokens.refresh_token) {
-      console.log('Requesting admin scopes - New user:', !existingUser, 'Has admin access:', hasAdminAccess);
+    // 2. Don't have required admin scopes OR haven't completed consent flow AND  
+    // 3. Don't have a refresh token OR don't have admin scopes
+    if ((!existingUser || !hasAdminAccess) && (!hasRequiredAdminScopes || !hasCompletedConsent) && (!oauthTokens.refresh_token || !hasRequiredAdminScopes)) {
+      console.log('Requesting admin scopes - New user:', !existingUser, 'Has admin access:', hasAdminAccess, 'Has required scopes:', hasRequiredAdminScopes);
       
       // First, mark that we've started the consent flow for this user
       await supabaseAdmin
@@ -321,8 +339,8 @@ export async function GET(request: Request) {
       return NextResponse.redirect(authUrl);
     }
 
-    // If we got this far with a refresh token, mark the consent as completed
-    if (oauthTokens.refresh_token && !hasCompletedConsent) {
+    // Only mark consent as completed if we have both refresh token AND admin scopes
+    if (oauthTokens.refresh_token && hasRequiredAdminScopes && !hasCompletedConsent) {
       await supabaseAdmin
         .from('auth_flow_state')
         .upsert({
@@ -450,6 +468,8 @@ export async function GET(request: Request) {
           message: 'Started Google Workspace data sync',
           access_token: oauthTokens.access_token,
           refresh_token: oauthTokens.refresh_token || null,
+          scope: oauthTokens.scope,
+          token_expiry: oauthTokens.expiry_date ? new Date(oauthTokens.expiry_date).toISOString() : null
         })
         .select()
         .single();
@@ -469,12 +489,31 @@ export async function GET(request: Request) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
     
-    // Create the session record in database
+    // First, make sure we store/update the user's profile information to get the user ID
+    const { data: userRecord, error: userError } = await supabaseAdmin
+      .from('users_signedup')
+      .upsert({
+        email: userInfo.email,
+        name: userInfo.name,
+        avatar_url: userInfo.picture || null,
+        updated_at: new Date().toISOString(),
+      }, { 
+        onConflict: 'email' 
+      })
+      .select('id')
+      .single();
+      
+    if (userError) {
+      console.error('Error upserting user profile:', userError);
+      return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=user_creation_failed', request.url));
+    }
+    
+    // Create the session record in database with the proper user_id
     const { error: sessionError } = await supabaseAdmin
       .from('user_sessions')
       .insert({
         id: sessionId,
-        user_id: existingUser?.id,
+        user_id: userRecord.id,
         user_email: userInfo.email,
         auth_provider: 'google',
         expires_at: expiresAt.toISOString(),
@@ -605,22 +644,6 @@ export async function GET(request: Request) {
     } catch (prefsError) {
       console.error('Error creating default notification preferences:', prefsError);
       // Continue despite error - not critical
-    }
-
-    // Now make sure we store the user's profile information in users_signedup table
-    const { error: userError } = await supabaseAdmin
-      .from('users_signedup')
-      .upsert({
-        email: userInfo.email,
-        name: userInfo.name,
-        avatar_url: userInfo.picture || null,
-        updated_at: new Date().toISOString(),
-      }, { 
-        onConflict: 'email' 
-      });
-      
-    if (userError) {
-      console.error('Error upserting user profile:', userError);
     }
 
     // If this is a new user, send webhook notification

@@ -165,5 +165,66 @@ export async function sendFailedSignupWebhook(
   userName: string,
   reason: string
 ): Promise<boolean> {
-  return sendUserWebhook(userEmail, userName, reason);
+  try {
+    console.log(`Sending failed signup webhook for ${userEmail}, reason: ${reason}`);
+    
+    // For failed signups, we want to send webhooks even if the user has failed before
+    // So we don't check the failed signups table like we do for successful signups
+    
+    // Only check if they've successfully signed up before
+    const { data: existingUser } = await supabaseAdmin
+      .from('users_signedup')
+      .select('id')
+      .eq('email', userEmail)
+      .single();
+    
+    // Don't send failed signup webhook if user has already successfully signed up
+    if (existingUser) {
+      console.log(`User ${userEmail} already exists in successful signups, skipping failed signup webhook`);
+      return false;
+    }
+    
+    // Create the request with a timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    try {
+      const webhookResponse = await fetch('https://primary-production-d8d8.up.railway.app/webhook/d98b3a82-3ac8-44d0-b28f-ea7682badee2', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic ' + Buffer.from('thamim:G7#kL9@vB3!mQ2$z').toString('base64')
+        },
+        body: JSON.stringify({
+          user_email: userEmail,
+          app_name: 'Shadow IT',
+          user_name: userName || '',
+          reason: reason || ''
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+      
+      if (!webhookResponse.ok) {
+        const responseText = await webhookResponse.text();
+        console.error(`Failed to send webhook: Status ${webhookResponse.status}, Response: ${responseText}`);
+        return false;
+      } else {
+        console.log('Successfully sent failed signup webhook notification');
+        return true;
+      }
+    } catch (fetchError: unknown) {
+      clearTimeout(timeoutId);
+      if ((fetchError as { name?: string })?.name === 'AbortError') {
+        console.error('Webhook request timed out after 10 seconds');
+      } else {
+        console.error('Error during webhook fetch:', fetchError);
+      }
+      return false;
+    }
+  } catch (webhookError) {
+    console.error('Error in sendFailedSignupWebhook:', webhookError);
+    return false;
+  }
 } 
