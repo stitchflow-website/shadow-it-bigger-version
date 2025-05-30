@@ -60,7 +60,7 @@ import { Share } from "@/components/ui/share";
 import SettingsModal from "@/app/components/SettingsModal";
 // Import risk assessment utilities
 import { HIGH_RISK_SCOPES, MEDIUM_RISK_SCOPES } from "@/lib/risk-assessment";
-import { supabaseAdmin } from '@/lib/supabase';
+
 import { determineRiskLevel, transformRiskLevel, getRiskLevelColor, evaluateSingleScopeRisk, RiskLevel } from '@/lib/risk-assessment'; // Corrected import alias and added type import
 import { useSearchParams } from "next/navigation"
 import { LabelList } from "recharts"
