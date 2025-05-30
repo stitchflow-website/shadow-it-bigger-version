@@ -17,15 +17,20 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
 
-# Set build-time arguments if you have any and need to pass them from Cloud Build
-# ARG NEXT_PUBLIC_SOME_VARIABLE
+# ARG for build-time substitution variables from Cloud Build
 ARG _NEXT_PUBLIC_SUPABASE_URL
 ARG _NEXT_PUBLIC_SUPABASE_ANON_KEY
- # Set them as environment variables for the build process
+
+# Set them as environment variables for the build process
 ENV NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}
 
 # ENV NEXT_PUBLIC_SOME_VARIABLE=${NEXT_PUBLIC_SOME_VARIABLE}
+
+# Add these lines for debugging:
+RUN echo "Build-time NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}"
+RUN echo "Build-time NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+# End of debug lines
 
 RUN npm run build
 # Or: yarn build
