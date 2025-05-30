@@ -1,0 +1,58 @@
+steps:
+  # Step 1: Build the container image
+  # This step uses the Docker builder to build your image.
+  # It tags the image with a unique ID based on the commit SHA.
+  # Crucially, it passes your Supabase variables as build arguments.
+  - name: 'gcr.io/cloud-builders/docker'
+    id: Build
+    args:
+      - 'build'
+      - '-t'
+      - '${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${SHORT_SHA}' # Image tag using trigger variables
+      - '--build-arg'
+      - '_NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}' # Passed from trigger's substitution variables
+      - '--build-arg'
+      - '_NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}' # Passed from trigger's substitution variables
+      - '.' # Build context is the current directory (root of your repo)
+
+  # Step 2: Push the container image to Artifact Registry
+  # This step pushes the successfully built image to Artifact Registry,
+  # from where Cloud Run will pull it.
+  - name: 'gcr.io/cloud-builders/docker'
+    id: Push
+    args: ['push', '${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${SHORT_SHA}']
+    waitFor: ['Build'] # Ensures this step runs only after the 'Build' step is successful
+
+  # Step 3: Deploy the container image to Cloud Run
+  # This step uses gcloud CLI to deploy the new image to your Cloud Run service.
+  - name: 'gcr.io/google-cloud-cli/gcloud'
+    id: Deploy
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}' # Your Cloud Run service name from trigger variable
+      - '--image'
+      - '${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${SHORT_SHA}' # The image just built and pushed
+      - '--region'
+      - '${_DEPLOY_REGION}' # The region of your Cloud Run service from trigger variable
+      - '--platform'
+      - '${_PLATFORM}' # Platform type from trigger variable (should be 'managed')
+      - '--allow-unauthenticated' # Keep this if your service needs to be publicly accessible
+      # Add any other gcloud run deploy flags you might need, for example:
+      # - '--port=3000' (if not default)
+      # - '--cpu=1'
+      # - '--memory=2Gi'
+      # - '--timeout=3600'
+      # - '--concurrency=80'
+      # - '--min-instances=0'
+      # - '--max-instances=10'
+      # Note: Runtime environment variables (from secrets) are configured on the Cloud Run service itself, not typically here.
+    waitFor: ['Push'] # Ensures this step runs only after the 'Push' step is successful
+
+# Specifies the image(s) that this build will produce.
+# This is useful for other tools and for referencing the image later.
+images:
+  - '${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${SHORT_SHA}'
+
+# Optional: You can set a timeout for the entire build process.
+# timeout: '1200s' # 20 minutes
