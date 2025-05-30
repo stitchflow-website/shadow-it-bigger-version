@@ -54,5 +54,9 @@ steps:
 images:
   - '${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${SHORT_SHA}'
 
+# Add this options block for logging:
+options:
+  logging: CLOUD_LOGGING_ONLY
+
 # Optional: You can set a timeout for the entire build process.
 # timeout: '1200s' # 20 minutes
