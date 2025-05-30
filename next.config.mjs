@@ -7,6 +7,7 @@ try {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -19,7 +20,8 @@ const nextConfig = {
   experimental: {
     webpackBuildWorker: true,
     parallelServerBuildTraces: true,
-    parallelServerCompiles: true,}
+    parallelServerCompiles: true,
+  }
   // ,
   // assetPrefix:'/tools/shadow-it-scan',
 }
