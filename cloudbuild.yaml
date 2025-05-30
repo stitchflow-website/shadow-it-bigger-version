@@ -13,6 +13,8 @@ steps:
       - '_NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}' # Passed from trigger's substitution variables
       - '--build-arg'
       - '_NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}' # Passed from trigger's substitution variables
+      - '--build-arg'
+      - '_SUPABASE_SERVICE_ROLE_KEY=${_SUPABASE_SERVICE_ROLE_KEY}' # Passed from trigger's substitution variables
       - '.' # Build context is the current directory (root of your repo)
 
   # Step 2: Push the container image to Artifact Registry
