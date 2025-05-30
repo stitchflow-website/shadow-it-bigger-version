@@ -1,0 +1,52 @@
+# 1. Install dependencies only when needed
+FROM node:18-alpine AS deps
+# Enable corepack for pnpm, yarn, etc.
+RUN corepack enable
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
+# Choose your package manager
+RUN npm ci
+# Or: RUN yarn install --frozen-lockfile
+# Or: RUN pnpm install --frozen-lockfile
+
+# 2. Rebuild the source code only when needed
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+ENV NEXT_TELEMETRY_DISABLED 1
+
+# Set build-time arguments if you have any and need to pass them from Cloud Build
+# ARG NEXT_PUBLIC_SOME_VARIABLE
+# ENV NEXT_PUBLIC_SOME_VARIABLE=${NEXT_PUBLIC_SOME_VARIABLE}
+
+RUN npm run build
+# Or: yarn build
+# Or: pnpm build
+
+# 3. Production image, copy all the files and run next
+FROM node:18-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV production
+ENV NEXT_TELEMETRY_DISABLED 1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+
+# Automatically leverage output traces to reduce image size
+# https://nextjs.org/docs/advanced-features/output-file-tracing
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT 3000
+
+# server.js is created by standalone output
+CMD ["node", "server.js"]
