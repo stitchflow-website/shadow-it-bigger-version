@@ -2443,14 +2443,16 @@ export default function ShadowITDashboard() {
               <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Discover the apps your employees are using, detect potential risks by tracking app scopes, and prevent compliance gaps before they escalate.
               </p>
-              <div className="mt-6 sm:mt-8 flex justify-center">
-                <Button 
-                  onClick={() => setShowLoginModal(true)} 
-                  className="px-8 py-3 text-base font-medium text-white bg-primary hover:bg-primary/90 rounded-lg"
-                >
-                  Start your scan
-                </Button>
-              </div>
+              {!isAuthenticated() && (
+                <div className="mt-6 sm:mt-8 flex justify-center">
+                  <Button 
+                    onClick={() => setShowLoginModal(true)} 
+                    className="px-8 py-3 text-base font-medium text-white bg-primary hover:bg-primary/90 rounded-lg"
+                  >
+                    Start your scan
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
