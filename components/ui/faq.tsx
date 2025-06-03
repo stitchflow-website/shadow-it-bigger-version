@@ -5,7 +5,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 
 export function FAQ() {
   return (
-    <div className="bg-[#FAF8FA]">
+    <div className="bg-[#f8f5f3]">
       <div className="max-w-[900px] mx-auto pt-11 px-6 pb-11">
         <div className="text-center mb-11">
           <h2 className="text-2xl font-semibold">Frequently Asked Questions</h2>

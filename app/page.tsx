@@ -23,11 +23,14 @@ import {
   ShieldAlert,
   ChartNoAxesCombined,
   Bell,
+  ArrowRight,
+  ArrowRightIcon,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { WhyStitchflow } from "@/components/ui/demo";
 import { Button } from "@/components/ui/button"
+import Button_website from "@/components/ui/Button_website"
 import Link from 'next/link';
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -2445,12 +2448,20 @@ export default function ShadowITDashboard() {
               </p>
               {!isAuthenticated() && (
                 <div className="mt-6 sm:mt-8 flex justify-center">
-                  <Button 
+                  <Button_website 
                     onClick={() => setShowLoginModal(true)} 
-                    className="px-8 py-3 text-base font-medium text-white bg-primary hover:bg-primary/90 rounded-lg"
+                    variant="primary" // This variant will be styled by the className
+                    type="button"
+                    // className combines custom button's base styles with overrides for white bg, dark text, border, and new padding
+                    className="py-3 px-8 w-auto flex group z-50 pointer-events-auto bg-white hover:bg-gray-100 text-[#363338] border border-gray-300 rounded-lg"
                   >
-                    Start your scan
-                  </Button>
+                    <div className="flex justify-center items-center">
+                        <span className="font-medium text-base leading-4 whitespace-nowrap">
+                            Start your scan
+                        </span>
+                        <ArrowRight className="ml-2 h-4 w-0 flex-shrink-0 transition-all ease-in duration-200 group-hover:w-4 group-active:translate-x-1.5" />
+                    </div>
+                  </Button_website>
                 </div>
               )}
             </div>
@@ -4447,7 +4458,7 @@ export default function ShadowITDashboard() {
 
       <FAQ />
 
-      <WhyStitchflow className="bg-[#FAF8FA] mb-8" />
+      <WhyStitchflow className="bg-[#f8f5f3] mb-8" />
 
       <FeedbackChat/>
 
