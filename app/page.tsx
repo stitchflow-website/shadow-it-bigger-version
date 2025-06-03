@@ -141,6 +141,14 @@ const CHART_TOTAL_HEIGHT = 384; // Corresponds to h-96
 const BAR_VIEWPORT_HEIGHT = CHART_TOTAL_HEIGHT - X_AXIS_HEIGHT;
 const BAR_THICKNESS_WITH_PADDING = 30;
 
+// Helper function to truncate text
+const truncateText = (text: string, maxLength: number = 20) => {
+  if (text.length > maxLength) {
+    return text.substring(0, maxLength) + "...";
+  }
+  return text;
+};
+
 export default function ShadowITDashboard() {
   const router = useRouter();
   const [applications, setApplications] = useState<Application[]>([])
@@ -2011,21 +2019,27 @@ export default function ShadowITDashboard() {
 
     const testimonials = [
       {
+        name: "u/ITLead",
         text: "Sharing this with my boss. Looks like great potential for our non-existent process haha",
       },
       {
+        name: "u/sysadmin",
         text: "Nice tool. We're building something similar. The market need is real. Good luck to you <3",
       },
       {
+        name: "u/ITManager",
         text: "This is nifty! I'm downloading it now. Do you plan to do updates/keep it current? Definitely going to mention this in my next position.",
       },
       {
+        name: "u/sysengineer",
         text: "This tool will be a great help to IT admins for sure...!!",
       },
       {
+        name: "u/CISO",
         text: "Quite nifty... there's quite a bit of customizing you can do. Thanks for sharing this for free.",
       },
       {
+        name: "u/ITOpsMgr",
         text: "Very nice. Wish I had known about this a few months ago. I had our Salesforce admin build a contract tracker with similar functions a couple of months ago and now the finance team wants to use it to track their contracts.",
       },
     ];
@@ -2246,19 +2260,15 @@ export default function ShadowITDashboard() {
                 <div className="text-sm text-muted-foreground">
 
                   <p className="mt-2">
-                  We take data privacy seriously. Learn more about our approach to security{" "}
+                  We take data privacy seriously. Learn more about our approach to{" "}
                     <a href="https://www.stitchflow.com/security" className="font-medium text-green-600 hover:underline">
-                       View our security terms {" "}
+                    security {" "}
                     </a>
-                    or 
-
-                    schedule a time to chat with us 
-
-                    {" "}
-
+                    or {" "}
                     <a href="https://www.stitchflow.com/demo" className="font-medium text-green-600 hover:underline">
-                      schedule a chat
+                    schedule a time
                     </a>{" "}
+                    to chat with us
                   </p>
                 </div>
               </div>
@@ -2273,7 +2283,7 @@ export default function ShadowITDashboard() {
                     <div className="flex items-start gap-2">
                       <RedditLogo />
                       <div>
-                        <div className="mb-1 text-xs font-medium">r/user</div>
+                        <div className="mb-1 text-xs font-medium">{testimonial.name}</div>
                         <p className="text-sm">{testimonial.text}</p>
                       </div>
                     </div>
@@ -2396,9 +2406,9 @@ export default function ShadowITDashboard() {
   };
 
   return (
-    <div className="mx-auto font-sans text-gray-900 bg-[#FAF8FA]">
+    <div className="mx-auto font-sans text-gray-900 bg-[#f8f5f3]">
 
-      <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-[#f8f5f3] border-b">
         <div className="flex items-center align-middle justify-between max-w-7xl mx-auto px-4 sm:px-8 py-3">
           <div className="flex items-center gap-2.5">
             <a href="https://www.stitchflow.com" target="_blank" rel="noopener noreferrer" className="flex items-center">
@@ -2433,6 +2443,14 @@ export default function ShadowITDashboard() {
               <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Discover the apps your employees are using, detect potential risks by tracking app scopes, and prevent compliance gaps before they escalate.
               </p>
+              <div className="mt-6 sm:mt-8 flex justify-center">
+                <Button 
+                  onClick={() => setShowLoginModal(true)} 
+                  className="px-8 py-3 text-base font-medium text-white bg-primary hover:bg-primary/90 rounded-lg"
+                >
+                  Start your scan
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -2703,7 +2721,7 @@ export default function ShadowITDashboard() {
                               {filterManaged && (
                                 <button
                                   onClick={() => setFilterManaged(null)}
-                                  className="text-xs text-primary hover:text-primary/80 transition-colors"
+                                  className="text-xs text-primary hover:text-primary/80 transition-colors ml-2"
                                 >
                                   Clear filter
                                 </button>
@@ -3141,6 +3159,7 @@ export default function ShadowITDashboard() {
                                   tickLine={false}
                                   width={140}
                                   tick={{ fill: '#111827', fontSize: 12 }}
+                                  tickFormatter={(value) => truncateText(value, 20)} // Added truncation
                                 />
                                 <Bar 
                                   dataKey="value" 
@@ -3238,7 +3257,7 @@ export default function ShadowITDashboard() {
                                             setMainView("list");
                                           }}
                                         >
-                                          {payload.value}
+                                          {truncateText(payload.value, 10)} {/* Apply truncation here */}
                                         </text>
                                       </g>
                                     );
@@ -3329,6 +3348,7 @@ export default function ShadowITDashboard() {
                                   tickLine={false}
                                   width={140}
                                   tick={{ fill: '#111827', fontSize: 12 }}
+                                  tickFormatter={(value) => truncateText(value, 20)} // Added truncation
                                 />
                                 <Bar 
                                   dataKey="value" 
@@ -3429,6 +3449,7 @@ export default function ShadowITDashboard() {
                                     tickLine={false}
                                     width={140}
                                     tick={{ fill: '#111827', fontSize: 12 }}
+                                    tickFormatter={(value) => truncateText(value, 20)} // Added truncation
                                   />
                                   <Bar 
                                     dataKey="value" 
@@ -4397,7 +4418,7 @@ export default function ShadowITDashboard() {
               </div>
               <h3 className="text-lg font-semibold mb-2">Granular insights</h3>
               <p className="text-gray-600 text-sm leading-relaxed">
-              Track every user's permissions and activities for each app. View app insights by category, risk, and scope groups—all in one place. Catch risky behavior before it becomes a problem.
+            View app insights by category, risk, and scope groups—all in one place. Catch risky behavior before it becomes a problem.
               </p>
             </div>
             <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">

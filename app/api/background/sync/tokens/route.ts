@@ -155,58 +155,43 @@ async function sendSyncCompletedEmail(userEmail: string, syncId?: string) {
 
 export const maxDuration = 3600; // Set max duration to 1 hour for Railway (supports long-running processes)
 export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs'; // Railway optimized runtime
+export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
 
 export async function POST(request: Request) {
-  const startTime = Date.now();
-  
+  // Declare requestData here to make sync_id available in catch
+  let requestData; 
   try {
-    const { 
-      organization_id, 
-      sync_id, 
-      access_token, 
-      refresh_token,
-      users 
-    } = await request.json();
+    requestData = await request.json();
+    const { organization_id, sync_id, access_token, refresh_token, users } = requestData;
     
-    if (!organization_id || !access_token || !sync_id) {
+    console.log(`[Tokens API ${sync_id}] Starting token fetch processing`);
+    
+    // Validate required fields
+    if (!organization_id || !sync_id || !access_token || !refresh_token) {
+      console.error(`[Tokens API ${sync_id}] Missing required fields`);
       return NextResponse.json(
-        { error: 'Missing required parameters' },
+        { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    console.log(`[Tokens ${sync_id}] Starting token processing for organization: ${organization_id}`);
-    
+    // Await the processTokens function
     await processTokens(organization_id, sync_id, access_token, refresh_token, users, request);
     
+    console.log(`[Tokens API ${sync_id}] Token fetch completed successfully`);
     return NextResponse.json({ 
-      success: true, 
-      message: 'Token processing completed successfully',
-      processingTime: Date.now() - startTime
+      message: 'Token fetch completed successfully',
+      syncId: sync_id,
+      organizationId: organization_id
     });
 
   } catch (error: any) {
-    console.error('Error in token processing:', error);
-    
-    // Make sure to update sync status on error
-    try {
-      await updateSyncStatus(
-        'sync_id' in (await request.json()) ? (await request.json()).sync_id : 'unknown',
-        -1,
-        `Token processing failed: ${error.message}`,
-        'FAILED'
-      );
-    } catch (statusError) {
-      console.error('Error updating sync status:', statusError);
-    }
-
+    const sync_id_for_error = requestData?.sync_id; // Use optional chaining
+    console.error(`[Tokens API ${sync_id_for_error || 'unknown'}] Error:`, error);
+    // processTokens is responsible for updating sync_status to FAILED.
+    // This handler just ensures a 500 response is sent.
     return NextResponse.json(
-      { 
-        error: 'Failed to process tokens', 
-        details: error.message,
-        processingTime: Date.now() - startTime
-      },
+      { error: 'Failed to process tokens', details: error.message },
       { status: 500 }
     );
   }
@@ -268,59 +253,25 @@ async function processTokens(
     
     console.log(`[Tokens ${sync_id}] User map has ${userMap.size} entries`);
     
-    // ⭐ MEMORY OPTIMIZATION: Process tokens in batches instead of loading all at once
-    await updateSyncStatus(sync_id, 40, 'Starting memory-efficient token processing');
-    
-    // First, get a count or sample to estimate the workload
-    let allApplicationTokens = [];
+    // Fetch OAuth tokens
+    let applicationTokens = [];
     try {
-      allApplicationTokens = await googleService.getOAuthTokens();
-      console.log(`[Tokens ${sync_id}] Found ${allApplicationTokens.length} total application tokens`);
+      await updateSyncStatus(sync_id, 40, 'Fetching application tokens from Google Workspace');
+      applicationTokens = await googleService.getOAuthTokens();
+      console.log(`[Tokens ${sync_id}] Fetched ${applicationTokens.length} application tokens`);
     } catch (tokenError) {
       console.error(`[Tokens ${sync_id}] Error fetching OAuth tokens:`, tokenError);
       await updateSyncStatus(sync_id, -1, 'Failed to fetch application tokens from Google Workspace', 'FAILED');
       throw tokenError;
     }
     
-    // ⭐ BATCH PROCESSING: Adaptive batch size based on total tokens for massive organizations
-    let BATCH_SIZE = 500; // Default batch size
+    await updateSyncStatus(sync_id, 50, `Processing ${applicationTokens.length} application tokens`);
     
-    // Adaptive batching for massive organizations (50k+ users)
-    if (allApplicationTokens.length > 10000) {
-      BATCH_SIZE = 1000; // Larger batches for big orgs
-      console.log(`[Tokens ${sync_id}] Large organization detected, using batch size: ${BATCH_SIZE}`);
-    } else if (allApplicationTokens.length > 50000) {
-      BATCH_SIZE = 2000; // Even larger batches for massive orgs
-      console.log(`[Tokens ${sync_id}] Massive organization detected, using batch size: ${BATCH_SIZE}`);
-    }
+    // Group applications by display name
+    const appNameMap = new Map<string, any[]>();
     
-    const totalBatches = Math.ceil(allApplicationTokens.length / BATCH_SIZE);
-    
-    console.log(`[Tokens ${sync_id}] Processing ${allApplicationTokens.length} tokens in ${totalBatches} batches of ${BATCH_SIZE}`);
-    
-    // Track processed applications globally
-    const globalAppNameMap = new Map<string, any[]>();
-    const globalAppsToUpsert: any[] = [];
-    const globalUserAppRelations: { appName: string, userId: string, userEmail: string, token: any }[] = [];
-    
-    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-      const startIdx = batchIndex * BATCH_SIZE;
-      const endIdx = Math.min(startIdx + BATCH_SIZE, allApplicationTokens.length);
-      const tokenBatch = allApplicationTokens.slice(startIdx, endIdx);
-      
-      const batchProgress = 40 + Math.floor((batchIndex / totalBatches) * 35);
-      await updateSyncStatus(
-        sync_id, 
-        batchProgress, 
-        `Processing batch ${batchIndex + 1}/${totalBatches} (${tokenBatch.length} tokens) - ${globalUserAppRelations.length} relations found`
-      );
-      
-      console.log(`[Tokens ${sync_id}] Processing batch ${batchIndex + 1}/${totalBatches}: tokens ${startIdx}-${endIdx}`);
-      
-      // Group applications in this batch
-      const batchAppNameMap = new Map<string, any[]>();
-      
-      for (const token of tokenBatch) {
+    // First pass: Group tokens by application name
+    for (const token of applicationTokens) {
       const appName = token.displayText || 'Unknown App';
       
       if (!appName) {
@@ -328,108 +279,38 @@ async function processTokens(
         continue;
       }
       
-        if (!batchAppNameMap.has(appName)) {
-          batchAppNameMap.set(appName, []);
+      if (!appNameMap.has(appName)) {
+        appNameMap.set(appName, []);
       }
       
       // Add token with user info
-        batchAppNameMap.get(appName)!.push(token);
-        
-        // Also add to global map for final processing
-        if (!globalAppNameMap.has(appName)) {
-          globalAppNameMap.set(appName, []);
-        }
-        globalAppNameMap.get(appName)!.push(token);
-      }
-      
-      // Process batch applications  
-      for (const [appName, tokens] of batchAppNameMap.entries()) {
-        // Process user relationships for this batch
-        for (const token of tokens) {
-          const userKey = token.userKey;
-          const userEmail = token.userEmail;
-    
-          // Try to get user ID from map using different keys
-          let userId = null;
-          
-          // Try by Google user ID first
-          if (userKey && userMap.has(userKey)) {
-            userId = userMap.get(userKey);
-          }
-          
-          // Fall back to email if available
-          if (!userId && userEmail) {
-            // Try normalized email
-            const normalizedEmail = userEmail.toLowerCase();
-            if (userMap.has(normalizedEmail)) {
-              userId = userMap.get(normalizedEmail);
-            }
-          }
-          
-          if (!userId) {
-            // Minimal logging for massive organizations to avoid log overflow
-            if (globalUserAppRelations.length < 5) {
-              console.warn('No matching user found for token:', {
-                userKey: userKey || 'missing',
-                userEmail: userEmail || 'missing',
-                appName: appName
-              });
-            }
-            continue;
-          }
-          
-          // Extract only essential token data to minimize memory usage
-          const simplifiedToken = {
-            scopes: token.scopes || [],
-            displayText: token.displayText || ''
-          };
-    
-          // Check if this user-app relationship already exists
-          const existingRelationIndex = globalUserAppRelations.findIndex(rel => 
-            rel.appName === appName && rel.userId === userId
-          );
-          
-          if (existingRelationIndex !== -1) {
-            // Merge token scopes with existing record
-            const existingToken = globalUserAppRelations[existingRelationIndex].token;
-            existingToken.scopes = [...new Set([...(existingToken.scopes || []), ...(simplifiedToken.scopes || [])])];
-          } else {
-            // Add a new relationship
-            globalUserAppRelations.push({
-              appName,
-              userId,
-              userEmail: userEmail || '',
-              token: simplifiedToken
-            });
-          }
-        }
-      }
-      
-      // Clear batch variables to free memory
-      tokenBatch.length = 0;
-      batchAppNameMap.clear();
-      
-      // ⭐ AGGRESSIVE MEMORY CLEANUP for massive organizations
-      if (batchIndex % 3 === 0 && global.gc) {
-        console.log(`[Tokens ${sync_id}] Memory cleanup after batch ${batchIndex + 1} - ${globalUserAppRelations.length} relations processed`);
-        global.gc();
-      }
-      
-      // Dynamic pause based on organization size
-      const pauseTime = allApplicationTokens.length > 50000 ? 100 : 50;
-      if (batchIndex < totalBatches - 1) {
-        await new Promise(resolve => setTimeout(resolve, pauseTime));
-      }
+      appNameMap.get(appName)!.push(token);
     }
     
-    // Clear the large array to free memory before final processing
-    allApplicationTokens.length = 0;
+    console.log(`[Tokens ${sync_id}] Grouped tokens into ${appNameMap.size} applications`);
     
-    await updateSyncStatus(sync_id, 75, `Preparing final application data for ${globalAppNameMap.size} applications`);
+    // Prepare bulk upsert operations
+    const applicationsToUpsert: any[] = [];
+    const userAppRelationsToProcess: { appName: string, userId: string, userEmail: string, token: any }[] = [];
     
-    // Now process the global app map to create final application records
-    for (const [appName, tokens] of globalAppNameMap.entries()) {
+    // Process each application
+    let appCount = 0;
+    const totalApps = appNameMap.size;
+    
+    for (const [appName, tokens] of appNameMap.entries()) {
+      appCount++;
+      const progressPercent = 50 + Math.floor((appCount / totalApps) * 25);
+      
+      if (appCount % 10 === 0 || appCount === totalApps) {
+        await updateSyncStatus(
+          sync_id, 
+          progressPercent, 
+          `Processing application ${appCount}/${totalApps}`
+        );
+      }
+      
       // Determine highest risk level based on ALL scopes combined
+      // This ensures app risk level properly reflects all scopes across all users
       const allScopesForRiskEvaluation = new Set<string>();
       tokens.forEach((token: any) => {
         if (token.scopes && Array.isArray(token.scopes)) {
@@ -461,43 +342,109 @@ async function processTokens(
       };
       
       if (existingApp) {
+        // Update existing app with its ID
         appRecord.id = existingApp.id;
       } else {
+        // Generate a new UUID for new applications
         appRecord.id = crypto.randomUUID();
       }
       
-      globalAppsToUpsert.push(appRecord);
-    }
-    
-    // Clear global app map to free memory
-    globalAppNameMap.clear();
-    
-    // Save applications in batches - optimized for massive organizations
-    await updateSyncStatus(sync_id, 75, `Saving ${globalAppsToUpsert.length} applications to database`);
-    
-    // Chunk applications for database operations (Railway can handle larger chunks)
-    const APP_CHUNK_SIZE = 100; // Process 100 apps at a time
-    let upsertError = null;
-    
-    try {
-      for (let i = 0; i < globalAppsToUpsert.length; i += APP_CHUNK_SIZE) {
-        const chunk = globalAppsToUpsert.slice(i, i + APP_CHUNK_SIZE);
-        console.log(`[Tokens ${sync_id}] Saving application chunk ${Math.floor(i/APP_CHUNK_SIZE) + 1}/${Math.ceil(globalAppsToUpsert.length/APP_CHUNK_SIZE)} (${chunk.length} apps)`);
+      applicationsToUpsert.push(appRecord);
+      
+      // Process each token to create user-application relationships
+      for (const token of tokens) {
+        const userKey = token.userKey;
+        const userEmail = token.userEmail;
         
-        const { error } = await supabaseAdmin
-          .from('applications')
-          .upsert(chunk);
+        // Try to get user ID from map using different keys
+        let userId = null;
+        
+        // Try by Google user ID first
+        if (userKey && userMap.has(userKey)) {
+          userId = userMap.get(userKey);
+        }
+        
+        // Fall back to email if available
+        if (!userId && userEmail) {
+          // Try normalized email
+          const normalizedEmail = userEmail.toLowerCase();
+          if (userMap.has(normalizedEmail)) {
+            userId = userMap.get(normalizedEmail);
+          }
+        }
+        
+        if (!userId) {
+          // Log the missing user details for debugging
+          console.warn('No matching user found for token:', {
+            userKey: userKey || 'missing',
+            userEmail: userEmail || 'missing',
+            appName: appName
+          });
+          continue;
+        }
+        
+        // Extract only the necessary parts of the token to avoid serialization issues
+        const simplifiedToken = {
+          scopes: token.scopes || [],
+          scopeData: token.scopeData || [],
+          scope: token.scope || '',
+          permissions: token.permissions || [],
+          displayText: token.displayText || ''
+        };
+        
+        // Log the first token for debugging
+        if (userAppRelationsToProcess.length === 0) {
+          console.log('First token example (simplified):', JSON.stringify(simplifiedToken));
+        }
+        
+        // Check if this user-app relationship already exists in our processing list
+        const existingRelationIndex = userAppRelationsToProcess.findIndex(rel => 
+          rel.appName === appName && rel.userId === userId
+        );
+        
+        if (existingRelationIndex !== -1) {
+          // Merge token scopes with existing record instead of duplicating
+          const existingToken = userAppRelationsToProcess[existingRelationIndex].token;
+          existingToken.scopes = [...new Set([...(existingToken.scopes || []), ...(simplifiedToken.scopes || [])])];
           
-        if (error) {
-          upsertError = error;
-          break;
-    }
-    
-        // Brief pause between chunks for massive datasets
-        if (i + APP_CHUNK_SIZE < globalAppsToUpsert.length) {
-          await new Promise(resolve => setTimeout(resolve, 50));
+          // Merge other scope data if needed
+          if (simplifiedToken.scopeData && simplifiedToken.scopeData.length > 0) {
+            existingToken.scopeData = [...(existingToken.scopeData || []), ...simplifiedToken.scopeData];
+          }
+          
+          // Update the scope string if needed
+          if (simplifiedToken.scope) {
+            existingToken.scope = existingToken.scope 
+              ? `${existingToken.scope} ${simplifiedToken.scope}`
+              : simplifiedToken.scope;
+          }
+          
+          // Update permissions if needed
+          if (simplifiedToken.permissions && simplifiedToken.permissions.length > 0) {
+            existingToken.permissions = [...(existingToken.permissions || []), ...simplifiedToken.permissions];
+          }
+        } else {
+          // Add a new relationship if none exists
+          userAppRelationsToProcess.push({
+            appName,
+            userId,
+            userEmail: userEmail || '',
+            token: simplifiedToken
+          });
         }
       }
+    }
+    
+    // Save applications in batches
+    await updateSyncStatus(sync_id, 75, `Saving ${applicationsToUpsert.length} applications`);
+    
+    let upsertError = null;
+    try {
+      const { error } = await supabaseAdmin
+        .from('applications')
+        .upsert(applicationsToUpsert);
+        
+      upsertError = error;
     } catch (err) {
       console.error('Error during application upsert:', err);
       upsertError = err;
@@ -541,8 +488,8 @@ async function processTokens(
     // Use the same URL variables defined earlier
     const nextUrl = `${protocol}${selfUrl}/api/background/sync/relations`;
     console.log(`Triggering relations processing at: ${nextUrl}`);
-    console.log(`Prepared ${globalUserAppRelations.length} user-app relations and ${appMap.length} app mappings`);
-    if (globalUserAppRelations.length === 0) {
+    console.log(`Prepared ${userAppRelationsToProcess.length} user-app relations and ${appMap.length} app mappings`);
+    if (userAppRelationsToProcess.length === 0) {
       console.warn(`[Tokens ${sync_id}] No user-application relations to process - check user mapping and token data`);
       // Mark sync as completed even if no relations (fixes 'unknown' category issue)
       await updateSyncStatus(
@@ -570,7 +517,7 @@ async function processTokens(
         body: JSON.stringify({
           organization_id,
           sync_id,
-          userAppRelations: globalUserAppRelations,
+          userAppRelations: userAppRelationsToProcess,
           appMap: appMap
         }),
       });
