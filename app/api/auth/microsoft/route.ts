@@ -714,25 +714,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=sync_failed', request.url));
     }
 
-    // Create URL based on whether it's a new user or not
-    let redirectUrl;
-    if (isNewUser) {
-      // For new users, redirect to signed-up page first
-      redirectUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/signed-up');
-      if (syncStatus?.id) {
-        redirectUrl.searchParams.set('syncId', syncStatus.id);
-      }
-      redirectUrl.searchParams.set('orgId', org.id);
-      redirectUrl.searchParams.set('provider', 'microsoft');
-      console.log('Redirecting new user to signed-up page first');
-    } else {
-      // For existing users, go directly to loading page
-      redirectUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/loading');
-      if (syncStatus?.id) {
-        redirectUrl.searchParams.set('syncId', syncStatus.id);
-      }
-      redirectUrl.searchParams.set('orgId', org.id);
-      console.log('Redirecting existing user to loading page');
+    // Create URL for loading page with syncId parameter
+    const redirectUrl = new URL('https://www.stitchflow.com/tools/shadow-it-scan/loading');
+    if (syncStatus?.id) {
+      redirectUrl.searchParams.set('syncId', syncStatus.id);
     }
 
     console.log('Setting cookies and redirecting to:', redirectUrl.toString());
@@ -745,7 +730,7 @@ export async function GET(request: NextRequest) {
     expiresAt.setDate(expiresAt.getDate() + 30);
     
     // Create HTML response with localStorage setting and redirect
-    const htmlResponse = `
+    const loadingHtmlResponse = `
       <!DOCTYPE html>
       <html>
       <head>
@@ -755,8 +740,7 @@ export async function GET(request: NextRequest) {
           console.log("Microsoft auth: Setting up session", {
             email: "${userData.userPrincipalName}",
             sessionId: "${sessionId}",
-            orgId: "${org.id}",
-            isNewUser: ${isNewUser}
+            orgId: "${org.id}"
           });
           
           // Store email in localStorage for cross-browser session awareness
@@ -783,7 +767,7 @@ export async function GET(request: NextRequest) {
           }
           
           // Explicitly calling redirect after all localStorage items are set
-          console.log("Session established, redirecting to ${isNewUser ? 'signed-up page' : 'loading page'}");
+          console.log("Session established, redirecting to loading page");
           setTimeout(function() {
             window.location.href = "${redirectUrl.toString()}";
           }, 100);
@@ -795,7 +779,7 @@ export async function GET(request: NextRequest) {
       </html>
     `;
     
-    const response = new NextResponse(htmlResponse, {
+    const loadingResponse = new NextResponse(loadingHtmlResponse, {
       status: 200,
       headers: {
         'Content-Type': 'text/html',
@@ -803,7 +787,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Set necessary cookies
-    const cookieOptions = {
+    const loadingCookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax' as const,
@@ -813,15 +797,15 @@ export async function GET(request: NextRequest) {
     };
     
     // Set necessary cookies
-    response.cookies.set('orgId', org.id, {
-      ...cookieOptions,
+    loadingResponse.cookies.set('orgId', org.id, {
+      ...loadingCookieOptions,
       httpOnly: false // Allow JavaScript access to this cookie
     });
-    response.cookies.set('userEmail', userData.userPrincipalName, {
-      ...cookieOptions,
+    loadingResponse.cookies.set('userEmail', userData.userPrincipalName, {
+      ...loadingCookieOptions,
       httpOnly: false // Allow JavaScript access to this cookie
     });
-    response.cookies.set('shadow_session_id', sessionId, cookieOptions);
+    loadingResponse.cookies.set('shadow_session_id', sessionId, loadingCookieOptions);
     
     // Create the session record
     const { data: sessionData, error: sessionError } = await supabaseAdmin
@@ -879,7 +863,7 @@ export async function GET(request: NextRequest) {
       console.error('Error triggering Microsoft sync:', error);
     });
     
-    return response;
+    return loadingResponse;
   } catch (error) {
     console.error('Auth error:', error);
     return NextResponse.redirect(new URL('/tools/shadow-it-scan/?error=unknown', request.url));
