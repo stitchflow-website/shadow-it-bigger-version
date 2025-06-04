@@ -2434,13 +2434,13 @@ export default function ShadowITDashboard() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary rounded-full text-xs font-medium hover:bg-primary/15 transition-colors"
             >
-              A tool from Stitchflow
+               Free tool from Stitchflow
               <ExternalLink className="h-3 w-3" />
             </a>
             
             <div className="space-y-4 sm:space-y-6">
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mx-auto max-w-[900px] leading-tight">
-              Shadow IT Scanner 
+               Free Shadow IT Scanner 
               </h1>
               
               <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
@@ -2481,15 +2481,19 @@ export default function ShadowITDashboard() {
                     This is a preview of the app. Get started with the Shadow IT scan for your workspace
                     </p>
                   </div>
-                  <Button
+                  <Button_website
                     onClick={() => {
                       setShowLoginModal(true)
                     }}
-                    variant="outline"
-                    className="w-full sm:w-auto bg-white hover:bg-white/90 text-black border-white hover:text-black transition-colors"
+                    variant="primary"
+                    type="button"
+                    className="py-2 px-8 w-auto flex group z-50 pointer-events-auto bg-white hover:bg-gray-100 text-[#363338] border border-gray-300 rounded-lg"
                   >
-                    Sign in
-                  </Button>
+                    <span className="font-medium text-base leading-4 whitespace-nowrap">
+                            Sign in
+                        </span>
+                        
+                  </Button_website>
                 </div>
               </div>
             )}
