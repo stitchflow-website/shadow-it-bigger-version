@@ -534,13 +534,25 @@ export async function GET(request: Request) {
     // Determine where to redirect based on user status
     let redirectUrl;
     if (!existingUser || !hasExistingData) {
-      // For new users or users without data, redirect to loading page with sync status
-      redirectUrl = new URL('https://stitchflow.com/tools/shadow-it-scan/loading');
-      if (syncStatus) {
-        redirectUrl.searchParams.set('syncId', syncStatus.id);
+      // For new users, redirect to signed-up page first, then to loading page
+      if (!existingUser) {
+        // This is a truly new user - redirect to signed-up page
+        redirectUrl = new URL('https://stitchflow.com/tools/shadow-it-scan/signed-up');
+        if (syncStatus) {
+          redirectUrl.searchParams.set('syncId', syncStatus.id);
+        }
+        redirectUrl.searchParams.set('orgId', org.id);
+        redirectUrl.searchParams.set('provider', 'google');
+        console.log('Redirecting new user to signed-up page first');
+      } else {
+        // Existing user but no data, go directly to loading page
+        redirectUrl = new URL('https://stitchflow.com/tools/shadow-it-scan/loading');
+        if (syncStatus) {
+          redirectUrl.searchParams.set('syncId', syncStatus.id);
+        }
+        redirectUrl.searchParams.set('orgId', org.id);
+        console.log('Redirecting existing user without data to loading page');
       }
-      redirectUrl.searchParams.set('orgId', org.id);
-      console.log('Redirecting new user to loading page');
     } else {
       // For returning users with existing data, go straight to dashboard
       redirectUrl = new URL('https://stitchflow.com/tools/shadow-it-scan/');
