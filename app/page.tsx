@@ -127,13 +127,13 @@ export default function ShadowITDashboard() {
 
   // Add new state for settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  
+
   const [uncategorizedApps, setUncategorizedApps] = useState<Set<string>>(new Set())
   const [appCategories, setAppCategories] = useState<Record<string, string>>({})
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
-
+  
   // State for the "Top Apps by User Count" chart's managed status filter
   const [chartManagedStatusFilter, setChartManagedStatusFilter] = useState<string>('Any Status');
 
@@ -154,7 +154,7 @@ export default function ShadowITDashboard() {
   useEffect(() => {
     setApplications(initialData);
   }, [initialData]);
-  
+
   const handleSignOut = () => {
     // Mock sign out logic
     console.log("User signed out");
@@ -1228,7 +1228,7 @@ export default function ShadowITDashboard() {
   return (
     <div className="mx-auto font-sans text-gray-900 bg-[#f8f5f3]">
 
-              
+        
 
       <main className="pt-[40px] pl-10 pr-10 bg-white mt-4 pb-10">
             <div className="flex items-center gap-2 mb-4">
@@ -1592,7 +1592,7 @@ export default function ShadowITDashboard() {
                                       className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
                                       value={editedStatuses[app.id] || app.managementStatus}
                                       onChange={(e) => {
-                                        handleStatusChange(app.id, e.target.value);
+                                          handleStatusChange(app.id, e.target.value);
                                       }}
                                     >
                                       <option value="Managed">Managed</option>
@@ -2165,7 +2165,7 @@ export default function ShadowITDashboard() {
                           })()}
                         </div>
                       </div>
-                  </div>
+                </div>
               )}
             </div>
           ) : (
