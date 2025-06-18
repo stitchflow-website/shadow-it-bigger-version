@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, useRef } from "react"
+import React, { useState, useEffect, useMemo, useRef, use } from "react"
+import Papa from "papaparse"
 import {
   User,
   ArrowUpDown,
@@ -68,75 +69,19 @@ import { determineRiskLevel, transformRiskLevel, getRiskLevelColor, evaluateSing
 import { useSearchParams } from "next/navigation"
 import { LabelList } from "recharts"
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  Application,
+  AppUser,
+  SortColumn,
+  SortDirection,
+  UserSortColumn,
+  CategoryData,
+  BarChartData,
+  RiskData,
+} from "@/types";
+import { fetchData } from "@/app/lib/data"
 
 // Type definitions
-type Application = {
-  id: string
-  name: string
-  category: string | null // Modified to allow null
-  userCount: number
-  users: AppUser[]
-  riskLevel: RiskLevel
-  riskReason: string
-  totalPermissions: number
-  scopeVariance: { userGroups: number; scopeGroups: number }
-  logoUrl?: string      // Primary logo URL
-  logoUrlFallback?: string // Fallback logo URL
-  created_at?: string   // Added created_at field
-  managementStatus: "Managed" | "Unmanaged" | "Needs Review"
-  ownerEmail: string
-  notes: string
-  scopes: string[]
-  isInstalled: boolean
-  isAuthAnonymously: boolean
-  isCategorizing?: boolean // Added to track categorization status
-}
-
-type AppUser = {
-  id: string
-  appId: string
-  name: string
-  email: string
-  lastActive?: string
-  created_at?: string
-  scopes: string[]
-  riskLevel: RiskLevel
-  riskReason: string
-}
-
-// Sort types
-type SortColumn =
-  | "name"
-  | "category"
-  | "userCount"
-  | "riskLevel"
-  | "totalPermissions"
-  // | "lastLogin" // Removed
-  | "managementStatus"
-  | "highRiskUserCount" // Added for the new column
-type SortDirection = "asc" | "desc"
-
-// User table sort types
-type UserSortColumn = "name" | "email" | "created" | "riskLevel"
-
-// Chart data types
-type CategoryData = {
-  name: string
-  value: number
-  color: string
-}
-
-type BarChartData = {
-  name: string
-  users: number
-  apps: number
-}
-
-type RiskData = {
-  name: string
-  value: number
-  color: string
-}
 
 const X_AXIS_HEIGHT = 30;
 const Y_AXIS_WIDTH = 150;
@@ -154,14 +99,14 @@ const truncateText = (text: string, maxLength: number = 20) => {
 
 export default function ShadowITDashboard() {
   const router = useRouter();
-  const [applications, setApplications] = useState<Application[]>([])
+  const initialData = use(fetchData());
+  const [applications, setApplications] = useState<Application[]>(initialData)
   const [searchInput, setSearchInput] = useState("")
   const [filterCategory, setFilterCategory] = useState<string | null>(null)
   const [filterRisk, setFilterRisk] = useState<string | null>(null)
   const [filterManaged, setFilterManaged] = useState<string | null>(null)
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null)
   const [isUserModalOpen, setIsUserModalOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
   const [userSearchTerm, setUserSearchTerm] = useState("")
   const [editedStatuses, setEditedStatuses] = useState<Record<string, string>>({})
   const [mainView, setMainView] = useState<"list" | "Insights">("list")
@@ -182,22 +127,13 @@ export default function ShadowITDashboard() {
 
   // Add new state for settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-
-  const [authProvider, setAuthProvider] = useState<'google' | 'microsoft' | null>(null);
-
-  const [isPolling, setIsPolling] = useState(false)
+  
   const [uncategorizedApps, setUncategorizedApps] = useState<Set<string>>(new Set())
   const [appCategories, setAppCategories] = useState<Record<string, string>>({})
-  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
 
-  const [userInfo, setUserInfo] = useState<{ name: string; email: string; avatar_url: string | null } | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  // Add this state near your other useState declarations
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [loginError, setLoginError] = useState<string>('');
-  
   // State for the "Top Apps by User Count" chart's managed status filter
   const [chartManagedStatusFilter, setChartManagedStatusFilter] = useState<string>('Any Status');
 
@@ -207,7 +143,6 @@ export default function ShadowITDashboard() {
   // State for the "Apps by Scope Permissions" chart's managed status filter
   const [scopePermissionsManagedStatusFilter, setScopePermissionsManagedStatusFilter] = useState<string>('Any Status');
 
-  const searchParams = useSearchParams(); // Import and use useSearchParams
   const mainContentRef = useRef<HTMLDivElement>(null); // Added for scroll to top
 
   // Add states for owner email and notes editing
@@ -216,705 +151,15 @@ export default function ShadowITDashboard() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveMessage, setSaveMessage] = useState<{type: "success" | "error", text: string} | null>(null);
 
-  // Helper function to redirect to Google consent screen
-  const redirectToGoogleConsent = () => {
-    let redirectURI;
-    
-    // Check if we're on localhost
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1'))) {
-      redirectURI = `${window.location.origin}/tools/shadow-it-scan/api/auth/google/callback`;
-    } else {
-      redirectURI = `https://stitchflow.com/tools/shadow-it-scan/api/auth/google`;
-    }
-    
-    const scopes = [
-      'openid',
-      'profile',
-      'email',
-      'https://www.googleapis.com/auth/admin.directory.user.readonly',
-      'https://www.googleapis.com/auth/admin.directory.domain.readonly',
-      'https://www.googleapis.com/auth/admin.directory.user.security',
-    ];
-    
-    const state = Math.random().toString(36).substring(2, 15);
-    localStorage.setItem('oauth_state', state);
-    localStorage.setItem('auth_provider', 'google');
-    
-    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    url.searchParams.append('client_id', process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '');
-    url.searchParams.append('redirect_uri', redirectURI);
-    url.searchParams.append('response_type', 'code');
-    url.searchParams.append('scope', scopes.join(' '));
-    url.searchParams.append('access_type', 'offline');
-    url.searchParams.append('state', state);
-    url.searchParams.append('prompt', 'consent');
-    
-    console.log("Redirecting to Google with URI:", redirectURI);
-    window.location.href = url.toString();
-  };
+  useEffect(() => {
+    setApplications(initialData);
+  }, [initialData]);
   
-  // Helper function to redirect to Microsoft consent screen
-  const redirectToMicrosoftConsent = () => {
-    let redirectURI;
-    
-    // Check if we're on localhost
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1'))) {
-      redirectURI = `${window.location.origin}/tools/shadow-it-scan/api/auth/microsoft/callback`;
-    } else {
-      redirectURI = `https://stitchflow.com/tools/shadow-it-scan/api/auth/microsoft`;
-    }
-    
-    const scopes = [
-      'user.read',
-      'User.ReadBasic.All',
-      'Directory.Read.All'
-    ];
-    
-    const state = Math.random().toString(36).substring(2, 15);
-    localStorage.setItem('oauth_state', state);
-    localStorage.setItem('auth_provider', 'microsoft');
-    
-    const url = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
-    url.searchParams.append('client_id', process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID || '');
-    url.searchParams.append('redirect_uri', redirectURI);
-    url.searchParams.append('response_type', 'code');
-    url.searchParams.append('scope', scopes.join(' '));
-    url.searchParams.append('state', state);
-    url.searchParams.append('prompt', 'consent');
-    
-    console.log("Redirecting to Microsoft with URI:", redirectURI);
-    window.location.href = url.toString();
-  };
-  
-  // Add a useEffect to check for error parameters in the URL
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const errorParam = searchParams.get('error');
-
-    if (errorParam) {
-      const provider = localStorage.getItem('auth_provider') as 'google' | 'microsoft' | null;
-
-      const needsDirectConsentErrors = [
-        'interaction_required',
-        'login_required',
-        'consent_required',
-        'missing_data',
-        'data_refresh_required'
-      ];
-      const isDirectConsentError = needsDirectConsentErrors.includes(errorParam);
-
-      if (isDirectConsentError && provider) {
-        console.log(`Redirecting directly to ${provider} consent screen due to error: ${errorParam}`);
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete('error');
-        window.history.replaceState({}, document.title, cleanUrl.toString());
-
-        if (provider === 'google') {
-          redirectToGoogleConsent();
-        } else if (provider === 'microsoft') {
-          redirectToMicrosoftConsent();
-        }
-        return; // Exit after redirecting
-      }
-
-      let friendlyMessage = '';
-        switch (errorParam) {
-          case 'admin_required':
-            friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
-            break;
-          case 'not_workspace_account':
-            friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
-            break;
-          case 'not_work_account':
-            friendlyMessage = "Please use an admin workspace account as personal accounts are not supported.";
-            break;
-          case 'no_code':
-            friendlyMessage = "Authentication failed: Authorization code missing. Please try again. Check you mail for detailed error message.";
-            break;
-          case 'auth_failed':
-            friendlyMessage = "Authentication failed. Please try again or reach out to contact@stitchflow.io if the issue persists.";
-            break;
-          case 'user_data_failed':
-            friendlyMessage = "Failed to fetch user data after authentication. Please try again.";
-            break;
-          case 'config_missing':
-            friendlyMessage = "OAuth configuration is missing. Please reach out to contact@stitchflow.io.";
-            break;
-          case 'data_refresh_required': // Also in needsDirectConsentErrors
-            // If provider was missing, this message will be shown.
-            friendlyMessage = "We need to refresh your account permissions. Please sign in again to grant access.";
-            break;
-          // Cases for interaction_required, login_required, consent_required, missing_data
-          // are handled by the default block below if they were a 'isDirectConsentError' but provider was null.
-          case 'interaction_required':
-          case 'login_required':
-          case 'consent_required':
-          case 'missing_data':
-          case 'unknown':
-          default:
-            if (isDirectConsentError) { // Error was a direct consent type, but provider was null (so no redirect)
-              friendlyMessage = 'We need to refresh your data access. Please grant permission again.';
-            } else {
-              friendlyMessage = "An unknown authentication error occurred. Please try again.";
-            }
-            break;
-        }
-        
-      setLoginError(friendlyMessage);
-      setShowLoginModal(true);
-
-      // Clean up the URL by removing the error parameter
-      const cleanUrl = new URL(window.location.href);
-      if (cleanUrl.searchParams.has('error')) {
-          cleanUrl.searchParams.delete('error');
-          window.history.replaceState({}, document.title, cleanUrl.toString());
-      }
-    }
-  }, [searchParams, redirectToGoogleConsent, redirectToMicrosoftConsent, setLoginError, setShowLoginModal]);
-
-  // Add new function to check categories
-  const checkCategories = async () => {
-    try {
-      let categoryOrgId: string | null = null;
-      
-      // Only run client-side code in browser environment
-      if (typeof window !== 'undefined') {
-        const urlParams = new URLSearchParams(window.location.search);
-        categoryOrgId = urlParams.get('orgId');
-        
-        if (!categoryOrgId) {
-          try {
-            const cookies = document.cookie.split(';');
-            const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
-            if (orgIdCookie) {
-              categoryOrgId = orgIdCookie.split('=')[1].trim();
-            }
-          } catch (cookieError) {
-            console.error("Error parsing cookies:", cookieError);
-          }
-        }
-        
-        if (!categoryOrgId) return;
-      } else {
-        // Skip this function on the server
-        return;
-      }
-
-      // Only fetch categories for uncategorized apps
-      const uncategorizedIds = Array.from(uncategorizedApps);
-      if (uncategorizedIds.length === 0) return;
-
-      const response = await fetch(`/tools/shadow-it-scan/api/applications/categories?ids=${uncategorizedIds.join(',')}&orgId=${categoryOrgId}`);
-      if (!response.ok) return;
-
-      const data = await response.json();
-      
-      // Update only the categories state
-      setAppCategories(prev => ({ ...prev, ...data }));
-      
-      // Remove categorized apps from uncategorized set
-      setUncategorizedApps(prev => {
-        const next = new Set(prev);
-        Object.entries(data).forEach(([id, category]) => {
-          if (category && category !== 'Unknown') {
-            next.delete(id);
-          }
-        });
-        return next;
-      });
-    } catch (error) {
-      console.error("Error checking categories:", error);
-    }
-  };
-
-  // Modify the polling effect to use checkCategories
-  useEffect(() => {
-    if (uncategorizedApps.size > 0) {
-      pollingInterval.current = setInterval(checkCategories, 5000) as NodeJS.Timeout;
-    } else {
-      if (pollingInterval.current) {
-        clearInterval(pollingInterval.current);
-        pollingInterval.current = null;
-      }
-    }
-    return () => {
-      if (pollingInterval.current) {
-        clearInterval(pollingInterval.current);
-        pollingInterval.current = null;
-      }
-    };
-  }, [uncategorizedApps]);
-
-  // Modify fetchData to only set initial data
-  const fetchData = async () => {
-    try {
-      setIsLoading(true);
-      
-      // Check URL parameters for orgId (which might be set during OAuth redirect)
-      let fetchOrgId = null;
-      if (typeof window !== 'undefined') {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlOrgId = urlParams.get('orgId');
-        
-        if (urlOrgId) {
-          fetchOrgId = urlOrgId;
-        } else if (document.cookie.split(';').find(cookie => cookie.trim().startsWith('orgId='))) {
-          const orgIdCookie = document.cookie.split(';').find(cookie => cookie.trim().startsWith('orgId='));
-          fetchOrgId = orgIdCookie?.split('=')[1].trim();
-        }
-      }
-      
-      // Only load dummy data if not authenticated
-      if (!isAuthenticated()) {
-        console.log('Not authenticated, loading dummy data');
-        // Use dummy data if no cookies found
-        const dummyData = [
-          {
-            "Apps": "Slack",
-            "Category": "Productivity & Collaboration",
-            "Users": [
-              "Adam Williams",
-              "Ashley Parker",
-              "Brooke Evans",
-              "Daniel Carter",
-              "Diana Myers",
-              "Donna Reynolds",
-              "Grace Henderson",
-              "Julia Scott",
-              "Jack Thompson",
-              "James Bennett",
-              "Joseph Brooks",
-              "Kevin Anderson",
-              "Matthew Collins",
-              "Nathan Harris",
-              "Peter Russell",
-              "Patrick Walsh",
-              "Paul Simmons",
-              "Ryan Mitchell",
-              "Sandbox User",
-              "Samuel Hayes",
-              "Steven Morgan",
-              "Shane Robinson",
-              "Sara Price",
-              "Victoria Barnes",
-              "Taylor Monroe",
-              "Thomas Greene",
-              "Vanessa Reed",
-              "Valerie Patterson",
-              "Violet Richardson"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid",
-              "https://www.googleapis.com/auth/calendar.events",
-              "https://www.googleapis.com/auth/activity",
-              "https://www.googleapis.com/auth/drive.activity",
-              "https://www.googleapis.com/auth/calendar.readonly",
-              "https://www.googleapis.com/auth/drive",
-              "https://www.googleapis.com/auth/admin.directory.group.readonly",
-              "https://www.googleapis.com/auth/admin.directory.group.member.readonly",
-              "https://www.googleapis.com/auth/admin.directory.user.readonly"
-            ],
-            "Total Scopes": 11,
-            "Risk": "High",
-            "Status": "Managed"
-          },
-          {
-            "Apps": "HubSpot",
-            "Category": "Sales & Marketing",
-            "Users": [
-              "Peter Russell",
-              "Ashley Parker",
-              "Adam Williams",
-              "Andrew Patterson",
-              "Grace Henderson",
-              "Joseph Brooks",
-              "Jack Thompson",
-              "James Bennett",
-              "Kevin Anderson",
-              "Matthew Collins",
-              "Nathan Harris",
-              "Ryan Mitchell",
-              "Ray Smith",
-              "Sandbox User",
-              "Samuel Hayes",
-              "Shane Robinson",
-              "Victoria Barnes",
-              "Sandbox User",
-              "Taylor Monroe",
-              "Thomas Greene"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid",
-              "https://www.googleapis.com/auth/calendar.events",
-              "https://www.googleapis.com/auth/calendar.readonly",
-              "https://www.googleapis.com/auth/gmail.readonly",
-              "https://www.googleapis.com/auth/gmail.send"
-            ],
-            "Total Scopes": 7,
-            "Risk": "High",
-            "Status": "Managed"
-          },
-          {
-            "Apps": "Kandji",
-            "Category": "Identity & Access Management",
-            "Users": [
-              "Ashley Parker",
-              "Peter Russell",
-              "Shane Robinson",
-              "Taylor Monroe"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid",
-              "https://www.googleapis.com/auth/admin.directory.group.readonly",
-              "https://www.googleapis.com/auth/admin.directory.user.readonly"
-            ],
-            "Total Scopes": 5,
-            "Risk": "High",
-            "Status": "Managed"
-          },
-          {
-            "Apps": "ClickUp",
-            "Category": "Productivity & Collaboration",
-            "Users": [
-              "Ashley Parker",
-              "Diana Myers",
-              "Grace Henderson",
-              "Julia Scott",
-              "Jack Thompson",
-              "James Bennett",
-              "Samuel Hayes",
-              "Thomas Greene",
-              "Vanessa Reed"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid",
-              "https://www.googleapis.com/auth/calendar"
-            ],
-            "Total Scopes": 4,
-            "Risk": "Medium",
-            "Status": "Unmanaged"
-          },
-          {
-            "Apps": "Zoom",
-            "Category": "Productivity & Collaboration",
-            "Users": [
-              "Adam Williams",
-              "Ashley Parker",
-              "Victor Sanders",
-              "Brooke Evans",
-              "Daniel Carter",
-              "Diana Myers",
-              "Donna Reynolds",
-              "Grace Henderson",
-              "Julia Scott",
-              "Joseph Brooks",
-              "Jack Thompson",
-              "James Bennett",
-              "Joseph Brooks",
-              "Kevin Anderson",
-              "Matthew Collins",
-              "Peter Russell",
-              "Patrick Walsh",
-              "Sandbox User",
-              "Samuel Hayes",
-              "Shane Robinson",
-              "Sara Price",
-              "Victoria Barnes",
-              "Taylor Monroe",
-              "Thomas Greene",
-              "Vanessa Reed",
-              "Valerie Patterson"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid",
-              "https://www.googleapis.com/auth/calendar.events",
-              "https://www.googleapis.com/auth/contacts",
-              "https://www.googleapis.com/auth/calendar"
-            ],
-            "Total Scopes": 6,
-            "Risk": "Medium",
-            "Status": "Managed"
-          },
-          {
-            "Apps": "Docker",
-            "Category": "Cloud Platforms & Infrastructure",
-            "Users": [
-              "Brooke Evans",
-              "Peter Russell",
-              "Patrick Walsh"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid"
-            ],
-            "Total Scopes": 3,
-            "Risk": "Low",
-            "Status": "Needs Review"
-          },
-          {
-            "Apps": "Strapi Cloud",
-            "Category": "Cloud Platforms & Infrastructure",
-            "Users": [
-              "Samuel Hayes",
-              "Sandbox User"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid"
-            ],
-            "Total Scopes": 3,
-            "Risk": "Low",
-            "Status": "Unmanaged"
-          },
-          {
-            "Apps": "Datadog",
-            "Category": "IT Operations & Security",
-            "Users": [
-              "Brooke Evans",
-              "Joseph Brooks",
-              "Peter Russell",
-              "Patrick Walsh",
-              "Taylor Monroe",
-              "Thomas Greene"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid"
-            ],
-            "Total Scopes": 3,
-            "Risk": "Low",
-            "Status": "Managed"
-          },
-          {
-            "Apps": "Looker Studio",
-            "Category": "Analytics & Business Intelligence",
-            "Users": [
-              "Grace Henderson",
-              "Paul Simmons"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/analytics.readonly",
-              "https://www.googleapis.com/auth/webmasters.readonly",
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/adwords",
-              "https://www.googleapis.com/auth/drive"
-            ],
-            "Total Scopes": 5,
-            "Risk": "High",
-            "Status": "Unmanaged"
-          },
-          {
-            "Apps": "Framer",
-            "Category": "Design & Creative Tools",
-            "Users": [
-              "Adam Williams",
-              "Nathan Harris",
-              "Samuel Hayes",
-              "Sandbox User"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid",
-              "https://www.googleapis.com/auth/drive.file"
-            ],
-            "Total Scopes": 4,
-            "Risk": "High",
-            "Status": "Needs Review"
-          },
-          {
-            "Apps": "Canva",
-            "Category": "Design & Creative Tools",
-            "Users": [
-              "Ashley Parker",
-              "James Bennett",
-              "Samuel Hayes",
-              "Taylor Monroe"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid"
-            ],
-            "Total Scopes": 3,
-            "Risk": "Low",
-            "Status": "Managed"
-          },
-          {
-            "Apps": "Otter.ai",
-            "Category": "Productivity & Collaboration",
-            "Users": [
-              "Ashley Parker",
-              "Julia Scott",
-              "Samuel Hayes",
-              "Vanessa Reed"
-            ],
-            "Scopes": [
-              "https://www.googleapis.com/auth/userinfo.profile",
-              "https://www.googleapis.com/auth/userinfo.email",
-              "openid",
-              "https://www.googleapis.com/auth/calendar.readonly"
-            ],
-            "Total Scopes": 4,
-            "Risk": "Medium",
-            "Status": "Needs Review"
-          }
-        ]
-        
-        setApplications(transformDummyData(dummyData));
-        setIsLoading(false);
-        return;
-      }
-
-      const fetchOrgIdValue = fetchOrgId || '';
-      const response = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${fetchOrgIdValue}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch applications');
-      }
-
-      const rawData: Application[] = await response.json();
-      // Process data to calculate user risk levels client-side
-      const processedData = rawData.map(app => ({
-        ...app,
-        users: app.users.map(user => ({
-          ...user,
-          riskLevel: determineRiskLevel(user.scopes) // Calculate risk level for each user
-        }))
-      }));
-      setApplications(processedData);
-      
-      // Track apps still uncategorized
-      const unknownIds = new Set<string>();
-      processedData.forEach((app: Application) => { // Use processedData here
-        if (app.category === 'Unknown') unknownIds.add(app.id);
-      });
-      setUncategorizedApps(unknownIds);
-      
-      setIsLoading(false);
-    } catch (error) {
-      console.error("Error fetching application data:", error);
-      setIsLoading(false);
-      setApplications([]);
-    }
-  };
-
-  // Add useEffect to trigger fetchData
-  useEffect(() => {
-    fetchData();
-    
-    // Cleanup function
-    return () => {
-      if (pollingInterval.current) {
-        clearInterval(pollingInterval.current);
-        pollingInterval.current = null;
-      }
-    };
-  }, []); // Empty dependency array means this runs once on mount
-
-  // Add error state if needed
-  const [error, setError] = useState<string | null>(null);
-
-  // Stop polling when all apps are categorized
-  useEffect(() => {
-    if (!isPolling && pollingInterval.current) {
-      clearInterval(pollingInterval.current);
-      pollingInterval.current = null;
-    }
-  }, [isPolling]);
-
-  useEffect(() => {
-    const provider = localStorage.getItem('auth_provider') as 'google' | 'microsoft' | null;
-    setAuthProvider(provider);
-  }, []);
-
-  useEffect(() => {
-    // Fetch user info directly from our new API endpoint
-    const fetchUserData = async () => {
-      try {
-        const response = await fetch('/tools/shadow-it-scan/api/session-info');
-        
-        if (response.ok) {
-          const userData = await response.json();
-          setUserInfo(userData);
-          console.log('User data fetched successfully:', userData);
-        } else {
-          console.error('Failed to fetch user data, status:', response.status);
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-      }
-    };
-    
-    fetchUserData();
-  }, []);
-
   const handleSignOut = () => {
-    // Only run in browser environment
-    if (typeof window !== 'undefined') {
-      // Clear all cookies by setting them to expire in the past
-      const allCookies = document.cookie.split(';');
-      console.log('Cookies before clearing:', allCookies);
-      
-      // Specifically clear the critical cookies with all path/domain combinations
-      const cookiesToClear = ['orgId', 'userEmail', 'accessToken', 'refreshToken'];
-      const domains = [window.location.hostname, '', null, 'stitchflow.com', `.${window.location.hostname}`];
-      const paths = ['/', '/tools/shadow-it-scan', '/tools/shadow-it-scan/', '', null];
-      
-      // Try all combinations to ensure cookies are cleared
-      for (const cookieName of cookiesToClear) {
-        for (const domain of domains) {
-          for (const path of paths) {
-            const domainStr = domain ? `; domain=${domain}` : '';
-            const pathStr = path ? `; path=${path}` : '';
-            document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT${pathStr}${domainStr}`;
-          }
-        }
-      }
-      
-      // Also try to clear all cookies generically
-      allCookies.forEach((cookie: string) => {
-        const [name] = cookie.trim().split('=');
-        if (name) {
-          // Try with different domain/path combinations
-          for (const domain of domains) {
-            for (const path of paths) {
-              const domainStr = domain ? `; domain=${domain}` : '';
-              const pathStr = path ? `; path=${path}` : '';
-              document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT${pathStr}${domainStr}`;
-            }
-          }
-        }
-      });
-      
-      // Clear local storage
-      localStorage.clear();
-      
-      // Clear session storage too
-      sessionStorage.clear();
-      
-      console.log('Cookies after clearing:', document.cookie);
-      
-      // Redirect and force refresh (using a timestamp to prevent caching)
-      window.location.href = `/tools/shadow-it-scan/`;
-    }
+    // Mock sign out logic
+    console.log("User signed out");
+    window.location.reload();
   };
-
   
   // Sorting function
   const handleSort = (column: SortColumn) => {
@@ -1159,48 +404,9 @@ export default function ShadowITDashboard() {
     return pages
   }
 
-  // Modify the checkAuth function to be more generic
-  const isAuthenticated = () => {
-    // Only access cookies in the browser
-    if (typeof window === 'undefined') {
-      return false; // On server, consider not authenticated
-    }
-    
-    // Debug: Log all cookies to see what's available
-    const allCookies = document.cookie;
-    console.log("All cookies:", allCookies);
-    
-    const cookies = document.cookie.split(';');
-    console.log("Split cookies:", cookies);
-    
-    // Trim the cookies and check for orgId and userEmail
-    const orgIdCookie = cookies.find(cookie => cookie.trim().startsWith('orgId='));
-    const userEmailCookie = cookies.find(cookie => cookie.trim().startsWith('userEmail='));
-    
-    console.log("orgIdCookie:", orgIdCookie);
-    console.log("userEmailCookie:", userEmailCookie);
-    
-    // Use the same logic as in fetchData to also check URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlOrgId = urlParams.get('orgId');
-    
-    console.log("URL orgId:", urlOrgId);
-    
-    // Consider authenticated if either cookies or URL param is present
-    const authenticated = !!(orgIdCookie && userEmailCookie) || !!urlOrgId;
-    console.log("Authentication result:", authenticated);
-    
-    return authenticated;
-  };
-
-  console.log("isAuthenticated", isAuthenticated());
+  const isAuthenticated = () => true;
 
   const checkAuth = (action: () => void) => {
-    if (!isAuthenticated()) {
-      setShowLoginModal(true);
-      return false;
-    }
-    
     action();
     return true;
   };
@@ -1235,23 +441,7 @@ export default function ShadowITDashboard() {
 
   // Handle status change
   const handleStatusChange = async (appId: string, newStatus: string) => {
-    try {
-      const response = await fetch('/tools/shadow-it-scan/api/applications', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: appId,
-          managementStatus: newStatus,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update status');
-      }
-
-      // Update local state immediately after successful API call
+      // Update local state immediately
       setApplications((prevApps) =>
         prevApps.map((app) =>
           app.id === appId ? { ...app, managementStatus: newStatus as "Managed" | "Unmanaged" | "Needs Review" } : app,
@@ -1263,17 +453,6 @@ export default function ShadowITDashboard() {
         ...prev,
         [appId]: newStatus,
       }));
-
-      // Fetch updated data from the server
-      const updatedResponse = await fetch(`/tools/shadow-it-scan/api/applications?orgId=${new URLSearchParams(window.location.search).get('orgId')}`);
-      if (updatedResponse.ok) {
-        const updatedData = await updatedResponse.json();
-        setApplications(updatedData);
-      }
-    } catch (error) {
-      console.error('Error updating status:', error);
-      // Optionally, you could add error handling UI feedback here
-    }
   };
 
   // Helper function to group users by identical scope sets
@@ -1441,19 +620,19 @@ export default function ShadowITDashboard() {
     
     // Fixed color mapping for consistent colors with proper hex values instead of tailwind classes
     const colorMap: Record<string, string> = {
-      "Analytics & Business Intelligence":   "#FBCFE8", // pink-200  :contentReference[oaicite:0]{index=0}
-      "Cloud Platforms & Infrastructure":    "#C7D2FE", // indigo-200  :contentReference[oaicite:1]{index=1}
-      "Customer Success & Support":          "#99F6E4", // teal-200  :contentReference[oaicite:2]{index=2}
-      "Design & Creative Tools":             "#F5D0FE", // fuchsia-200  :contentReference[oaicite:3]{index=3}
-      "Developer & Engineering Tools":       "#BFDBFE", // blue-200  :contentReference[oaicite:4]{index=4}
-      "Finance & Accounting":                "#FDE68A", // amber-200  :contentReference[oaicite:5]{index=5}
-      "Human Resources & People Management": "#D9F99D", // lime-200  :contentReference[oaicite:6]{index=6}
-      "IT Operations & Security":            "#FECACA", // red-200   :contentReference[oaicite:7]{index=7}
-      "Identity & Access Management":        "#DDD6FE", // violet-200  :contentReference[oaicite:8]{index=8}
-      "Productivity & Collaboration":        "#A7F3D0", // emerald-200  :contentReference[oaicite:9]{index=9}
-      "Project Management":                  "#FED7AA", // orange-200  :contentReference[oaicite:10]{index=10}
-      "Sales & Marketing":                   "#A5F3FC", // cyan-200   :contentReference[oaicite:11]{index=11}
-      Others:                                "#E5E7EB", // gray-200   :contentReference[oaicite:12]{index=12}
+      "Analytics & Business Intelligence":   "#FBCFE8", // pink-200
+      "Cloud Platforms & Infrastructure":    "#C7D2FE", // indigo-200
+      "Customer Success & Support":          "#99F6E4", // teal-200
+      "Design & Creative Tools":             "#F5D0FE", // fuchsia-200
+      "Developer & Engineering Tools":       "#BFDBFE", // blue-200
+      "Finance & Accounting":                "#FDE68A", // amber-200
+      "Human Resources & People Management": "#D9F99D", // lime-200
+      "IT Operations & Security":            "#FECACA", // red-200
+      "Identity & Access Management":        "#DDD6FE", // violet-200
+      "Productivity & Collaboration":        "#A7F3D0", // emerald-200
+      "Project Management":                  "#FED7AA", // orange-200
+      "Sales & Marketing":                   "#A5F3FC", // cyan-200
+      Others:                                "#E5E7EB", // gray-200
     };
     // Return the mapped color or a default
     return colorMap[category] || "#E2E8F0"; // Default slate-200 for unknown categories
@@ -1491,12 +670,13 @@ export default function ShadowITDashboard() {
     logoUrlFallback?: string;
   }) => {
     // Get the first letter of the app name
-    const initial = name.charAt(0).toUpperCase();
+    const initial = name ? name.charAt(0).toUpperCase() : '';
     const [primaryLogoError, setPrimaryLogoError] = useState(false);
     const [fallbackLogoError, setFallbackLogoError] = useState(false);
 
     // Generate a consistent background color based on app name
     const getBackgroundColor = (appName: string) => {
+      if(!appName) return '#ccc';
       // Simple hash function to generate a consistent color
       const hash = appName.split('').reduce((acc, char) => {
         return char.charCodeAt(0) + ((acc << 5) - acc);
@@ -1880,23 +1060,9 @@ export default function ShadowITDashboard() {
     }
   }, []);
 
-  // Helper function to generate a random ID
-  const generateId = () => Math.random().toString(36).substr(2, 9);
-
-  // Helper function to transform user data
-  const transformUser = (name: string, appId: string, scopes: string[]): AppUser => ({
-    id: generateId(),
-    appId,
-    name,
-    email: `${name.toLowerCase().replace(' ', '.')}@example.com`,
-    scopes,
-    riskLevel: determineRiskLevel(scopes),
-    riskReason: "Based on scope permissions and usage patterns",
-  });
-
-
     // Helper to convert app name to likely domain format
   function appNameToDomain(appName: string): string {
+    if (!appName) return '';
     // Common apps with special domain formats
     const knownDomains: Record<string, string> = {
       'slack': 'slack.com',
@@ -1950,6 +1116,9 @@ export default function ShadowITDashboard() {
   }
 
   function getAppLogoUrl(appName: string) {
+    if (!appName) {
+        return { primary: '', fallback: '' };
+    }
     const domain = appNameToDomain(appName);
     
     // Try to get the app icon using Logo.dev
@@ -1965,340 +1134,6 @@ export default function ShadowITDashboard() {
       fallback: fallbackUrl
     };
   }
-
-  // Function to transform the dummy data into our app's format
-  const transformDummyData = (dummyData: any[]): Application[] => {
-    return dummyData.map(item => {
-      
-      const id = generateId();
-      const logoUrls = getAppLogoUrl(item.Apps);
-      let appUsers = item.Users.map((user: string) => transformUser(user, id, item.Scopes));
-
-      // Ensure some prominent dummy apps have high-risk users for UI demonstration
-      if (item.Apps === "Slack" && appUsers.length > 0) {
-        if (appUsers[0]) appUsers[0].riskLevel = "High";
-        if (appUsers[1]) appUsers[1].riskLevel = "High"; // Ensure at least two for Slack if possible
-      }
-      if (item.Apps === "HubSpot" && appUsers.length > 0) {
-        if (appUsers[0]) appUsers[0].riskLevel = "High";
-      }
-      if (item.Apps === "Looker Studio" && appUsers.length > 0) { // Another app that has "High" app risk
-        if (appUsers[0]) appUsers[0].riskLevel = "High";
-      }
-
-      return {
-        id,
-        name: item.Apps,
-        category: item.Category,
-        userCount: appUsers.length,
-        users: appUsers, // use the potentially modified appUsers
-        riskLevel: item.Risk as RiskLevel,
-        riskReason: "Based on scope permissions and usage patterns",
-        totalPermissions: item["Total Scopes"],
-        scopeVariance: { userGroups: Math.floor(Math.random() * 5) + 1, scopeGroups: Math.floor(Math.random() * 3) + 1 },
-        managementStatus: item.Status as "Managed" | "Unmanaged" | "Needs Review",
-        ownerEmail: "",
-        logoUrl: logoUrls.primary,
-        logoUrlFallback: logoUrls.fallback, // Assign fallback logo URL
-        notes: "",
-        scopes: item.Scopes,
-        isInstalled: true,
-        isAuthAnonymously: false
-      };
-    });
-  };
-
-  // Update the LoginModal component to fix both the top gap and maintain button spacing
-  const LoginModal = ({ error }: { error: string }) => {
-    const [isLoading, setIsLoading] = useState(false);
-    const [loginProvider, setLoginProvider] = useState<'google' | 'microsoft' | null>(null);
-    const [currentLoginError, setCurrentLoginError] = useState(error); // Use prop for initial error
-    const searchParams = useSearchParams();
-
-    // Custom Reddit logo component - Moved from SignInDialog
-    const RedditLogo = () => (
-      <img src="/tools/shadow-it-scan/reddit-logo.svg" alt="Reddit Logo" width="20" height="20" className="text-orange-500" />
-    );
-
-    const testimonials = [
-      {
-        name: "u/ITLead",
-        text: "Sharing this with my boss. Looks like great potential for our non-existent process haha",
-      },
-      {
-        name: "u/sysadmin",
-        text: "Nice tool. We're building something similar. The market need is real. Good luck to you <3",
-      },
-      {
-        name: "u/ITManager",
-        text: "This is nifty! I'm downloading it now. Do you plan to do updates/keep it current? Definitely going to mention this in my next position.",
-      },
-      {
-        name: "u/sysengineer",
-        text: "This tool will be a great help to IT admins for sure...!!",
-      },
-      {
-        name: "u/CISO",
-        text: "Quite nifty... there's quite a bit of customizing you can do. Thanks for sharing this for free.",
-      },
-      {
-        name: "u/ITOpsMgr",
-        text: "Very nice. Wish I had known about this a few months ago. I had our Salesforce admin build a contract tracker with similar functions a couple of months ago and now the finance team wants to use it to track their contracts.",
-      },
-    ];
-
-    // Log data for debugging
-    console.log("Login Modal Rendered, error state:", currentLoginError);
-    console.log("URL Search Params:", Object.fromEntries(searchParams.entries()));
-
-    useEffect(() => {
-      setCurrentLoginError(error); // Update error when prop changes
-    }, [error]);
-    
-    const handleGoogleLogin = async () => {
-      try {
-        setIsLoading(true);
-        setLoginProvider('google');
-        setCurrentLoginError(''); // Clear previous errors specifically for a new login attempt
-
-        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-        let redirectUri;
-
-        if (!clientId) {
-          setCurrentLoginError("Missing Google OAuth configuration");
-          console.error('Missing client ID');
-          setIsLoading(false);
-          return;
-        }
-
-        // If we're on localhost, use the current origin
-        if (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1')) {
-          redirectUri = `${window.location.origin}/tools/shadow-it-scan/api/auth/google/callback`;
-        } else {
-          redirectUri = 'https://stitchflow.com/tools/shadow-it-scan/api/auth/google';
-        }
-        
-        console.log('Using redirectUri:', redirectUri);
-        
-        // Use minimal scopes initially - just enough to identify the user
-        const scopes = [
-          'openid',
-          'profile',
-          'email'
-        ].join(' ');
-
-        // Generate a state parameter to verify the response and enable cross-browser detection
-        const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
-        
-        // Always store in localStorage to identify this browser session
-        localStorage.setItem('oauthState', state);
-        localStorage.setItem('auth_provider', 'google');
-        localStorage.setItem('lastLogin', Date.now().toString());
-        localStorage.setItem('login_attempt_time', Date.now().toString());
-        
-        // Direct account selection - show the accounts dialog directly
-        // This bypasses the initial email input screen
-        const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-        authUrl.searchParams.append('client_id', clientId);
-        authUrl.searchParams.append('redirect_uri', redirectUri);
-        authUrl.searchParams.append('response_type', 'code');
-        authUrl.searchParams.append('scope', scopes);
-        authUrl.searchParams.append('access_type', 'offline'); 
-        authUrl.searchParams.append('include_granted_scopes', 'true');
-        authUrl.searchParams.append('state', state);
-        
-        // Clean URL before redirecting
-        const cleanUrl = new URL(window.location.href);
-        if (cleanUrl.searchParams.has('error')) {
-          cleanUrl.searchParams.delete('error');
-          window.history.replaceState({}, document.title, cleanUrl.toString());
-        }
-
-        window.location.href = authUrl.toString();
-      } catch (err) {
-        console.error('Login error:', err);
-        setCurrentLoginError('Failed to initialize login. Please try again.');
-        setIsLoading(false);
-        setLoginProvider(null);
-      }
-    };
-
-    const handleMicrosoftLogin = async () => {
-      try {
-        setIsLoading(true);
-        setLoginProvider('microsoft');
-        setCurrentLoginError(''); // Clear previous errors specifically for a new login attempt
-
-        const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
-        let redirectUri = process.env.NEXT_PUBLIC_MICROSOFT_REDIRECT_URI;
-
-        if (!clientId || !redirectUri) {
-          setCurrentLoginError("Missing Microsoft OAuth configuration");
-          console.error('Missing env variables:', { 
-            clientId: clientId ? 'present' : 'missing',
-            redirectUri: redirectUri ? 'present' : 'missing'
-          });
-          setIsLoading(false);
-          setLoginProvider(null);
-          return;
-        }
-
-        // If we're on localhost, update the redirect URI
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          redirectUri = window.location.origin + '/api/auth/microsoft';
-        } else {
-          redirectUri = 'https://www.stitchflow.com/tools/shadow-it-scan/api/auth/microsoft';
-        }
-        
-        console.log('Using redirectUri:', redirectUri);
-        
-        const scopes = [
-          // Start with minimal scopes; we'll request admin scopes later if needed
-          'User.Read',
-          'offline_access',
-          'openid',
-          'profile',
-          'email'
-        ].join(' ');
-
-        // Generate a state parameter to verify the response and enable cross-browser detection
-        const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
-        
-        // Always store in localStorage to identify this browser session
-        localStorage.setItem('oauthState', state);
-        localStorage.setItem('auth_provider', 'microsoft');
-        localStorage.setItem('lastLogin', Date.now().toString());
-        localStorage.setItem('login_attempt_time', Date.now().toString());
-        
-        const authUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
-        authUrl.searchParams.append('client_id', clientId);
-        authUrl.searchParams.append('redirect_uri', redirectUri);
-        authUrl.searchParams.append('response_type', 'code');
-        authUrl.searchParams.append('scope', scopes);
-        authUrl.searchParams.append('response_mode', 'query');
-        authUrl.searchParams.append('prompt', 'select_account');
-        authUrl.searchParams.append('state', state);
-
-        // Clean URL before redirecting
-        const cleanUrl = new URL(window.location.href);
-        if (cleanUrl.searchParams.has('error')) {
-          cleanUrl.searchParams.delete('error');
-          window.history.replaceState({}, document.title, cleanUrl.toString());
-        }
-
-        window.location.href = authUrl.toString();
-      } catch (err) {
-        console.error('Microsoft login error:', err);
-        setCurrentLoginError('Failed to initialize Microsoft login. Please try again.');
-        setIsLoading(false);
-        setLoginProvider(null);
-      }
-    };
-
-    return (
-      <Dialog open={showLoginModal} onOpenChange={setShowLoginModal}>
-        <DialogContent className="sm:max-w-[900px] md:max-w-[1000px] p-0 overflow-hidden font-inter">
-          <div className="grid gap-6 md:grid-cols-[1fr_1.2fr]">
-            {/* Left side - Sign in */}
-            <div className="space-y-8 p-8">
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold">Sign in to continue</h2>
-                <p className="text-sm text-muted-foreground">
-                Connect with your org admin account to begin using the app
-                </p>
-              </div>
-
-              {/* Error Message Display */}
-              {currentLoginError && currentLoginError.length > 0 && (
-                <div className="mb-4 p-3 text-sm text-red-700 bg-red-100 rounded-md border border-red-200">
-                  {currentLoginError}
-                </div>
-              )}
-
-              <div className="space-y-6">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start gap-2"
-                  onClick={handleGoogleLogin}
-                  disabled={isLoading}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24">
-                    <path
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      fill="#4285F4"
-                    />
-                    <path
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      fill="#34A853"
-                    />
-                    <path
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      fill="#FBBC05"
-                    />
-                    <path
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      fill="#EA4335"
-                    />
-                  </svg>
-                  {isLoading && loginProvider === 'google' ? 'Connecting...' : 'Sign in with Google Workspace'}
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start gap-2"
-                  onClick={handleMicrosoftLogin}
-                  disabled={isLoading}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 23 23">
-                    <path fill="#f3f3f3" d="M0 0h23v23H0z" />
-                    <path fill="#f35325" d="M1 1h10v10H1z" />
-                    <path fill="#81bc06" d="M12 1h10v10H12z" />
-                    <path fill="#05a6f0" d="M1 12h10v10H1z" />
-                    <path fill="#ffba08" d="M12 12h10v10H12z" />
-                  </svg>
-                  {isLoading && loginProvider === 'microsoft' ? 'Connecting...' : 'Sign in with Microsoft Workspace'}
-                </Button>
-              </div>
-
-              <div className="space-y-3 pt-6">
-                <div className="text-sm text-muted-foreground">
-
-                  <p className="mt-2">
-                  We take data privacy seriously. Learn more about our approach to{" "}
-                    <a href="https://www.stitchflow.com/security" className="font-medium text-green-600 hover:underline">
-                    security {" "}
-                    </a>
-                    or {" "}
-                    <a href="https://www.stitchflow.com/demo" className="font-medium text-green-600 hover:underline">
-                    schedule a time
-                    </a>{" "}
-                    to chat with us
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Right side - Reddit testimonials */}
-            <div className="hidden space-y-4 bg-gray-50 p-8 md:block">
-              <h3 className="text-center text-lg font-semibold">What IT folks share about our free tools</h3>
-              <div className="max-h-[400px] space-y-4 overflow-y-auto pr-2">
-                {testimonials.map((testimonial, index) => (
-                  <div key={index} className="rounded-md bg-[#f5f0e8] p-4">
-                    <div className="flex items-start gap-2">
-                      <RedditLogo />
-                      <div>
-                        <div className="mb-1 text-xs font-medium">{testimonial.name}</div>
-                        <p className="text-sm">{testimonial.text}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  };
 
   // Add a useEffect to force re-rendering the charts when in Insights view after new categories arrive
   useEffect(() => {
@@ -2358,22 +1193,6 @@ export default function ShadowITDashboard() {
       setIsSaving(true);
       setSaveMessage(null);
 
-      const response = await fetch('/tools/shadow-it-scan/api/applications', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: selectedApp.id,
-          ownerEmail,
-          notes,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update application');
-      }
-
       // Update applications state with the updated app
       setApplications(prevApps => {
         // Create a new array with the updated application
@@ -2385,8 +1204,6 @@ export default function ShadowITDashboard() {
         
         return updatedApps;
       });
-
-      // No need to update selectedAppId as it would trigger a re-render and potentially close the modal
 
       setSaveMessage({
         type: "success",
@@ -2411,108 +1228,15 @@ export default function ShadowITDashboard() {
   return (
     <div className="mx-auto font-sans text-gray-900 bg-[#f8f5f3]">
 
-      <header className="fixed top-0 left-0 right-0 z-50 bg-[#f8f5f3] border-b">
-        <div className="flex items-center align-middle justify-between max-w-7xl mx-auto px-4 sm:px-8 py-3">
-          <div className="flex items-center gap-2.5">
-            <a href="https://www.stitchflow.com" target="_blank" rel="noopener noreferrer" className="flex items-center">
-              <img
-                src="/Stitchflow.png"
-                alt="Stitchflow"
-                className="h-6 w-auto"
-              />
-            </a>
-            <span className="text-lg font-medium font-['Epilogue', sans-serif] text-gray-900 flex items-center">Shadow IT Scanner</span>
-          </div>
-        </div>
-      </header>
-
-       
-          <div className="text-center space-y-4 sm:space-y-6 py-6 sm:py-16 px-4 max-w-[1900px] mx-auto">
-            <a
-              href="https://www.stitchflow.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary rounded-full text-xs font-medium hover:bg-primary/15 transition-colors"
-            >
-               Free tool from Stitchflow
-              <ExternalLink className="h-3 w-3" />
-            </a>
-            
-            <div className="space-y-4 sm:space-y-6">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mx-auto max-w-[900px] leading-tight">
-               Free Shadow IT Scanner 
-              </h1>
               
-              <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Discover the apps your employees are using, detect potential risks by tracking app scopes, and prevent compliance gaps before they escalate.
-              </p>
-              {!isAuthenticated() && (
-                <div className="mt-6 sm:mt-8 flex justify-center">
-                  <Button_website 
-                    onClick={() => setShowLoginModal(true)} 
-                    variant="primary" // This variant will be styled by the className
-                    type="button"
-                    // className combines custom button's base styles with overrides for white bg, dark text, border, and new padding
-                    className="py-3 px-8 w-auto flex group z-50 pointer-events-auto bg-white hover:bg-gray-100 text-[#363338] border border-gray-300 rounded-lg"
-                  >
-                    <div className="flex justify-center items-center">
-                        <span className="font-medium text-base leading-4 whitespace-nowrap">
-                            Start your scan
-                        </span>
-                        <ArrowRight className="ml-2 h-4 w-0 flex-shrink-0 transition-all ease-in duration-200 group-hover:w-4 group-active:translate-x-1.5" />
-                    </div>
-                  </Button_website>
-                </div>
-              )}
-            </div>
-          </div>
-
-
-        
 
       <main className="pt-[40px] pl-10 pr-10 bg-white mt-4 pb-10">
-
-            {!isAuthenticated() && (
-              <div className="bg-black border border-gray-800 rounded-lg p-4 mb-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-yellow-500">👋</span>
-                    <p className="text-gray-200">
-                    This is a preview of the app. Get started with the Shadow IT scan for your workspace
-                    </p>
-                  </div>
-                  <Button_website
-                    onClick={() => {
-                      setShowLoginModal(true)
-                    }}
-                    variant="primary"
-                    type="button"
-                    className="py-2 px-8 w-auto flex group z-50 pointer-events-auto bg-white hover:bg-gray-100 text-[#363338] border border-gray-300 rounded-lg"
-                  >
-                    <span className="font-medium text-base leading-4 whitespace-nowrap">
-                            Sign in
-                        </span>
-                        
-                  </Button_website>
-                </div>
-              </div>
-            )}
-
             <div className="flex items-center gap-2 mb-4">
               <h2 className="text-xl font-bold">Shadow IT Overview</h2>
               <Share url="https://www.stitchflow.com/tools/shadow-it-scan" />
             </div>
 
-            {isLoading ? (
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-                <div className="p-6 flex justify-center items-center min-h-[400px]">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-                    <p>Loading application data...</p>
-                  </div>
-                </div>
-              </div>
-            ) : !selectedAppId ? (
+            {!selectedAppId ? (
               <div ref={mainContentRef} className="space-y-6"> {/* Added ref here */}
                 <div className="flex justify-between items-center mt-[-4px]">
                   <div>
@@ -2572,78 +1296,6 @@ export default function ShadowITDashboard() {
                       Email Notifications
                     </Button>
 
-                    {/* Only show profile if authenticated */}
-                    {isAuthenticated() && (
-                    <div className="relative" ref={profileRef}>
-                      <button
-                        onClick={() => setIsProfileOpen(!isProfileOpen)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setIsProfileOpen(!isProfileOpen);
-                          } else if (e.key === 'Escape') {
-                            setIsProfileOpen(false);
-                          }
-                        }}
-                        aria-expanded={isProfileOpen}
-                        aria-haspopup="true"
-                        aria-label="User menu"
-                        className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors overflow-hidden"
-                      >
-                        {userInfo?.avatar_url ? (
-                          <img 
-                            src={userInfo.avatar_url} 
-                            alt={userInfo.name || "User"} 
-                            className="h-10 w-10 object-cover"
-                          />
-                        ) : userInfo?.name ? (
-                          <span className="text-sm font-medium">
-                            {userInfo.name.split(' ').map(n => n[0]).join('')}
-                          </span>
-                        ) : (
-                          <User className="h-5 w-5 text-gray-600" />
-                        )}
-                      </button>
-
-                      {isProfileOpen && (
-                        <div 
-                          className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50"
-                          role="menu"
-                          aria-orientation="vertical"
-                          aria-labelledby="user-menu"
-                        >
-                          {userInfo && (
-                            <>
-                              <div className="px-4 py-3 border-b border-gray-100">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <div>
-                                    <p className="font-medium text-gray-900">{userInfo.name}</p>
-                                    <p className="text-sm text-gray-500 truncate max-w-[200px]">{userInfo.email}</p>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="px-2 py-2">
-                                <button
-                                  onClick={handleSignOut}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault();
-                                      handleSignOut();
-                                    }
-                                  }}
-                                  role="menuitem"
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                                >
-                                  <LogOut className="h-4 w-4" />
-                                  Sign out
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    )}
                   </div>
                 </div>
 
@@ -2692,10 +1344,6 @@ export default function ShadowITDashboard() {
                               className="w-full min-w-[300px] h-10 px-3 rounded-lg border border-gray-200 bg-white mt-1 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 truncate"
                               value={filterCategory || ""}
                               onChange={(e) => {
-                                if (!isAuthenticated()) {
-                                  setShowLoginModal(true);
-                                  return;
-                                }
                                 setFilterCategory(e.target.value || null);
                               }}
                             >
@@ -2944,15 +1592,7 @@ export default function ShadowITDashboard() {
                                       className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
                                       value={editedStatuses[app.id] || app.managementStatus}
                                       onChange={(e) => {
-                                        if (checkAuth(() => {
-                                          handleStatusChange(app.id, e.target.value);
-                                        })) {
-                                          // If authenticated, update the UI immediately
-                                          setEditedStatuses(prev => ({
-                                            ...prev,
-                                            [app.id]: e.target.value
-                                          }));
-                                        }
+                                        handleStatusChange(app.id, e.target.value);
                                       }}
                                     >
                                       <option value="Managed">Managed</option>
@@ -3525,117 +2165,7 @@ export default function ShadowITDashboard() {
                           })()}
                         </div>
                       </div>
-                    
-                  
-
-                  {/* Application Similarity Groups */}
-                  
-                    {/* <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 col-span-2">
-                      <h3 className="text-lg font-medium text-gray-900">Application Similarity Groups</h3>
-                      <p className="text-sm text-gray-500 mb-4">
-                        Groups of applications that share similar characteristics and usage patterns.
-                      </p>
-                      <div className="h-[500px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart
-                            data={applications.map(app => ({
-                              name: app.name,
-                              users: app.userCount,
-                              permissions: app.totalPermissions,
-                              similar: getSimilarApps(app, applications).length,
-                              category: appCategories[app.id] || app.category,
-                            }))}
-                            layout="vertical"
-                            margin={{ left: 150, right: 20, top: 20, bottom: 20 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                            <XAxis type="number" />
-                            <YAxis
-                              type="category"
-                              dataKey="name"
-                              width={140}
-                              tick={({ x, y, payload }) => (
-                                <g transform={`translate(${x},${y})`}>
-                                  <text
-                                    x={-3}
-                                    y={0}
-                                    dy={4}
-                                    textAnchor="end"
-                                    fill="#111827"
-                                    fontSize={12}
-                                    className="cursor-pointer hover:fill-primary transition-colors"
-                                    onClick={() => {
-                                      const app = applications.find(a => a.name === payload.value);
-                                      if (app) {
-                                        setMainView("list");
-                                        setSelectedAppId(app.id);
-                                        setIsUserModalOpen(true);
-                                      }
-                                    }}
-                                  >
-                                    {payload.value}
-                                  </text>
-                                </g>
-                              )}
-                            />
-                            <Bar
-                              dataKey="users"
-                              stackId="a"
-                              name="Users"
-                              fill="#4B5563"
-                              radius={[0, 4, 4, 0]}
-                            >
-                              {applications.map((app, index) => (
-                                <Cell
-                                  key={`cell-${index}`}
-                                  fill={getCategoryColor(app.category)}
-                                  fillOpacity={0.8}
-                                  cursor="pointer"
-                                  onClick={() => {
-                                    setMainView("list");
-                                    setSelectedAppId(app.id);
-                                    setIsUserModalOpen(true);
-                                  }}
-                                />
-                              ))}
-                            </Bar>
-                            <RechartsTooltip
-                              content={({ active, payload, label }) => {
-                                if (active && payload && payload.length) {
-                                  const app = applications.find(a => a.name === label);
-                                  if (!app) return null;
-
-                                  const similarApps = getSimilarApps(app, applications);
-                                  return (
-                                    <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
-                                      <p className="font-medium">{label}</p>
-                                      <p className="text-sm text-gray-500">{app.category}</p>
-                                      <div className="text-sm mt-2">
-                                        <div className="font-medium">Similar Apps:</div>
-                                        <div className="mt-1 space-y-1">
-                                          {similarApps.map(({ app: similarApp, score }, index) => (
-                                            <div key={index} className="flex items-center gap-2">
-                                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getCategoryColor(similarApp.category) }} />
-                                              <span>{similarApp.name}</span>
-                                              <span className="text-gray-500">({Math.round(score * 100)}% match)</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              }}
-                              cursor={{ fill: "rgba(0, 0, 0, 0.05)" }}
-                            />
-                            <Legend />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div> */}
-                  
-                </div>
+                  </div>
               )}
             </div>
           ) : (
@@ -3698,79 +2228,6 @@ export default function ShadowITDashboard() {
                     <Settings className="h-4 w-4 mr-2" />
                     Email Notifications
                   </Button>
-
-                  {/* Only show profile if authenticated */}
-                  {isAuthenticated() && (
-                  <div className="relative" ref={profileRef}>
-                    <button
-                      onClick={() => setIsProfileOpen(!isProfileOpen)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          setIsProfileOpen(!isProfileOpen);
-                        } else if (e.key === 'Escape') {
-                          setIsProfileOpen(false);
-                        }
-                      }}
-                      aria-expanded={isProfileOpen}
-                      aria-haspopup="true"
-                      aria-label="User menu"
-                      className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors overflow-hidden"
-                    >
-                      {userInfo?.avatar_url ? (
-                        <img 
-                          src={userInfo.avatar_url} 
-                          alt={userInfo.name || "User"} 
-                          className="h-10 w-10 object-cover"
-                        />
-                      ) : userInfo?.name ? (
-                        <span className="text-sm font-medium">
-                          {userInfo.name.split(' ').map(n => n[0]).join('')}
-                        </span>
-                      ) : (
-                        <User className="h-5 w-5 text-gray-600" />
-                      )}
-                    </button>
-
-                    {isProfileOpen && (
-                      <div 
-                        className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50"
-                        role="menu"
-                        aria-orientation="vertical"
-                        aria-labelledby="user-menu"
-                      >
-                        {userInfo && (
-                          <>
-                            <div className="px-4 py-3 border-b border-gray-100">
-                              <div className="flex items-center gap-3 mb-2">
-                                <div>
-                                  <p className="font-medium text-gray-900">{userInfo.name}</p>
-                                  <p className="text-sm text-gray-500 truncate max-w-[200px]">{userInfo.email}</p>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="px-2 py-2">
-                              <button
-                                onClick={handleSignOut}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    handleSignOut();
-                                  }
-                                }}
-                                role="menuitem"
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                              >
-                                <LogOut className="h-4 w-4" />
-                                Sign out
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  )}
                 </div>
               </div>
 
@@ -3845,9 +2302,6 @@ export default function ShadowITDashboard() {
                         <TabsTrigger value="scopes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:bg-gray-200 data-[state=active]:hover:bg-white">
                         Scope User Groups
                         </TabsTrigger>
-                        {/* <TabsTrigger value="similar" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                          Similar Apps
-                        </TabsTrigger> */}
                         <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:bg-gray-200 data-[state=active]:hover:bg-white">
                           Notes
                         </TabsTrigger>
@@ -4248,89 +2702,6 @@ export default function ShadowITDashboard() {
                           </div>
                       </TabsContent>
 
-                      {/* <TabsContent value="similar">
-                        <div className="p-5 border border-gray-200 rounded-md bg-white">
-                          <h3 className="text-lg font-medium mb-4">Similar Applications</h3>
-                          <p className="text-sm text-muted-foreground mb-6">
-                            Apps that share similar usage patterns with {selectedApp.name}, based on user behavior and functional overlap.
-                          </p>
-
-                          <div className="space-y-6">
-                            {getSimilarApps(selectedApp, applications).map(({ app, score, reasons }) => (
-                              <div key={app.id} className="p-4 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
-                                <div className="flex items-start justify-between gap-4">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-3">
-                                      <AppIcon name={app.name} logoUrl={app.logoUrl} logoUrlFallback={app.logoUrlFallback} />
-                                      <div>
-                                        <h4 className="font-medium">{app.name}</h4>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-sm text-muted-foreground">{app.category}</span>
-                                          <span className="text-sm text-muted-foreground">•</span>
-                                          <span className="text-sm font-medium text-primary">{Math.round(score * 100)}% match</span>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                   
-                                    <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-50 rounded-md">
-                                      <div>
-                                        <div className="text-sm text-muted-foreground">Shared Users</div>
-                                        <div className="text-lg font-medium">
-                                          {app.users.filter(u => 
-                                            selectedApp.users.some(su => su.email === u.email)
-                                          ).length}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="text-sm text-muted-foreground">Common Functions</div>
-                                        <div className="text-lg font-medium">
-                                          {Array.from(getAppFunctionality(app.scopes)).filter(f => 
-                                            getAppFunctionality(selectedApp.scopes).has(f)
-                                          ).length}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="text-sm text-muted-foreground">Active Users</div>
-                                        <div className="text-lg font-medium">
-                                          {app.users.length}
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    
-                                    <div className="space-y-2">
-                                      {reasons.map((reason, index) => (
-                                        <div key={index} className="flex items-center gap-2">
-                                          <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
-                                          <span className="text-sm">{reason}</span>
-                            </div>
-                          ))}
-                                    </div>
-                                  </div>
-
-                                  <div className="flex flex-col items-end gap-3">
-                                    <RiskBadge level={app.riskLevel} />
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        setSelectedAppId(app.id);
-                                        setIsUserModalOpen(true);
-                                      }}
-                                      className="whitespace-nowrap"
-                                    >
-                                      <Eye className="h-4 w-4 mr-2" />
-                                      View Details
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </TabsContent> */}
-
                       <TabsContent value="notes">
                         <div className="p-5 border border-gray-200 rounded-md bg-white">
                           <div className="space-y-4">
@@ -4392,101 +2763,6 @@ export default function ShadowITDashboard() {
         isOpen={isSettingsOpen} 
         onClose={() => setIsSettingsOpen(false)} 
       />
-
-      <div className="max-w-[70rem] mx-auto px-4 sm:px-8">
-          <h2 className="text-2xl font-semibold mb-8 sm:mb-14 text-gray-900 text-center mt-11">
-          Complete visibility. Real control. All in one place
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8">
-            <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
-                <ScanSearch className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Spot unauthorized apps instantly</h3>
-              <p className="text-gray-600 text-sm leading-relaxed">
-              Automatically detect all the AI and SaaS apps your employees are using across Google Workspace or Microsoft 365. Identify your org's managed apps and mark specific apps for review.
-              </p>
-            </div>
-            <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="relative">
-            
-              <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
-                <ShieldAlert className="h-6 w-6 text-primary" />
-                </div>
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Smart risk assessment</h3>
-              <p className="text-gray-600 text-sm leading-relaxed">
-              Get instant visibility into OAuth scopes and see clear risk indicators based on scope permissions per user.
-              </p>
-            </div>
-            <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="relative">
-                <div className="absolute -top-3 -right-3">
-                  <div className="bg-black text-white text-xs font-medium px-3 py-1 rounded-full flex items-center gap-1">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M13 3L4 14H13L11 21L20 10H11L13 3Z" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    Stitchflow Exclusive
-                  </div>
-                </div>
-              <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
-                <ChartNoAxesCombined className="h-6 w-6 text-primary" />
-                </div>
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Granular insights</h3>
-              <p className="text-gray-600 text-sm leading-relaxed">
-            View app insights by category, risk, and scope groups—all in one place. Catch risky behavior before it becomes a problem.
-              </p>
-            </div>
-            <div className="flex flex-col p-8 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="relative">
-                <div className="absolute -top-3 -right-3">
-                  <div className="bg-black text-white text-xs font-medium px-3 py-1 rounded-full flex items-center gap-1">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M13 3L4 14H13L11 21L20 10H11L13 3Z" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    Stitchflow Exclusive
-                  </div>
-                </div>
-              <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center mb-6">
-                <Bell className="h-6 w-6 text-primary" />
-                </div>
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Continuous monitoring & real-time alerts</h3>
-              <p className="text-gray-600 text-sm leading-relaxed">
-              Get notified when new apps or users appear, or when high-risk apps gain new users. Your environment, under control.
-              </p>
-            </div>
-          </div>
-      </div>
-
-      <FAQ />
-
-      <WhyStitchflow className="bg-[#f8f5f3] mb-8" />
-
-      <FeedbackChat/>
-
-      <footer className="bottom-0 left-0 right-0 flex justify-between items-center px-4 py-3 mt-4 bg-[#1a1a2e] text-white">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="hover:text-blue-500 transition-colors">
-            stitchflow.com
-          </Link>
-          <Link href="/privacy" className="hover:text-blue-500 transition-colors">
-            Privacy Policy
-          </Link>
-          <Link href="/terms-of-service" className="hover:text-blue-500 transition-colors">
-            Terms of Service
-          </Link>
-        </div>
-        <a 
-          href="mailto:contact@stitchflow.io" 
-          className="hover:text-blue-500 transition-colors"
-        >
-          contact@stitchflow.io
-        </a>
-      </footer>
-
-      
 
       {/* Update the custom styles */}
       <style jsx global>{`
@@ -4576,7 +2852,6 @@ export default function ShadowITDashboard() {
           background-color: #1f2937;
         }
       `}</style>
-      {showLoginModal && <LoginModal error={loginError} />}
     </div>
   )
 }
