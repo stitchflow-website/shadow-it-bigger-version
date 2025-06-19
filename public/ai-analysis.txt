@@ -1,0 +1,1058 @@
+/*
+================================================================================
+PART 1: SCORING RUBRIC DATA (scoring-rubric.ts)
+This file contains the definitions and logic for the risk scoring rubric.
+================================================================================
+*/
+// @ts-nocheck
+
+export interface ScoreDefinition {
+  score: number;
+  level: "Very Low" | "Low" | "Medium" | "High" | "Very High";
+  description: string;
+}
+
+export interface CriteriaRubric {
+  name: string;
+  definitions: ScoreDefinition[];
+}
+
+export interface CategoryRubric {
+  name: string;
+  weight: number; // default weight percentage
+  criteria: CriteriaRubric[];
+}
+
+export const riskScoringRubric: Record<string, CategoryRubric> = {
+  dataPrivacy: {
+    name: "Data Privacy & Handling",
+    weight: 30,
+    criteria: [
+      {
+        name: "Data Sensitivity",
+        definitions: [
+          { score: 1, level: "Very Low", description: "No sensitive data processed; only public information; clear data minimization practices" },
+          { score: 2, level: "Low",  description: "Limited sensitive data; strong retention policies; comprehensive deletion options" },
+          { score: 3, level: "Medium", description: "Moderate sensitive data exposure; adequate retention policies; some deletion options" },
+          { score: 4, level: "High", description: "Significant data exposure; vague retention policies; limited deletion options" },
+          { score: 5, level: "Very High", description: "Extensive sensitive/PII data; unclear retention; no deletion options; potential for data misuse" }
+        ]
+      },
+      {
+        name: "Data Residency",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Data stored in preferred regions; full control over location; comprehensive documentation" },
+          { score: 2, level: "Low", description: "Data in acceptable regions; good location controls; clear documentation" },
+          { score: 3, level: "Medium", description: "Limited regional options but clear documentation on data location" },
+          { score: 4, level: "High", description: "Data stored in concerning regions; limited location visibility; unclear documentation" },
+          { score: 5, level: "Very High", description: "Data in prohibited regions; no location control; no documentation on data residency" }
+        ]
+      },
+      {
+        name: "Training Data Usage",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Explicit opt-out from training; clear data usage policies; customer data never used for training" },
+          { score: 2, level: "Low", description: "Clear policies against using customer data for training; good transparency" },
+          { score: 3, level: "Medium", description: "Some clarity on training data usage; limited customer data use" },
+          { score: 4, level: "High", description: "Unclear policies on customer data usage for training" },
+          { score: 5, level: "Very High", description: "Customer data explicitly used for training; no opt-out options; unclear usage scope" }
+        ]
+      },
+      {
+        name: "Policy Transparency",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Comprehensive, clear policies; detailed privacy documentation; regular updates communicated" },
+          { score: 2, level: "Low", description: "Clear policies with good detail; accessible documentation; regular updates" },
+          { score: 3, level: "Medium", description: "Policies available but lack detail/clarity" },
+          { score: 4, level: "High", description: "Vague policies; limited documentation; unclear terms and conditions" },
+          { score: 5, level: "Very High", description: "No clear policies; missing documentation; frequently changing terms without notice" }
+        ]
+      }
+    ]
+  },
+  securityAccess: {
+    name: "Security & Access Controls",
+    weight: 25,
+    criteria: [
+      {
+        name: "Security Certifications",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Multiple relevant certifications (SOC2, ISO27001, etc.); regular audits; comprehensive compliance" },
+          { score: 2, level: "Low", description: "Strong security certifications relevant to the service" },
+          { score: 3, level: "Medium", description: "Some security certifications; adequate compliance framework" },
+          { score: 4, level: "High", description: "Limited certifications; unclear compliance status; outdated security standards" },
+          { score: 5, level: "Very High", description: "No relevant certifications; no compliance framework; poor security posture" }
+        ]
+      },
+      {
+        name: "Vulnerability Management",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Proactive vulnerability management; regular penetration testing; rapid response to issues" },
+          { score: 2, level: "Low", description: "Good vulnerability management; regular security assessments; timely patching" },
+          { score: 3, level: "Medium", description: "Standard vulnerability handling procedures" },
+          { score: 4, level: "High", description: "Reactive vulnerability management; slow response times; irregular assessments" },
+          { score: 5, level: "Very High", description: "Poor vulnerability management; no regular assessments; slow or no response to security issues" }
+        ]
+      },
+      {
+        name: "Authentication & Access",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Advanced authentication (MFA, SSO); granular role-based access; comprehensive audit logs" },
+          { score: 2, level: "Low", description: "Strong authentication methods; good role-based permissions; audit capabilities" },
+          { score: 3, level: "Medium", description: "Standard auth methods; basic role-based permissions" },
+          { score: 4, level: "High", description: "Basic authentication; limited access controls; poor permission management" },
+          { score: 5, level: "Very High", description: "Weak authentication; no role-based access; shared accounts; no audit trail" }
+        ]
+      },
+      {
+        name: "Breach History",
+        definitions: [
+          { score: 1, level: "Very Low", description: "No known breaches; excellent security track record; proactive security measures" },
+          { score: 2, level: "Low", description: "No major breaches; transparent about minor incidents; strong remediation process" },
+          { score: 3, level: "Medium", description: "Past minor breaches with clear resolution and communication" },
+          { score: 4, level: "High", description: "Recent or multiple breaches; poor communication or resolution" },
+          { score: 5, level: "Very High", description: "Multiple major breaches; lack of transparency; history of unresolved security issues" }
+        ]
+      }
+    ]
+  },
+  businessImpact: {
+    name: "Business Impact & Criticality",
+    weight: 20,
+    criteria: [
+      {
+        name: "Operational Importance",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Non-essential tool; low impact on business operations if unavailable" },
+          { score: 2, level: "Low", description: "Helpful tool but not critical; workarounds are easily available" },
+          { score: 3, level: "Medium", description: "Important for specific team functions; moderate operational impact" },
+          { score: 4, level: "High", description: "Critical for departmental operations; significant impact on productivity" },
+          { score: 5, level: "Very High", description: "Essential for core business functions; high impact across the organization" }
+        ]
+      },
+      {
+        name: "Data Criticality",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Handles public or non-sensitive data only" },
+          { score: 2, level: "Low", description: "Handles internal, non-confidential data" },
+          { score: 3, level: "Medium", description: "Handles confidential business data" },
+          { score: 4, level: "High", description: "Handles highly sensitive business data or some PII" },
+          { score: 5, level: "Very High", description: "Handles extensive PII, financial, or strategic data" }
+        ]
+      },
+      {
+        name: "User Base & Scope",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Used by a single user or a very small, isolated team" },
+          { score: 2, level: "Low", description: "Used by a single, non-critical team" },
+          { score: 3, level: "Medium", description: "Used by a specific department or multiple teams" },
+          { score: 4, level: "High", description: "Widely used across multiple departments" },
+          { score: 5, level: "Very High", description: "Company-wide adoption; essential for cross-functional collaboration" }
+        ]
+      }
+    ]
+  },
+  aiGovernance: {
+    name: "AI Governance & Transparency",
+    weight: 15,
+    criteria: [
+      {
+        name: "Model Transparency",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Full transparency on model architecture, data, and limitations; clear explainability" },
+          { score: 2, level: "Low", description: "Good documentation on model purpose and function; some explainability features" },
+          { score: 3, level: "Medium", description: "Basic information about the AI model and its function" },
+          { score: 4, level: "High", description: "Limited information; model is a 'black box' with little to no explanation" },
+          { score: 5, level: "Very High", description: "No transparency; proprietary model with no information on function or data" }
+        ]
+      },
+      {
+        name: "Human Oversight",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Clear and mandatory human review processes for critical decisions; strong oversight" },
+          { score: 2, level: "Low", description: "Human review is available and encouraged for AI-driven outputs" },
+          { score: 3, level: "Medium", description: "Some level of human oversight in place" },
+          { score: 4, level: "High", description: "Limited or optional human review; heavy reliance on automated decisions" },
+          { score: 5, level: "Very High", description: "No human oversight; fully automated decision-making in critical areas" }
+        ]
+      },
+      {
+        name: "Model Provenance",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Proprietary, well-documented model; clear data sourcing and training procedures" },
+          { score: 2, level: "Low", description: "Well-known, reputable third-party model with clear documentation" },
+          { score: 3, level: "Medium", description: "Reputable third-party model but with limited documentation" },
+          { score: 4, level: "High", description: "Lesser-known third-party model or unclear model origins" },
+          { score: 5, level: "Very High", description: "Unknown model provenance; no information on data sources or third-party providers" }
+        ]
+      },
+      {
+        name: "User Opt-Out Options",
+        definitions: [
+          { score: 1, level: "Very Low", "description": "Easy, granular opt-out for all AI features and data collection; clear user control" },
+          { score: 2, level: "Low", "description": "Clear opt-out options available for major AI features" },
+          { score: 3, level: "Medium", "description": "Some opt-out capabilities, but may be limited or difficult to access" },
+          { score: 4, level: "High", "description": "Limited or no opt-out for AI features; data collection is mandatory" },
+          { score: 5, level: "Very High", "description": "No opt-out whatsoever; AI features are forced and data collection is non-negotiable" }
+        ]
+      }
+    ]
+  },
+  vendorProfile: {
+    name: "Vendor Profile & Reliability",
+    weight: 10,
+    criteria: [
+      {
+        name: "Company Stability",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Publicly traded or large, stable private company with strong financials" },
+          { score: 2, level: "Low", description: "Well-established private company with a strong track record and funding" },
+          { score: 3, level: "Medium", description: "Established company with stable operations" },
+          { score: 4, level: "High", description: "Early-stage startup or company with uncertain financial stability" },
+          { score: 5, level: "Very High", description: "Very new company, open source project with no backing, or signs of financial distress" }
+        ]
+      },
+      {
+        name: "Support & Documentation",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Excellent, 24/7 support with enterprise SLA; comprehensive, well-maintained documentation" },
+          { score: 2, level: "Low", description: "Reliable support with good response times; clear and helpful documentation" },
+          { score: 3, level: "Medium", description: "Standard support channels; adequate documentation available" },
+          { score: 4, level: "High", description: "Limited support options; sparse or outdated documentation" },
+          { score: 5, level: "Very High", description: "No official support; community-only help; no or poor documentation" }
+        ]
+      },
+      {
+        name: "Integration Complexity",
+        definitions: [
+          { score: 1, level: "Very Low", description: "Seamless integration with existing systems; minimal setup required" },
+          { score: 2, level: "Low", description: "Straightforward integration with clear instructions" },
+          { score: 3, level: "Medium", description: "Requires some effort to integrate; standard complexity" },
+          { score: 4, level: "High", description: "Complex integration process; requires significant technical resources" },
+          { score: 5, level: "Very High", description: "Very difficult to integrate; high risk of compatibility issues" }
+        ]
+      }
+    ]
+  }
+};
+
+export function getScoreDefinition(category: string, criteria: string, score: number): ScoreDefinition | null {
+  const categoryRubric = riskScoringRubric[category];
+  if (!categoryRubric) return null;
+
+  const criteriaRubric = categoryRubric.criteria.find(c => c.name === criteria);
+  if (!criteriaRubric) return null;
+
+  const definition = criteriaRubric.definitions.find(d => d.score === score);
+  return definition || null;
+}
+
+/*
+================================================================================
+PART 2: PORTABLE REACT COMPONENT (risk-scoring-tab.tsx)
+This is the self-contained component for the Risk Scoring Tab.
+================================================================================
+*/
+
+import React, { useMemo } from 'react';
+
+// You will need to install these dependencies in your project:
+// npm install lucide-react
+//
+// Also, ensure you have set up shadcn/ui or have equivalent components
+// for Card, CardHeader, CardContent, CardTitle, CardDescription, and Badge.
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"; // Adjust this path to your project structure
+import { Badge } from "@/components/ui/badge"; // Adjust this path to your project structure
+
+// --- TYPE DEFINITIONS ---
+
+interface App {
+  [key: string]: string;
+}
+
+interface OrgSettings {
+  bucketWeights: {
+    dataPrivacy: number;
+    securityAccess: number;
+    businessImpact: number;
+    aiGovernance: number;
+    vendorProfile: number;
+  };
+  aiMultipliers: {
+    native: Record<string, number>;
+    partial: Record<string, number>;
+    none: Record<string, number>;
+  };
+  scopeMultipliers: {
+    high: Record<string, number>;
+    medium: Record<string, number>;
+    low: Record<string, number>;
+  };
+}
+
+interface RiskScoringTabProps {
+  app: App | null;
+  allApps: App[];
+  orgSettings: OrgSettings;
+}
+
+// --- MAIN COMPONENT ---
+
+export const RiskScoringTab: React.FC<RiskScoringTabProps> = ({ app, allApps, orgSettings }) => {
+  
+  // Memoize scoring criteria to ensure it only updates when orgSettings change
+  const scoringCriteria = useMemo(() => ({
+    dataPrivacy: {
+      name: "Data Privacy & Handling",
+      weight: orgSettings.bucketWeights.dataPrivacy,
+      criteria: [
+        { field: "Data Sensitivity & Processing", rubricKey: "Data Sensitivity" },
+        { field: "Data Residency & Control", rubricKey: "Data Residency" },
+        { field: "Training Data Usage", rubricKey: "Training Data Usage" },
+        { field: "Policy Transparency", rubricKey: "Policy Transparency" },
+      ],
+      averageField: "Average 1"
+    },
+    securityAccess: {
+      name: "Security & Access Controls",
+      weight: orgSettings.bucketWeights.securityAccess,
+      criteria: [
+        { field: "Security Certification", rubricKey: "Security Certifications" },
+        { field: "Vulnerability Management", rubricKey: "Vulnerability Management" },
+        { field: "Authentication & Access Controls", rubricKey: "Authentication & Access" },
+        { field: "Breach History", rubricKey: "Breach History" },
+      ],
+      averageField: "Average 2"
+    },
+    businessImpact: {
+      name: "Business Impact & Criticality",
+      weight: orgSettings.bucketWeights.businessImpact,
+      criteria: [
+        { field: "Operational Importance", rubricKey: "Operational Importance" },
+        { field: "Data Criticality", rubricKey: "Data Criticality" },
+        { field: "User Base & Scope", rubricKey: "User Base & Scope" },
+      ],
+      averageField: "Average 3"
+    },
+    aiGovernance: {
+      name: "AI Governance & Transparency",
+      weight: orgSettings.bucketWeights.aiGovernance,
+      criteria: [
+        { field: "Model Transparency", rubricKey: "Model Transparency" },
+        { field: "Human Oversight", rubricKey: "Human Oversight" },
+        { field: "Model Provenance & Type", rubricKey: "Model Provenance" },
+        { field: "User Opt-Out Options", rubricKey: "User Opt-Out Options" },
+      ],
+      averageField: "Average 4"
+    },
+    vendorProfile: {
+      name: "Vendor Profile & Reliability",
+      weight: orgSettings.bucketWeights.vendorProfile,
+      criteria: [
+        { field: "Company Stability", rubricKey: "Company Stability" },
+        { field: "Support & Documentation", rubricKey: "Support & Documentation" },
+        { field: "Integration Complexity", rubricKey: "Integration Complexity" },
+      ],
+      averageField: "Average 5"
+    }
+  }), [orgSettings.bucketWeights]);
+
+  // All scoring calculations are memoized to re-run only when dependencies change
+  const scoringCalculations = useMemo(() => {
+    if (!app) return null;
+    
+    const finalScore = app?.["Final Risk Score - Aggregated"];
+    const aiStatus = app?.["Gen AI-Native"]?.toLowerCase() || "";
+    
+    const scopeRiskLevels = [
+      'HIGH', 'HIGH', 'HIGH', 'LOW', 'MEDIUM', 'MEDIUM', 'LOW', 'LOW', 'MEDIUM', 'HIGH',
+      'MEDIUM', 'MEDIUM', 'HIGH', 'HIGH', 'HIGH', 'HIGH', 'HIGH', 'MEDIUM', 'MEDIUM', 'MEDIUM',
+      'MEDIUM', 'HIGH', 'HIGH', 'LOW', 'HIGH', 'LOW', 'LOW', 'MEDIUM', 'MEDIUM', 'MEDIUM',
+      'HIGH', 'HIGH', 'MEDIUM', 'HIGH', 'LOW', 'HIGH', 'MEDIUM', 'MEDIUM', 'HIGH', 'MEDIUM',
+      'MEDIUM', 'MEDIUM', 'MEDIUM', 'HIGH', 'HIGH', 'MEDIUM', 'HIGH', 'HIGH', 'MEDIUM', 'HIGH',
+      'MEDIUM', 'HIGH', 'MEDIUM', 'LOW', 'MEDIUM', 'MEDIUM', 'MEDIUM', 'MEDIUM', 'HIGH', 'HIGH', 'HIGH'
+    ];
+    
+    const getScopeRisk = () => {
+      const currentAppIndex = allApps.findIndex((appItem: App) => appItem["Tool Name"] === app?.["Tool Name"]);
+      if (currentAppIndex >= 0 && currentAppIndex < scopeRiskLevels.length) {
+        return scopeRiskLevels[currentAppIndex];
+      }
+      return 'MEDIUM';
+    };
+    
+    const currentScopeRisk = getScopeRisk();
+    
+    const getScopeMultipliers = (scopeRisk: string) => {
+      if (scopeRisk === 'HIGH') return orgSettings.scopeMultipliers.high;
+      if (scopeRisk === 'MEDIUM') return orgSettings.scopeMultipliers.medium;
+      return orgSettings.scopeMultipliers.low;
+    };
+
+    const scopeMultipliers = getScopeMultipliers(currentScopeRisk);
+    
+    const getAIMultipliers = (status: string) => {
+      const lowerStatus = status.toLowerCase().trim();
+      if (lowerStatus.includes("partial")) return orgSettings.aiMultipliers.partial;
+      if (lowerStatus.includes("no") || lowerStatus === "" || lowerStatus.includes("not applicable")) return orgSettings.aiMultipliers.none;
+      if (lowerStatus.includes("genai") || lowerStatus.includes("native") || lowerStatus.includes("yes")) return orgSettings.aiMultipliers.native;
+      return orgSettings.aiMultipliers.none;
+    };
+
+    const multipliers = getAIMultipliers(aiStatus);
+    
+    const calculateBaseScore = () => {
+      return Object.values(scoringCriteria).reduce((total, category) => {
+        const numScore = app?.[category.averageField] ? Number.parseFloat(app[category.averageField]) : 0;
+        return total + (numScore * (category.weight / 100) * 2);
+      }, 0);
+    };
+
+    const calculateAIScore = () => {
+      return Object.entries(scoringCriteria).reduce((total, [key, category]) => {
+        const numScore = app?.[category.averageField] ? Number.parseFloat(app[category.averageField]) : 0;
+        const weightedScore = numScore * (category.weight / 100) * 2;
+        const aiMultiplier = multipliers[key as keyof typeof multipliers] as number;
+        return total + (weightedScore * aiMultiplier);
+      }, 0);
+    };
+    
+    const calculateScopeScore = () => {
+      return Object.entries(scoringCriteria).reduce((total, [key, category]) => {
+        const numScore = app?.[category.averageField] ? Number.parseFloat(app[category.averageField]) : 0;
+        const weightedScore = numScore * (category.weight / 100) * 2;
+        const aiMultiplier = multipliers[key as keyof typeof multipliers] as number;
+        const scopeMultiplier = scopeMultipliers[key as keyof typeof scopeMultipliers] as number;
+        return total + (weightedScore * aiMultiplier * scopeMultiplier);
+      }, 0);
+    };
+    
+    const baseScore = calculateBaseScore();
+    const aiScore = calculateAIScore();
+    const scopeScore = calculateScopeScore();
+    const genAIAmplification = baseScore > 0 ? aiScore / baseScore : 1.0;
+    const scopeAmplification = aiScore > 0 ? scopeScore / aiScore : 1.0;
+    const totalAppRiskScore = baseScore * genAIAmplification * scopeAmplification;
+    
+    return {
+      finalScore, aiStatus, currentScopeRisk, scopeMultipliers, multipliers,
+      baseScore, aiScore, scopeScore, genAIAmplification, scopeAmplification, totalAppRiskScore
+    };
+  }, [app, allApps, orgSettings, scoringCriteria]);
+
+  if (!scoringCalculations || !app) {
+    return <div>Loading scoring data...</div>;
+  }
+    
+  const {
+    finalScore, aiStatus, currentScopeRisk, scopeMultipliers, multipliers,
+    baseScore, aiScore, scopeScore, genAIAmplification, scopeAmplification, totalAppRiskScore
+  } = scoringCalculations;
+    
+  const appsWithoutScopeRisk = [ '3CX', 'Aha!', 'Atlassian Cloud', 'Employment Hero', 'Employment Law Practical Handbook', 'Keeper Password Manager', 'Monday OneDrive', 'MyFiles (Entra)', 'Salesforce', 'Shop.app' ];
+  const hasScopeRisk = !appsWithoutScopeRisk.includes(app["Tool Name"] || "");
+    
+  return (
+    <div className="space-y-8">
+      {/* Total App Risk Score Section */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">Total App Risk Score</h3>
+            <p className="text-sm text-gray-500">Comprehensive risk assessment incorporating base score, AI impact, and scope effects</p>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <Badge variant="outline" className="text-2xl px-6 py-3 border-gray-400 bg-gray-50 text-gray-900 font-bold">
+              {totalAppRiskScore.toFixed(1)}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
+            <div className="font-medium text-gray-900 text-sm">Total Risk Calculation</div>
+            <div className="text-xs text-gray-600">
+              {hasScopeRisk ? (
+                <>Base Score ({baseScore.toFixed(1)}) × GenAI Amplification ({genAIAmplification.toFixed(1)}x) × Scope Amplification ({scopeAmplification.toFixed(1)}x) = {totalAppRiskScore.toFixed(1)}</>
+              ) : (
+                <>Base Score ({baseScore.toFixed(1)}) × GenAI Amplification ({genAIAmplification.toFixed(1)}x) = {totalAppRiskScore.toFixed(1)}</>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Scope Risk Section */}
+      {hasScopeRisk ? (
+        <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Scope Risk Assessment</h3>
+                    <p className="text-sm text-gray-500">Risk multipliers based on application scope and user base</p>
+                </div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-shrink-0">
+                    <Badge variant="secondary" className="text-sm bg-gray-100 text-gray-700">
+                        Scope Risk: {currentScopeRisk}
+                    </Badge>
+                    <Badge variant="outline" className="text-sm px-4 py-2 border-gray-400 bg-gray-900 text-white font-bold">
+                        Scope Amplification: {scopeAmplification.toFixed(1)}x
+                    </Badge>
+                </div>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
+                    <div>
+                        <div className="font-medium text-gray-900 text-sm">Scope Amplification Factor</div>
+                        <div className="text-xs text-gray-600">
+                            Scope Score ({scopeScore.toFixed(1)}) ÷ AI Score ({aiScore.toFixed(1)}) = {scopeAmplification.toFixed(1)}x
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                {Object.entries(scoringCriteria).map(([categoryKey, category]) => {
+                    const scopeMultiplier = scopeMultipliers[categoryKey as keyof typeof scopeMultipliers] as number;
+                    const aiMultiplier = multipliers[categoryKey as keyof typeof multipliers] as number;
+                    const numScore = app?.[category.averageField] ? Number.parseFloat(app[category.averageField]) : 0;
+                    const baseCatScore = numScore * (category.weight / 100) * 2;
+                    const aiCatScore = baseCatScore * aiMultiplier;
+                    const scopeCatScore = aiCatScore * scopeMultiplier;
+                    const isAffected = scopeMultiplier > 1.0;
+                    return (
+                        <Card key={categoryKey} className="p-3 border-gray-200">
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="font-medium text-xs text-gray-900 leading-tight">{category.name}</div>
+                                    <Badge variant="secondary" className={`text-xs px-2 py-1 ${isAffected ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                                        ×{scopeMultiplier}
+                                    </Badge>
+                                </div>
+                                <div className="bg-gray-50 rounded p-2">
+                                    <div className="text-xs text-gray-600 space-y-1">
+                                        <div className="flex justify-between"><span>AI Score:</span><span className="font-medium">{aiCatScore.toFixed(1)}</span></div>
+                                        <div className="border-t border-gray-200 pt-1 flex justify-between font-medium"><span>Scope Score:</span><span className={isAffected ? 'text-gray-900' : 'text-gray-600'}>{scopeCatScore.toFixed(1)}</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+                    );
+                })}
+            </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Scope Risk Assessment</h3>
+                    <p className="text-sm text-gray-500">Risk multipliers based on application scope and user base</p>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                    <Badge variant="secondary" className="text-sm bg-gray-100 text-gray-700">Not Applicable</Badge>
+                </div>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="text-center text-gray-600"><p className="text-sm">Scope risk data is not available for this application.</p></div>
+            </div>
+        </div>
+      )}
+
+      {/* GenAI Risk Section */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">GenAI Risk Assessment</h3>
+            <p className="text-sm text-gray-500">AI-specific risk calculations and amplification factor</p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-shrink-0">
+            <Badge variant="secondary" className="text-sm bg-gray-100 text-gray-700">AI Status: {aiStatus}</Badge>
+            <Badge variant="outline" className="text-sm px-4 py-2 border-gray-400 bg-gray-900 text-white font-bold">GenAI Amplification: {genAIAmplification.toFixed(1)}x</Badge>
+          </div>
+        </div>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
+                <div>
+                    <div className="font-medium text-gray-900 text-sm">GenAI Amplification Factor</div>
+                    <div className="text-xs text-gray-600">AI Score ({aiScore.toFixed(1)}) ÷ Base Score ({baseScore.toFixed(1)}) = {genAIAmplification.toFixed(1)}x</div>
+                </div>
+            </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+            {Object.entries(scoringCriteria).map(([categoryKey, category]) => {
+                const multiplier = multipliers[categoryKey as keyof typeof multipliers] as number;
+                const numScore = app?.[category.averageField] ? Number.parseFloat(app[category.averageField]) : 0;
+                const baseCatScore = numScore * (category.weight / 100) * 2;
+                const adjustedScore = baseCatScore * multiplier;
+                const isAffected = multiplier > 1.0;
+                return (
+                    <Card key={categoryKey} className="p-3 border-gray-200">
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <div className="font-medium text-xs text-gray-900 leading-tight">{category.name}</div>
+                                <Badge variant="secondary" className={`text-xs px-2 py-1 ${isAffected ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>×{multiplier}</Badge>
+                            </div>
+                            <div className="bg-gray-50 rounded p-2">
+                                <div className="text-xs text-gray-600 space-y-1">
+                                    <div className="flex justify-between"><span>Base:</span><span className="font-medium">{baseCatScore.toFixed(1)}</span></div>
+                                    <div className="border-t border-gray-200 pt-1 flex justify-between font-medium"><span>AI Score:</span><span className={isAffected ? 'text-gray-900' : 'text-gray-600'}>{adjustedScore.toFixed(1)}</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+                );
+            })}
+        </div>
+      </div>
+
+      {/* Base Risk Assessment */}
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Base Risk Assessment</h3>
+            <p className="text-sm text-gray-500">Detailed scoring across all risk categories</p>
+          </div>
+          {finalScore && (
+            <Badge variant="outline" className="text-sm px-4 py-2 border-gray-400 bg-gray-50 text-gray-900 font-bold flex-shrink-0">
+              App Risk Score: {Number.parseFloat(finalScore).toFixed(1)}
+            </Badge>
+          )}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {Object.entries(scoringCriteria).map(([categoryKey, category]) => {
+            const averageScore = app?.[category.averageField];
+            const numScore = averageScore ? Number.parseFloat(averageScore) : 0;
+            const weightedScore = numScore * (category.weight / 100) * 2;
+            return (
+              <Card key={categoryKey} className="h-full border-gray-200">
+                <CardHeader className="pb-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-base mb-2 text-gray-900">{category.name}</CardTitle>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600">{category.weight}% weight</Badge>
+                          <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600">Avg: {numScore > 0 ? numScore.toFixed(1) : 'N/A'}/5</Badge>
+                        </div>
+                        <div className="text-xs text-gray-500">Formula: {numScore > 0 ? numScore.toFixed(1) : 'N/A'} × {category.weight}% × 2</div>
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="ml-2 bg-gray-900 text-white">{weightedScore > 0 ? weightedScore.toFixed(1) : 'N/A'}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
+                    {category.criteria.map((criterion) => {
+                      const score = app?.[criterion.field];
+                      const numericScore = score ? Number.parseFloat(score) : 0;
+                      const rubricDefinition = getScoreDefinition(categoryKey, criterion.rubricKey, numericScore);
+                      return (
+                        <div key={criterion.field} className="flex items-start gap-3">
+                          <div className="flex flex-col items-center flex-shrink-0">
+                            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-900 text-white text-xs font-medium">{numericScore || 'N/A'}</div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm mb-1 text-gray-900">{criterion.rubricKey}</div>
+                            <div className="text-xs text-gray-600 line-clamp-2">{rubricDefinition?.description || 'No scoring information available'}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/*
+================================================================================
+PART 3: EXAMPLE USAGE
+Here is how you would use the <RiskScoringTab /> component in a parent page.
+================================================================================
+*/
+
+/*
+import { useState, useEffect } from 'react';
+import { RiskScoringTab } from './path/to/your/components/risk-scoring-tab';
+
+// --- MOCK DATA (In a real app, this would come from an API) ---
+
+const MOCK_APP = {
+    "Tool Name": "Sample AI Tool",
+    "Gen AI-Native": "GenAI Native",
+    "Final Risk Score - Aggregated": "4.5",
+    "Average 1": "3.5",
+    "Average 2": "4.1",
+    "Average 3": "2.8",
+    "Average 4": "4.5",
+    "Average 5": "3.0",
+    "Data Sensitivity & Processing": "4",
+    "Data Residency & Control": "3",
+    "Training Data Usage": "5",
+    "Policy Transparency": "2",
+    "Security Certification": "4",
+    "Vulnerability Management": "4",
+    "Authentication & Access Controls": "5",
+    "Breach History": "3",
+    "Operational Importance": "3",
+    "Data Criticality": "4",
+    "User Base & Scope": "2",
+    "Model Transparency": "5",
+    "Human Oversight": "4",
+    "Model Provenance & Type": "5",
+    "User Opt-Out Options": "4",
+    "Company Stability": "3",
+    "Support & Documentation": "3",
+    "Integration Complexity": "3",
+    // ... other app fields
+};
+
+const MOCK_ALL_APPS = [MOCK_APP]; // In a real app, this would be the full list
+
+const MOCK_ORG_SETTINGS = {
+    bucketWeights: { dataPrivacy: 30, securityAccess: 25, businessImpact: 20, aiGovernance: 15, vendorProfile: 10 },
+    aiMultipliers: {
+        native: { dataPrivacy: 1.5, securityAccess: 1.25, businessImpact: 1.0, aiGovernance: 1.5, vendorProfile: 1.0 },
+        partial: { dataPrivacy: 1.2, securityAccess: 1.1, businessImpact: 1.0, aiGovernance: 1.2, vendorProfile: 1.0 },
+        none: { dataPrivacy: 1.0, securityAccess: 1.0, businessImpact: 1.0, aiGovernance: 1.0, vendorProfile: 1.0 }
+    },
+    scopeMultipliers: {
+        high: { dataPrivacy: 1.3, securityAccess: 1.0, businessImpact: 1.0, aiGovernance: 1.3, vendorProfile: 1.0 },
+        medium: { dataPrivacy: 1.15, securityAccess: 1.0, businessImpact: 1.0, aiGovernance: 1.15, vendorProfile: 1.0 },
+        low: { dataPrivacy: 1.0, securityAccess: 1.0, businessImpact: 1.0, aiGovernance: 1.0, vendorProfile: 1.0 }
+    }
+};
+
+
+// --- EXAMPLE PARENT COMPONENT ---
+
+export default function AppDetailPage() {
+    // In a real application, you would fetch this data
+    const [app, setApp] = useState(MOCK_APP);
+    const [allApps, setAllApps] = useState(MOCK_ALL_APPS);
+    const [orgSettings, setOrgSettings] = useState(MOCK_ORG_SETTINGS);
+
+    // useEffect to fetch data would go here...
+
+    return (
+        <div className="p-4">
+             { // Render your other page components here... }
+
+             <RiskScoringTab 
+                app={app}
+                allApps={allApps}
+                orgSettings={orgSettings}
+             />
+        </div>
+    );
+}
+
+*/
+
+Of course. Let's break down the three pieces of data the RiskScoringTab component needs to work, explained in simple words.Think of the component as a calculator. To do its job, you need to give it the right numbers and rules. Here are the three inputs it requires:
+1. The app Object
+What it is: This is an object containing all the information for the single application that you are currently looking at.
+What it's for: This is the most important piece of data. The component uses it to get the name of the tool, its AI status, and—most importantly—the raw average scores for each risk category (like "Average 1", "Average 2", etc.) which are the foundation for all the calculations.
+In simple terms: It’s the "stat sheet" for one specific app.
+2. The allApps Array
+What it is: This is a list (or array) that contains the data for every single application in your database, including the one you're currently viewing. Each item in the list is an app object, just like the one described above.
+What it's for: This might seem strange, but the component has one very specific reason for needing this: to figure out the Scope Risk (High, Medium, or Low). In your app, the scope risk is determined by the app's position in the original master list. The component finds the current app within this complete list to determine its index and assign the correct scope risk.
+In simple terms: It’s the "master list" of all your apps, used to determine the scope risk for the specific app you're viewing.
+3. The orgSettings Object
+What it is: This object holds all of your organization's custom scoring rules. It tells the component how your company specifically wants to weigh and measure risk. It has three parts inside it:
+bucketWeights: This part defines the importance of each risk category. For example, it might say that "Data Privacy" accounts for 30% of the score, while "Vendor Profile" is only 10%.
+aiMultipliers: These are the risk multipliers for AI. It tells the component how much to increase the risk score if an app is "GenAI Native" versus one that has "No GenAI".
+scopeMultipliers: These are the risk multipliers for an app's permissions or scope. It defines how much the risk should be amplified if an app has "High" scope versus "Low" scope.
+In simple terms: It’s the "rulebook" that the component uses to apply your organization's unique risk appetite to the calculations.
+So, by providing these three pieces of data—the specific app's stats, the master list of all apps, and your custom rulebook—you give the component everything it needs to perform all its calculations and display the entire risk scoring interface correctly.
+
+/*
+================================================================================
+PART 1: PORTABLE REACT COMPONENT (organization-settings-dialog.tsx)
+This is the self-contained component for the Organization Score Settings Dialog.
+================================================================================
+*/
+
+import React, { useState, useEffect } from 'react';
+
+// You will need to install these dependencies in your project:
+// npm install lucide-react
+//
+// Also, ensure you have set up shadcn/ui or have equivalent components
+// for Dialog, Button, Input, Label, etc.
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Settings } from "lucide-react";
+
+// --- TYPE DEFINITIONS ---
+
+interface BucketWeights {
+    dataPrivacy: number;
+    securityAccess: number;
+    businessImpact: number;
+    aiGovernance: number;
+    vendorProfile: number;
+}
+
+interface MultiplierCategory {
+    dataPrivacy: number;
+    securityAccess: number;
+    businessImpact: number;
+    aiGovernance: number;
+    vendorProfile: number;
+}
+
+interface OrgSettings {
+    bucketWeights: BucketWeights;
+    aiMultipliers: {
+        native: MultiplierCategory;
+        partial: MultiplierCategory;
+        none: MultiplierCategory;
+    };
+    scopeMultipliers: {
+        high: MultiplierCategory;
+        medium: MultiplierCategory;
+        low: MultiplierCategory;
+    };
+}
+
+interface OrganizationSettingsDialogProps {
+  initialSettings: OrgSettings;
+  onSave: (newSettings: OrgSettings) => void;
+}
+
+// --- MAIN COMPONENT ---
+
+export const OrganizationSettingsDialog: React.FC<OrganizationSettingsDialogProps> = ({ initialSettings, onSave }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [tempSettings, setTempSettings] = useState(initialSettings);
+
+  // When the dialog is opened, reset tempSettings to match the initial ones
+  useEffect(() => {
+    if (isOpen) {
+      setTempSettings(initialSettings);
+    }
+  }, [isOpen, initialSettings]);
+
+  const handleSave = () => {
+    const totalWeight = Object.values(tempSettings.bucketWeights).reduce((sum, weight) => sum + weight, 0);
+    if (totalWeight === 100) {
+      onSave(tempSettings);
+      setIsOpen(false);
+    } else {
+      // This case is handled by disabling the button, but as a safeguard:
+      alert("Total weight must be 100%.");
+    }
+  };
+  
+  const totalWeight = Object.values(tempSettings.bucketWeights).reduce((sum, weight) => sum + weight, 0);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Settings className="h-4 w-4 mr-2" />
+          Organization Score Settings
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col p-4">
+        <DialogHeader className="flex-shrink-0 mb-4">
+          <DialogTitle>Organization Score Settings</DialogTitle>
+          <DialogDescription>
+            Customize scoring weights and multipliers for your organization's risk assessment methodology.
+          </DialogDescription>
+          <div className="mt-3 p-2 bg-blue-50 border-l-4 border-blue-400 rounded">
+            <p className="text-sm text-blue-700">
+              <span className="font-medium">Note:</span> Any changes to these settings will update risk scores across the application.
+            </p>
+          </div>
+        </DialogHeader>
+        
+        <div className="flex-1 overflow-y-auto space-y-5 px-2">
+          {/* Bucket Weights Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold ml-1">Category Weights</h3>
+            <p className="text-sm text-gray-600 ml-1">Adjust the importance of each risk category. Total must equal 100%.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(tempSettings.bucketWeights).map(([key, value]) => (
+                <div className="space-y-1" key={key}>
+                  <Label htmlFor={key} className="text-sm font-medium capitalize">{key.replace(/([A-Z])/g, ' $1')}</Label>
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      id={key}
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={value}
+                      onChange={(e) => setTempSettings(prev => ({
+                        ...prev,
+                        bucketWeights: { ...prev.bucketWeights, [key]: Number(e.target.value) }
+                      }))}
+                      className="w-20 h-9 text-sm px-3 text-center"
+                    />
+                    <span className="text-sm text-gray-500">%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+             {totalWeight !== 100 ? (
+                <div className="p-3 bg-red-50 border border-red-200 rounded">
+                    <p className="text-sm text-red-700">⚠️ Total weight is {totalWeight}%. Must equal 100% to save.</p>
+                </div>
+                ) : (
+                <div className="p-3 bg-green-50 border border-green-200 rounded">
+                    <p className="text-sm text-green-700">✅ Total weight: {totalWeight}%</p>
+                </div>
+            )}
+          </div>
+          
+          {/* AI Multipliers Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold ml-1">GenAI Risk Multipliers</h3>
+            <p className="text-sm text-gray-600 ml-1">Adjust risk multipliers based on GenAI's impact on an app.</p>
+            {Object.entries(tempSettings.aiMultipliers).map(([level, multipliers]) => (
+              <div key={level} className="space-y-3">
+                <h4 className="text-base font-medium text-gray-900 ml-1 capitalize">{level}</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                  {Object.entries(multipliers).map(([cat, val]) => (
+                    <div className="space-y-1" key={cat}>
+                      <Label className="text-sm capitalize">{cat.replace(/([A-Z])/g, ' $1')}</Label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        min="1.0"
+                        max="3.0"
+                        value={val}
+                        onChange={(e) => setTempSettings(prev => ({
+                          ...prev,
+                          aiMultipliers: { ...prev.aiMultipliers, [level]: { ...prev.aiMultipliers[level], [cat]: Number(e.target.value) } }
+                        }))}
+                        className="h-9 text-sm px-3 text-center"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {/* Scope Risk Multipliers Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold ml-1">Scope Risk Multipliers</h3>
+            <p className="text-sm text-gray-600 ml-1">Adjust risk multipliers based on an application's scope permissions.</p>
+             {Object.entries(tempSettings.scopeMultipliers).map(([level, multipliers]) => (
+              <div key={level} className="space-y-3">
+                <h4 className="text-base font-medium text-gray-900 ml-1 capitalize">{level}</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                  {Object.entries(multipliers).map(([cat, val]) => (
+                    <div className="space-y-1" key={cat}>
+                      <Label className="text-sm capitalize">{cat.replace(/([A-Z])/g, ' $1')}</Label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        min="1.0"
+                        max="3.0"
+                        value={val}
+                        onChange={(e) => setTempSettings(prev => ({
+                          ...prev,
+                          scopeMultipliers: { ...prev.scopeMultipliers, [level]: { ...prev.scopeMultipliers[level], [cat]: Number(e.target.value) } }
+                        }))}
+                        className="w-full h-9 text-sm px-3 text-center"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        <div className="flex justify-end space-x-2 pt-3 px-2 border-t bg-white flex-shrink-0">
+          <Button variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
+          <Button onClick={handleSave} disabled={totalWeight !== 100}>Save Settings</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+
+/*
+================================================================================
+PART 2: EXAMPLE USAGE
+Here is how you would use the <OrganizationSettingsDialog /> component.
+================================================================================
+*/
+
+/*
+import React, { useState } from 'react';
+import { OrganizationSettingsDialog } from './path/to/your/components/organization-settings-dialog';
+
+// --- MOCK DATA (In a real app, this would come from an API or state management) ---
+
+const MOCK_ORG_SETTINGS = {
+    bucketWeights: { dataPrivacy: 30, securityAccess: 25, businessImpact: 20, aiGovernance: 15, vendorProfile: 10 },
+    aiMultipliers: {
+        native: { dataPrivacy: 1.5, securityAccess: 1.25, businessImpact: 1.0, aiGovernance: 1.5, vendorProfile: 1.0 },
+        partial: { dataPrivacy: 1.2, securityAccess: 1.1, businessImpact: 1.0, aiGovernance: 1.2, vendorProfile: 1.0 },
+        none: { dataPrivacy: 1.0, securityAccess: 1.0, businessImpact: 1.0, aiGovernance: 1.0, vendorProfile: 1.0 }
+    },
+    scopeMultipliers: {
+        high: { dataPrivacy: 1.3, securityAccess: 1.0, businessImpact: 1.0, aiGovernance: 1.3, vendorProfile: 1.0 },
+        medium: { dataPrivacy: 1.15, securityAccess: 1.0, businessImpact: 1.0, aiGovernance: 1.15, vendorProfile: 1.0 },
+        low: { dataPrivacy: 1.0, securityAccess: 1.0, businessImpact: 1.0, aiGovernance: 1.0, vendorProfile: 1.0 }
+    }
+};
+
+// --- EXAMPLE PARENT COMPONENT ---
+
+export default function YourPage() {
+    // In a real app, this state would be managed by a context or state library like Redux/Zustand
+    const [orgSettings, setOrgSettings] = useState(MOCK_ORG_SETTINGS);
+
+    // This function will be called by the dialog when the user clicks save.
+    // Here, you would typically make an API call to persist the changes.
+    const handleSaveSettings = (newSettings) => {
+        console.log("Saving new settings:", newSettings);
+        
+        // Update the state in the parent component
+        setOrgSettings(newSettings);
+
+        // Example of an API call you might make
+        // fetch('/api/organization-settings', {
+        //   method: 'PUT',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify(newSettings),
+        // }).then(response => {
+        //   if (!response.ok) {
+        //     console.error("Failed to save settings");
+        //     // Optionally, handle the error, maybe show a notification
+        //   }
+        // });
+    };
+
+    return (
+        <div className="p-4">
+            <header className="flex justify-between items-center">
+                <h1 className="text-2xl font-bold">Your Application Dashboard</h1>
+                <OrganizationSettingsDialog
+                    initialSettings={orgSettings}
+                    onSave={handleSaveSettings}
+                />
+            </header>
+            
+            <main className="mt-4">
+                <p>Your main application content goes here.</p>
+                <p>The risk scores will now be calculated using the latest organization settings.</p>
+            </main>
+        </div>
+    );
+}
+
+*/
+

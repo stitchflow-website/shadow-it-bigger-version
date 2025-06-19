@@ -287,7 +287,7 @@ async function backgroundProcess(organization_id: string, sync_id: string, acces
         // Return a minimal valid record
         return {
           google_user_id: user.id || `unknown-${Date.now()}-${Math.random()}`,
-          email: user.primaryEmail || 'unknown@example.com',
+                        email: user.primaryEmail || 'unknown@acme.com',
           name: 'Unknown User',
           role: 'User',
           department: null,

@@ -89,7 +89,7 @@ export function middleware(request: NextRequest) {
   }
   
   // Check if user is authenticated for protected routes
-  if (pathname.startsWith('/tools/shadow-it-scan') &&
+  /* if (pathname.startsWith('/tools/shadow-it-scan') &&
       !pathname.startsWith('/tools/shadow-it-scan/login') &&
       !pathname.startsWith('/tools/shadow-it-scan/api/')) {
     
@@ -97,7 +97,7 @@ export function middleware(request: NextRequest) {
     if (!hasSessionCookie && !hasLegacyAuthCookie) {
       return NextResponse.redirect(new URL('/tools/shadow-it-scan/login', request.url));
     }
-  }
+  } */
   
   // Continue with the request
   return NextResponse.next();

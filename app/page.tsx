@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, useRef, use } from "react"
+import React, { useState, useEffect, useRef, useMemo } from "react"
 import Papa from "papaparse"
 import {
   User,
@@ -26,6 +26,7 @@ import {
   Bell,
   ArrowRight,
   ArrowRightIcon,
+  Menu,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -62,8 +63,13 @@ import { FeedbackChat } from "@/components/ui/feedback";
 import { Share } from "@/components/ui/share";
 // Import the new SettingsModal component
 import SettingsModal from "@/app/components/SettingsModal";
+// Import the new Sidebar component
+import Sidebar from "@/app/components/Sidebar";
 // Import risk assessment utilities
 import { HIGH_RISK_SCOPES, MEDIUM_RISK_SCOPES } from "@/lib/risk-assessment";
+// Import AI Scoring components
+import { RiskScoringTab } from "@/app/components/RiskScoringTab";
+import { OrganizationSettingsDialog } from "@/app/components/OrganizationSettingsDialog";
 
 import { determineRiskLevel, transformRiskLevel, getRiskLevelColor, evaluateSingleScopeRisk, RiskLevel } from '@/lib/risk-assessment'; // Corrected import alias and added type import
 import { useSearchParams } from "next/navigation"
@@ -79,7 +85,10 @@ import {
   BarChartData,
   RiskData,
 } from "@/types";
-import { fetchData } from "@/app/lib/data"
+import { fetchData, fetchAIScoringData } from "@/app/lib/data"
+import { calculateFinalAIRiskScore } from "@/app/lib/ai-risk-calculator"
+import { AIRiskAnalysisTable } from "@/components/ui/ai-risk-analysis-table"
+import { mapDomainForDisplay, mapOrgNameForDisplay } from "@/lib/utils"
 
 // Type definitions
 
@@ -99,8 +108,7 @@ const truncateText = (text: string, maxLength: number = 20) => {
 
 export default function ShadowITDashboard() {
   const router = useRouter();
-  const initialData = use(fetchData());
-  const [applications, setApplications] = useState<Application[]>(initialData)
+  const [applications, setApplications] = useState<Application[]>([])
   const [searchInput, setSearchInput] = useState("")
   const [filterCategory, setFilterCategory] = useState<string | null>(null)
   const [filterRisk, setFilterRisk] = useState<string | null>(null)
@@ -127,6 +135,11 @@ export default function ShadowITDashboard() {
 
   // Add new state for settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  
+  // Sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [currentSidebarView, setCurrentSidebarView] = useState("applications")
 
   const [uncategorizedApps, setUncategorizedApps] = useState<Set<string>>(new Set())
   const [appCategories, setAppCategories] = useState<Record<string, string>>({})
@@ -151,9 +164,126 @@ export default function ShadowITDashboard() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveMessage, setSaveMessage] = useState<{type: "success" | "error", text: string} | null>(null);
 
+  // Add states for AI scoring data and organization settings
+  const [allAIScoringData, setAllAIScoringData] = useState<any[]>([]);
+
+  // Helper functions for localStorage operations
+  const getOrgSettingsFromStorage = () => {
+    if (typeof window === 'undefined') return null;
+    
+    try {
+      const stored = localStorage.getItem('orgSettings');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Validate that the stored settings have the expected structure
+        if (parsed.bucketWeights && parsed.aiMultipliers && parsed.scopeMultipliers) {
+          return parsed;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load organization settings from localStorage:', error);
+    }
+    return null;
+  };
+
+  const saveOrgSettingsToStorage = (settings: any) => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      localStorage.setItem('orgSettings', JSON.stringify(settings));
+      console.log('Organization settings saved to localStorage');
+    } catch (error) {
+      console.error('Failed to save organization settings to localStorage:', error);
+    }
+  };
+
+  // Default organization settings
+  const defaultOrgSettings = {
+    bucketWeights: {
+      dataPrivacy: 30,
+      securityAccess: 25,
+      businessImpact: 20,
+      aiGovernance: 15,
+      vendorProfile: 10,
+    },
+    aiMultipliers: {
+      native: {
+        dataPrivacy: 1.5,
+        securityAccess: 1.3,
+        businessImpact: 1.2,
+        aiGovernance: 1.8,
+        vendorProfile: 1.1,
+      },
+      partial: {
+        dataPrivacy: 1.2,
+        securityAccess: 1.1,
+        businessImpact: 1.0,
+        aiGovernance: 1.3,
+        vendorProfile: 1.0,
+      },
+      none: {
+        dataPrivacy: 1.0,
+        securityAccess: 1.0,
+        businessImpact: 1.0,
+        aiGovernance: 1.0,
+        vendorProfile: 1.0,
+      },
+    },
+    scopeMultipliers: {
+      high: {
+        dataPrivacy: 1.4,
+        securityAccess: 1.6,
+        businessImpact: 1.5,
+        aiGovernance: 1.2,
+        vendorProfile: 1.1,
+      },
+      medium: {
+        dataPrivacy: 1.2,
+        securityAccess: 1.3,
+        businessImpact: 1.2,
+        aiGovernance: 1.1,
+        vendorProfile: 1.0,
+      },
+      low: {
+        dataPrivacy: 1.0,
+        securityAccess: 1.1,
+        businessImpact: 1.0,
+        aiGovernance: 1.0,
+        vendorProfile: 1.0,
+      },
+    },
+  };
+
+  // Initialize organization settings from localStorage or use defaults
+  const [orgSettings, setOrgSettings] = useState(() => {
+    return getOrgSettingsFromStorage() || defaultOrgSettings;
+  });
+
   useEffect(() => {
-    setApplications(initialData);
-  }, [initialData]);
+    const loadData = async () => {
+      try {
+        const [data, aiData] = await Promise.all([
+          fetchData(),
+          fetchAIScoringData()
+        ]);
+        console.log("Data loaded successfully:", data.length, "applications")
+        console.log("AI scoring data loaded:", aiData.length, "entries")
+        setApplications(data)
+        setAllAIScoringData(aiData)
+      } catch (error) {
+        console.error("Error loading data:", error)
+      }
+    }
+    
+    loadData()
+
+    // Load organization settings from localStorage after component mounts (for hydration)
+    const storedSettings = getOrgSettingsFromStorage();
+    if (storedSettings) {
+      setOrgSettings(storedSettings);
+      console.log('Organization settings loaded from localStorage');
+    }
+  }, [])
 
   const handleSignOut = () => {
     // Mock sign out logic
@@ -198,67 +328,69 @@ export default function ShadowITDashboard() {
   // Get unique categories for the filter dropdown
   const uniqueCategories = [...new Set(applications.map(app => appCategories[app.id] || app.category).filter((category): category is string => category !== null))].sort()
 
-  // Sort applications
-  const sortedApps = [...filteredApps].sort((a, b) => {
-    // Helper for numeric comparison with direction
-    const compareNumeric = (valA: number, valB: number) => {
-      return sortDirection === "asc" ? valA - valB : valB - valA
-    }
-
-    // Helper for string comparison with direction
-    const compareString = (a: string | null, b: string | null): number => {
-      if (!a && !b) return 0
-      if (!a) return -1
-      if (!b) return 1
-      return sortDirection === "asc" ? a.localeCompare(b) : b.localeCompare(a)
-    }
-
-    // Helper for date comparison with direction
-    const compareDate = (valA: string, valB: string) => {
-      const dateA = new Date(valA).getTime()
-      const dateB = new Date(valB).getTime()
-      return sortDirection === "asc" ? dateA - dateB : dateB - dateA
-    }
-
-    // Risk level comparison helper
-    const getRiskValue = (risk: string) => {
-      switch (risk.toLowerCase()) {
-        case "high":
-          return 3
-        case "medium":
-          return 2
-        case "low":
-          return 1
-        default:
-          return 0
+  // Memoize sorted apps to ensure re-calculation when orgSettings change (for AI risk scores)
+  const sortedApps = useMemo(() => {
+    return [...filteredApps].sort((a, b) => {
+      const compareNumeric = (valA: number, valB: number) => {
+        return sortDirection === "asc" ? valA - valB : valB - valA
       }
-    }
 
-    switch (sortColumn) {
-      case "name":
-        return compareString(a.name, b.name)
-      case "category":
-        return compareString(a.category, b.category)
-      case "userCount":
-        return compareNumeric(a.userCount, b.userCount)
-      case "riskLevel":
-        return compareNumeric(getRiskValue(a.riskLevel), getRiskValue(b.riskLevel))
-      case "totalPermissions":
-        return compareNumeric(a.totalPermissions, b.totalPermissions)
-      case "managementStatus":
-        return compareString(a.managementStatus, b.managementStatus)
-      case "highRiskUserCount":
-        // Use transformRiskLevel to normalize the riskLevel values during comparison
-        const highRiskA = a.users.filter(u => transformRiskLevel(u.riskLevel) === "High").length;
-        const highRiskB = b.users.filter(u => transformRiskLevel(u.riskLevel) === "High").length;
-        return compareNumeric(highRiskA, highRiskB);
-      default:
-        // Default to sorting by risk level and then user count
-        const riskDiff = compareNumeric(getRiskValue(a.riskLevel), getRiskValue(b.riskLevel))
-        if (riskDiff !== 0) return riskDiff
-        return compareNumeric(a.userCount, b.userCount)
-    }
-  })
+      const compareString = (a: string | null, b: string | null): number => {
+        const valA = a || ""
+        const valB = b || ""
+        return sortDirection === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA)
+      }
+
+      const compareDate = (valA: string, valB: string) => {
+        const dateA = new Date(valA).getTime()
+        const dateB = new Date(valB).getTime()
+        return sortDirection === "asc" ? dateA - dateB : dateB - dateA
+      }
+
+      const getRiskValue = (risk: string) => {
+        switch (risk) {
+          case "High": return 3
+          case "Medium": return 2
+          case "Low": return 1
+          default: return 0
+        }
+      }
+
+      switch (sortColumn) {
+        case "name":
+          return compareString(a.name, b.name)
+        case "category":
+          return compareString(a.category, b.category)
+        case "userCount":
+          return compareNumeric(a.userCount, b.userCount)
+        case "riskLevel":
+          return compareNumeric(getRiskValue(a.riskLevel), getRiskValue(b.riskLevel))
+        case "totalPermissions":
+          return compareNumeric(a.totalPermissions, b.totalPermissions)
+        case "managementStatus":
+          return compareString(a.managementStatus, b.managementStatus)
+        case "highRiskUserCount":
+          // Use transformRiskLevel to normalize the riskLevel values during comparison
+          const highRiskA = a.users.filter(u => transformRiskLevel(u.riskLevel) === "High").length;
+          const highRiskB = b.users.filter(u => transformRiskLevel(u.riskLevel) === "High").length;
+          return compareNumeric(highRiskA, highRiskB);
+        case "aiRiskScore":
+          // Get calculated final AI risk scores using current orgSettings
+          const getCalculatedAIScore = (app: Application): number => {
+            const finalScore = calculateFinalAIRiskScore(app, allAIScoringData, orgSettings);
+            return finalScore !== null ? finalScore : 0; // N/A apps sort to bottom (or top when ascending)
+          };
+          const scoreA = getCalculatedAIScore(a);
+          const scoreB = getCalculatedAIScore(b);
+          return compareNumeric(scoreA, scoreB);
+        default:
+          // Default to sorting by risk level and then user count
+          const riskDiff = compareNumeric(getRiskValue(a.riskLevel), getRiskValue(b.riskLevel))
+          if (riskDiff !== 0) return riskDiff
+          return compareNumeric(a.userCount, b.userCount)
+      }
+    })
+  }, [filteredApps, sortColumn, sortDirection, allAIScoringData, orgSettings]); // Added orgSettings as dependency
 
   // Pagination logic
   const totalPages = Math.ceil(sortedApps.length / itemsPerPage)
@@ -423,6 +555,24 @@ export default function ShadowITDashboard() {
   const handleOpenSettings = () => {
     checkAuth(() => setIsSettingsOpen(true));
   };
+
+  // Sidebar handlers
+  const handleSidebarToggle = () => {
+    setIsSidebarOpen(!isSidebarOpen)
+  }
+
+  const handleSidebarCollapse = () => {
+    setIsSidebarCollapsed(!isSidebarCollapsed)
+  }
+
+  const handleSidebarViewChange = (view: string) => {
+    setCurrentSidebarView(view)
+    // Handle view changes based on the selected item
+    if (view === "applications") {
+      setMainView("list")
+    }
+    // You can add more view handling logic here for other sidebar items
+  }
 
   // Modify your click handlers to use checkAuth
   const handleSeeUsers = (appId: string) => {
@@ -777,9 +927,9 @@ export default function ShadowITDashboard() {
         <Tooltip>
           <TooltipTrigger asChild>
             <div 
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryBadgeColor(currentCategory)} overflow-hidden text-ellipsis whitespace-nowrap max-w-[200px] group-hover:max-w-none`}
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryBadgeColor(currentCategory)} overflow-hidden text-ellipsis whitespace-nowrap max-w-[120px] group-hover:max-w-none`}
             >
-              {currentCategory}
+              {truncateText(currentCategory, 15)}
             </div>
           </TooltipTrigger>
           <TooltipContent side="top" className="p-2 bg-gray-900 text-white rounded-md shadow-lg">
@@ -1185,7 +1335,81 @@ export default function ShadowITDashboard() {
     }
   }, [selectedApp]);
 
-  // Function to save owner email and notes
+  // Memoize the AI risk analysis data generation to ensure it updates when orgSettings change
+  const generateAIRiskAnalysisData = useMemo(() => {
+    
+    // Fuzzy matching function to find application data from applications.csv
+    const findApplicationData = (aiAppName: string) => {
+      const cleanAIAppName = aiAppName.trim().toLowerCase();
+      
+      // First try exact match (case insensitive)
+      let exactMatch = applications.find(app => 
+        app.name.toLowerCase().trim() === cleanAIAppName
+      );
+      if (exactMatch) return exactMatch;
+      
+      // Try fuzzy matching
+      for (const app of applications) {
+        const appName = app.name.toLowerCase().trim();
+        
+        // Skip if either name is too short
+        if (cleanAIAppName.length <= 3 || appName.length <= 3) continue;
+        
+        // Check if one name contains the other
+        if (cleanAIAppName.includes(appName) || appName.includes(cleanAIAppName)) {
+          return app;
+        }
+        
+        // Check similarity score using a simple string similarity function
+        const similarity = calculateStringSimilarity(cleanAIAppName, appName);
+        if (similarity > 0.8) {
+          return app;
+        }
+      }
+      
+      return null; // No match found
+    };
+    
+    // Simple string similarity function (Jaccard similarity on words)
+    const calculateStringSimilarity = (str1: string, str2: string): number => {
+      const words1 = new Set(str1.split(/\s+/));
+      const words2 = new Set(str2.split(/\s+/));
+      
+      const intersection = new Set([...words1].filter(x => words2.has(x)));
+      const union = new Set([...words1, ...words2]);
+      
+      if (union.size === 0) return 0;
+      return intersection.size / union.size;
+    };
+
+    // Start with Adam's AI scoring data as primary source
+    return allAIScoringData.map(aiData => {
+      const aiAppName = aiData["Tool Name"];
+      if (!aiAppName) return null;
+      
+      // Find matching application data
+      const matchingApp = findApplicationData(aiAppName);
+      if (!matchingApp) return null; // Skip if no matching app found
+      
+      // Calculate raw and final scores using current orgSettings
+      const rawScore = parseFloat(aiData["Final Risk Score - Aggregated"]) || 0;
+      const finalScore = calculateFinalAIRiskScore(matchingApp, allAIScoringData, orgSettings) || 0;
+      
+      // Calculate blast radius (users × final risk score)
+      const blastRadius = matchingApp.userCount * finalScore;
+      
+      return {
+        appName: aiAppName, // Use the AI scoring app name as primary
+        category: aiData["Gen AI-Native"] || "Non-AI",
+        scopeRisk: matchingApp.riskLevel.toUpperCase(),
+        users: matchingApp.userCount,
+        rawAppRiskScore: rawScore,
+        finalAppRiskScore: finalScore,
+        blastRadius: blastRadius
+      };
+    }).filter((item): item is NonNullable<typeof item> => item !== null); // Remove null entries (unmatched apps)
+  }, [applications, allAIScoringData, orgSettings]); // Dependencies: recalculate when any of these change
+
   const handleSaveNotesAndOwner = async () => {
     if (!selectedApp) return;
 
@@ -1226,17 +1450,53 @@ export default function ShadowITDashboard() {
   };
 
   return (
-    <div className="mx-auto font-sans text-gray-900 bg-[#f8f5f3]">
+    <div className="flex h-screen bg-[#F7F5F2]" style={{ fontFamily: 'Geist, sans-serif' }}>
+      {/* Sidebar */}
+      <Sidebar
+        isOpen={isSidebarOpen}
+        isCollapsed={isSidebarCollapsed}
+        onToggle={handleSidebarToggle}
+        onCollapse={handleSidebarCollapse}
+        currentView={currentSidebarView}
+        onViewChange={handleSidebarViewChange}
+      />
 
-        
-
-      <main className="pt-[40px] pl-10 pr-10 bg-white mt-4 pb-10">
-            <div className="flex items-center gap-2 mb-4">
-              <h2 className="text-xl font-bold">Shadow IT Overview</h2>
+      {/* Main Content Area */}
+      <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${
+        isSidebarCollapsed ? 'lg:ml-[30px]' : 'lg:ml-[30px]'
+      }`}>
+                 {/* Header Bar */}
+         <header className="bg-white border-b border-[#E0D5C8] px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            {/* Mobile Menu Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSidebarToggle}
+              className="lg:hidden p-2 hover:bg-[#F7F5F2]"
+            >
+              <Menu className="h-5 w-5 text-[#363338]" />
+            </Button>
+            
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-semibold text-[#363338]">Shadow IT Overview</h2>
               <Share url="https://www.stitchflow.com/tools/shadow-it-scan" />
             </div>
+          </div>
+        </header>
+
+                 {/* Main Content */}
+         <main className="flex-1 overflow-auto bg-white p-6 min-w-0">
 
             {!selectedAppId ? (
+              currentSidebarView === "ai-risk-analysis" ? (
+                <div className="space-y-6">
+                  <AIRiskAnalysisTable 
+                    data={generateAIRiskAnalysisData} 
+                    orgSettings={orgSettings}
+                  />
+                </div>
+              ) : (
               <div ref={mainContentRef} className="space-y-6"> {/* Added ref here */}
                 <div className="flex justify-between items-center mt-[-4px]">
                   <div>
@@ -1295,6 +1555,13 @@ export default function ShadowITDashboard() {
                       <Settings className="h-4 w-4 mr-2" />
                       Email Notifications
                     </Button>
+                    <OrganizationSettingsDialog 
+                      initialSettings={orgSettings}
+                      onSave={(newSettings) => {
+                        setOrgSettings(newSettings);
+                        saveOrgSettingsToStorage(newSettings);
+                      }}
+                    />
 
                   </div>
                 </div>
@@ -1407,8 +1674,8 @@ export default function ShadowITDashboard() {
                       </div>
 
                       <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-                        <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-                        <Table>
+                        <div className="overflow-x-auto">
+                        <Table className="w-full min-w-fit">
                             <TableHeader className="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
                               <TableRow className="border-b border-gray-100">
                                 <TableHead className={`cursor-pointer rounded-tl-lg bg-transparent`} onClick={() => handleSort("name")}>
@@ -1442,30 +1709,36 @@ export default function ShadowITDashboard() {
                                       onClick={() => handleSort("totalPermissions")}
                                     >
                                       <div className="flex items-center justify-center">
-                                        Total Scope Permissions
+                                        Total Scope<br/>Permissions
                                         {getSortIcon("totalPermissions")}
                                       </div>
                                     </TableHead>
                                     <TableHead className="text-center cursor-pointer" onClick={() => handleSort("highRiskUserCount")}>
                                       <div className="flex items-center justify-center">
-                                        High Risk Users
+                                        High Risk<br/>Users
                                         {getSortIcon("highRiskUserCount")}
+                                      </div>
+                                    </TableHead>
+                                    <TableHead className="text-center cursor-pointer" onClick={() => handleSort("aiRiskScore")}>
+                                      <div className="flex items-center justify-center">
+                                        AI Risk<br/>Score
+                                        {getSortIcon("aiRiskScore")}
                                       </div>
                                     </TableHead>
                                 
                                 <TableHead className={`cursor-pointer`} onClick={() => handleSort("managementStatus")}>
                                   <div className="flex items-center">
-                                  Managed Status
+                                  Managed<br/>Status
                                     {getSortIcon("managementStatus")}
                                   </div>
                                 </TableHead>
-                                <TableHead className={`text-center rounded-tr-lg`}>User Scope Analysis</TableHead>
+                                <TableHead className={`text-center rounded-tr-lg`}>User Scope<br/>Analysis</TableHead>
                               </TableRow>
                             </TableHeader>
                           <TableBody>
                               {currentApps.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={9} className="text-center py-6 text-muted-foreground">
+                                <TableCell colSpan={10} className="text-center py-6 text-muted-foreground">
                                   No applications found matching your filters
                                 </TableCell>
                               </TableRow>
@@ -1480,12 +1753,21 @@ export default function ShadowITDashboard() {
                                   <TableCell>
                                     <div className="flex items-center gap-3">
                                       <AppIcon name={app.name} logoUrl={app.logoUrl} logoUrlFallback={app.logoUrlFallback} />
-                                      <div 
-                                        className="font-medium cursor-pointer hover:text-primary transition-colors truncate max-w-[200px]"
-                                        onClick={() => handleSeeUsers(app.id)}
-                                      >
-                                        {app.name}
-                                      </div>
+                                      <TooltipProvider>
+                                        <Tooltip delayDuration={300}>
+                                          <TooltipTrigger asChild>
+                                            <div 
+                                              className="font-medium cursor-pointer hover:text-primary transition-colors truncate max-w-[120px]"
+                                              onClick={() => handleSeeUsers(app.id)}
+                                            >
+                                              {truncateText(app.name, 15)}
+                                            </div>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="p-2">
+                                            <p className="text-sm">{app.name}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
                                     </div>
                                   </TableCell>
                                   <TableCell>
@@ -1586,10 +1868,36 @@ export default function ShadowITDashboard() {
                                           </Tooltip>
                                         </TooltipProvider>
                                       </TableCell>
+                                      
+                                      <TableCell className="text-center">
+                                        <TooltipProvider>
+                                          <Tooltip delayDuration={300}>
+                                            <TooltipTrigger asChild>
+                                              <div className="text-center cursor-pointer" onClick={() => handleSeeUsers(app.id)}>
+                                                {(() => {
+                                                  const finalScore = calculateFinalAIRiskScore(app, allAIScoringData, orgSettings);
+                                                  return finalScore !== null ? finalScore.toFixed(1) : "N/A";
+                                                })()}
+                                              </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="right" className="p-2">
+                                              <p className="text-sm">
+                                                {(() => {
+                                                  const finalScore = calculateFinalAIRiskScore(app, allAIScoringData, orgSettings);
+                                                  if (finalScore !== null) {
+                                                    return `Final AI Risk Score: ${finalScore.toFixed(2)}`;
+                                                  }
+                                                  return "AI risk analysis not available for this application";
+                                                })()}
+                                              </p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      </TableCell>
 
                                   <TableCell>
                                     <select
-                                      className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                                      className="w-full max-w-[120px] h-8 rounded-md border border-gray-200 bg-white px-2 text-xs hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200"
                                       value={editedStatuses[app.id] || app.managementStatus}
                                       onChange={(e) => {
                                           handleStatusChange(app.id, e.target.value);
@@ -2168,6 +2476,7 @@ export default function ShadowITDashboard() {
                 </div>
               )}
             </div>
+              )
           ) : (
             // User detail view
             <div className="space-y-6">
@@ -2289,7 +2598,7 @@ export default function ShadowITDashboard() {
                       
                         <div>
                           <dt className="text-muted-foreground font-medium">Owner</dt>
-                          <dd className="font-medium">{selectedApp.ownerEmail || "Not assigned"}</dd>
+                          <dd className="font-medium">{mapDomainForDisplay(selectedApp.ownerEmail) || "Not assigned"}</dd>
                         </div>
                       </dl>
                     </div>
@@ -2301,6 +2610,9 @@ export default function ShadowITDashboard() {
                         </TabsTrigger>
                         <TabsTrigger value="scopes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:bg-gray-200 data-[state=active]:hover:bg-white">
                         Scope User Groups
+                        </TabsTrigger>
+                        <TabsTrigger value="ai-scoring" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:bg-gray-200 data-[state=active]:hover:bg-white">
+                          AI Risk Scoring
                         </TabsTrigger>
                         <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm hover:bg-gray-200 data-[state=active]:hover:bg-white">
                           Notes
@@ -2386,7 +2698,7 @@ export default function ShadowITDashboard() {
                                         <span className="font-medium">{user.name}</span>
                                       </div>
                                     </TableCell>
-                                    <TableCell>{user.email}</TableCell>
+                                    <TableCell>{mapDomainForDisplay(user.email)}</TableCell>
                                     <TableCell>
                                       <TooltipProvider>
                                         <Tooltip delayDuration={300}>
@@ -2702,6 +3014,15 @@ export default function ShadowITDashboard() {
                           </div>
                       </TabsContent>
 
+                      <TabsContent value="ai-scoring">
+                        <RiskScoringTab 
+                          app={selectedApp?.aiScoringData || null} 
+                          allApps={allAIScoringData} 
+                          orgSettings={orgSettings} 
+                          selectedAppData={selectedApp}
+                        />
+                      </TabsContent>
+
                       <TabsContent value="notes">
                         <div className="p-5 border border-gray-200 rounded-md bg-white">
                           <div className="space-y-4">
@@ -2756,7 +3077,8 @@ export default function ShadowITDashboard() {
               </div>
             </div>
           )}
-       </main>
+        </main>
+      </div>
 
       {/* Use the new SettingsModal component */}
       <SettingsModal 

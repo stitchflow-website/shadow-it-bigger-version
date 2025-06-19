@@ -21,6 +21,7 @@ export type Application = {
   isInstalled: boolean
   isAuthAnonymously: boolean
   isCategorizing?: boolean // Added to track categorization status
+  aiScoringData?: any // AI scoring data from Adam_revised_latest_app.csv
 }
 
 export type AppUser = {
@@ -45,6 +46,7 @@ export type SortColumn =
   // | "lastLogin" // Removed
   | "managementStatus"
   | "highRiskUserCount" // Added for the new column
+  | "aiRiskScore" // Added for AI Risk Score column
 export type SortDirection = "asc" | "desc"
 
 // User table sort types

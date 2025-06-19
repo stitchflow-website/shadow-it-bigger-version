@@ -1,0 +1,44 @@
+Font family: Geist 
+
+
+Weights used: Regular (400), Medium (500), SemiBold (600)
+
+
+Font sizes:
+
+
+H1:
+Font size: 58px
+Line height: 68px
+H2:
+Font size: 40px
+Line height: 48px
+H3:
+Font size: 32px
+Line height: 40px
+H4: 
+Font size: 24px
+Line height: 28px
+H5:
+Font size: 20px
+Line height: 24px
+Body: 
+Font size: 16px
+Line height: 20px
+Caption:
+Font size: 12px
+Line height: 16px
+
+
+Font Color:
+Primary: #363338
+Secondary: #7B7481
+
+
+Notes: Use sentence case for all headings
+
+
+Background/Container colors
+Light: #F7F5F2
+Medium: #E0D5C8
+Dark: #363338

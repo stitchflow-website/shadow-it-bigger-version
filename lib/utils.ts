@@ -37,3 +37,27 @@ export function generateRandomString(length: number = 32): string {
     .map(v => chars[v % chars.length])
     .join('');
 }
+
+/**
+ * Maps domain names for display purposes only (UI display layer)
+ * This doesn't affect backend logic or data processing
+ */
+export function mapDomainForDisplay(email: string): string {
+  if (!email || typeof email !== 'string') return email;
+  
+  // Replace hewison.com.au and example.com with acme.com for display
+  return email
+    .replace(/hewison\.com\.au/g, 'acme.com')
+    .replace(/example\.com/g, 'acme.com');
+}
+
+/**
+ * Maps organization/domain names for display
+ */
+export function mapOrgNameForDisplay(orgName: string): string {
+  if (!orgName || typeof orgName !== 'string') return orgName;
+  
+  return orgName
+    .replace(/hewison\.com\.au/g, 'acme.com')
+    .replace(/example\.com/g, 'acme.com');
+}

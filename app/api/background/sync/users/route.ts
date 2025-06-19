@@ -223,7 +223,7 @@ async function processUsers(
             // Return a minimal valid record
             return {
               google_user_id: user.id || user.primaryEmail || `unknown-${Date.now()}-${Math.random()}`,
-              email: user.primaryEmail || `unknown-${processedCount + index}@example.com`,
+              email: user.primaryEmail || `unknown-${processedCount + index}@acme.com`,
               name: 'Unknown User',
               role: 'User',
               department: null,
