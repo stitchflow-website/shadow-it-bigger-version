@@ -184,9 +184,9 @@ async function sendSyncCompletedEmail(userEmail: string, syncId?: string) {
   }
 }
 
-export const maxDuration = 3600; // Set max duration to 1 hour for Railway (supports long-running processes)
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
+// export const maxDuration = 3600; // Set max duration to 1 hour for Railway (supports long-running processes)
+// export const dynamic = 'force-dynamic';
+// export const runtime = 'nodejs'; // Enable Fluid Compute by using nodejs runtime
 
 export async function POST(request: Request) {
   // Declare requestData here to make sync_id available in catch

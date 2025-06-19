@@ -2,7 +2,7 @@
   "buildCommand": "next build",
   "functions": {
     "app/api/**/*": {
-      "maxDuration": 300
+      "maxDuration": 60
     }
   },
   "crons": []
